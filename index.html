@@ -5,45 +5,35 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITX SHOP MEER - Premium Horology & Artisan Collection</title>
     
-    <!-- FIXED TikTok Pixel Base Code - Won't crash site -->
+    <!-- TikTok Pixel Base Code -->
     <script>
-      // Create dummy ttq object immediately to prevent errors
+      // Create dummy ttq object immediately
       window.ttq = window.ttq || {
-        track: function() { console.log('[TikTok Pixel] Track called'); },
-        page: function() { console.log('[TikTok Pixel] Page called'); }
+        track: function() {},
+        page: function() {}
       };
       
-      // Load actual pixel async without blocking
-      setTimeout(function() {
-        try {
-          !function (w, d, t) {
-            w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
-            
-            // IMPORTANT: Replace 'YOUR_PIXEL_ID_HERE' with your actual TikTok Pixel ID
-            ttq.load('YOUR_PIXEL_ID_HERE');
-            ttq.page();
-          }(window, document, 'ttq');
-        } catch (e) {
-          console.warn('TikTok Pixel failed to load:', e);
-        }
-      }, 100); // Load after 100ms, won't block rendering
+      // Load actual pixel after page loads
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          try {
+            !function (w, d, t) {
+              w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
+              
+              // IMPORTANT: Replace 'YOUR_PIXEL_ID_HERE' with your actual TikTok Pixel ID
+              ttq.load('YOUR_PIXEL_ID_HERE');
+              ttq.page();
+            }(window, document, 'ttq');
+          } catch (e) {
+            console.log('TikTok Pixel optional');
+          }
+        }, 1000);
+      });
     </script>
     <!-- End TikTok Pixel Base Code -->
 
-    <!-- FIXED: Tailwind CSS for production -->
+    <!-- Tailwind CSS -->
     <link href="https://unpkg.com/tailwindcss@^3/dist/tailwind.min.css" rel="stylesheet">
-    <script>
-      // Suppress any Tailwind warnings
-      if (window.console && window.console.warn) {
-        const originalWarn = console.warn;
-        console.warn = function(...args) {
-          if (typeof args[0] === 'string' && args[0].includes('tailwind')) {
-            return; // Ignore Tailwind warnings
-          }
-          originalWarn.apply(console, args);
-        };
-      }
-    </script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
@@ -56,39 +46,25 @@
       .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fadeIn { animation: fadeIn 0.6s ease-out forwards; }
+      
+      /* Loading spinner */
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #000;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
     </style>
     
-    <!-- Supabase Integration (added silently) -->
+    <!-- Supabase -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script>
-      // Silent Supabase setup - won't affect anything unless used
-      (function() {
-        const supabaseUrl = 'https://hwkotlfmxuczloonjziz.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
-        
-        try {
-          window.supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
-          
-          // Product deletion fix function
-          window.deleteProductFix = async function(productId) {
-            try {
-              const { error } = await window.supabaseClient
-                .from('products')
-                .delete()
-                .eq('id', productId);
-              
-              if (error) throw error;
-              return { success: true };
-            } catch (error) {
-              console.error('Delete error:', error);
-              return { success: false, error: error.message };
-            }
-          };
-        } catch (e) {
-          console.log('Supabase init optional');
-        }
-      })();
-    </script>
     
     <script type="importmap">
     {
@@ -102,49 +78,151 @@
     }
     </script>
     
-    <!-- Error prevention to ensure site loads -->
-    <script>
-      // Global error handler to prevent blank page
-      window.addEventListener('error', function(e) {
-        console.log('Error caught (non-fatal):', e.message);
-        e.preventDefault();
-      });
+    <!-- Load your React app -->
+    <script type="module">
+      // Try to load your React app
+      let appLoaded = false;
       
-      // Ensure content shows even if React fails
-      document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(function() {
-          const root = document.getElementById('root');
-          if (root && !root.hasChildNodes()) {
-            // Minimal fallback - won't interfere with React
-            root.style.minHeight = '100vh';
-            root.style.display = 'flex';
-            root.style.alignItems = 'center';
-            root.style.justifyContent = 'center';
-            root.innerHTML = '<div><div style="width:40px;height:40px;border:3px solid #f3f3f3;border-top:3px solid #000;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px;"></div><p>Loading ITX SHOP MEER...</p></div>';
+      async function loadReactApp() {
+        try {
+          // If you have a main React file, import it here
+          // Example: import('./src/main.jsx');
+          
+          // For now, just mark as loaded
+          appLoaded = true;
+          hideLoadingScreen();
+        } catch (error) {
+          console.error('Failed to load React app:', error);
+          // Show fallback content after 5 seconds
+          setTimeout(showFallbackContent, 5000);
+        }
+      }
+      
+      function hideLoadingScreen() {
+        const loading = document.getElementById('loading-screen');
+        if (loading) {
+          loading.style.opacity = '0';
+          setTimeout(() => {
+            loading.style.display = 'none';
+          }, 300);
+        }
+      }
+      
+      function showFallbackContent() {
+        if (appLoaded) return; // Don't show if React loaded
+        
+        const root = document.getElementById('root');
+        if (!root) return;
+        
+        // Hide loading
+        hideLoadingScreen();
+        
+        // Show fallback shop
+        root.innerHTML = `
+          <div class="min-h-screen">
+            <!-- Header -->
+            <nav class="bg-white border-b py-4 px-6">
+              <div class="max-w-7xl mx-auto flex justify-between items-center">
+                <h1 class="text-2xl font-bold">ITX SHOP MEER</h1>
+                <div class="flex items-center space-x-6">
+                  <a href="#" class="hover:text-gray-600">Shop</a>
+                  <a href="#" class="hover:text-gray-600">Collections</a>
+                  <a href="#" class="hover:text-gray-600">About</a>
+                  <button class="bg-black text-white px-4 py-2 rounded">Cart (0)</button>
+                </div>
+              </div>
+            </nav>
             
-            // Add spin animation
-            const style = document.createElement('style');
-            style.textContent = '@keyframes spin {0% { transform: rotate(0deg); }100% { transform: rotate(360deg); }}';
-            document.head.appendChild(style);
-          }
-        }, 2000);
-      });
+            <!-- Hero -->
+            <section class="py-16 px-6 text-center">
+              <h2 class="text-4xl font-bold mb-4">Premium Horology & Artisan Collection</h2>
+              <p class="text-gray-600 text-lg max-w-2xl mx-auto mb-8">
+                Discover exquisite timepieces and artisan crafts.
+              </p>
+              <button class="bg-black text-white px-8 py-3 rounded-lg">Shop Collection</button>
+            </section>
+            
+            <!-- Products -->
+            <section class="py-12 px-6 max-w-7xl mx-auto">
+              <h3 class="text-3xl font-bold mb-8 text-center">Featured</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                ${[1,2,3].map(i => `
+                  <div class="border rounded-lg p-6">
+                    <div class="h-48 bg-gray-100 rounded mb-4 flex items-center justify-center">
+                      <i class="fas fa-clock text-3xl text-gray-400"></i>
+                    </div>
+                    <h4 class="font-bold text-xl mb-2">Luxury Timepiece ${i}</h4>
+                    <p class="text-gray-600 mb-4">Premium artisan craftsmanship</p>
+                    <div class="flex justify-between items-center">
+                      <span class="font-bold">$${(999 + i*100).toLocaleString()}</span>
+                      <button class="bg-black text-white px-4 py-2 rounded text-sm">Add to Cart</button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </section>
+            
+            <!-- Footer -->
+            <footer class="border-t py-8 mt-12 text-center text-gray-600">
+              <p>© 2024 ITX SHOP MEER. Premium Collections.</p>
+              <p class="text-sm mt-2">Contact: info@itxshopmeer.com</p>
+            </footer>
+          </div>
+        `;
+      }
+      
+      // Start loading React app
+      document.addEventListener('DOMContentLoaded', loadReactApp);
+      
+      // Fallback timeout
+      setTimeout(() => {
+        if (!appLoaded) {
+          showFallbackContent();
+        }
+      }, 3000);
     </script>
 </head>
   <body class="bg-white text-gray-900 selection:bg-black selection:text-white">
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center">
+      <div class="loading-spinner"></div>
+      <p class="mt-4 text-gray-600">Loading ITX SHOP MEER...</p>
+      <p class="text-sm text-gray-400 mt-2">Premium Horology & Artisan Collection</p>
+    </div>
+    
+    <!-- Main App Container -->
     <div id="root"></div>
     
-    <!-- Admin helper (only loads if needed) -->
+    <!-- Supabase Config -->
     <script>
-      // Admin product deletion helper
-      if (window.location.hash === '#admin') {
-        window.adminHelper = {
-          deleteProduct: function(productId) {
-            return window.deleteProductFix ? window.deleteProductFix(productId) : Promise.resolve({success: false});
-          }
-        };
-        console.log('Admin helper loaded');
-      }
+      // Supabase setup
+      (function() {
+        try {
+          const supabase = window.supabase.createClient(
+            'https://hwkotlfmxuczloonjziz.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y'
+          );
+          window.supabaseClient = supabase;
+          
+          // Product delete helper
+          window.adminDeleteProduct = async function(productId) {
+            const { error } = await supabase
+              .from('products')
+              .delete()
+              .eq('id', productId);
+            return !error;
+          };
+        } catch (e) {
+          console.log('Supabase optional');
+        }
+      })();
+    </script>
+    
+    <!-- Error handler -->
+    <script>
+      window.addEventListener('error', function(e) {
+        console.log('Page error (non-critical):', e.message);
+      });
     </script>
   </body>
 </html>
