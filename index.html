@@ -5,78 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITX SHOP MEER - Premium Horology & Artisan Collection</title>
     
-    <!-- TikTok Pixel Base Code - FIXED to not crash -->
+    <!-- TikTok Pixel Base Code - FIXED SYNTAX -->
     <script>
-      // Create safe TikTok Pixel that won't break site
-      (function() {
-        // Create dummy ttq object immediately
-        window.ttq = window.ttq || {
-          track: function() {},
-          page: function() {}
-        };
+      !function (w, d, t) {
+        w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)));};};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e;},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
         
-        // Load real pixel after page loads
-        window.addEventListener('DOMContentLoaded', function() {
-          setTimeout(function() {
-            try {
-              !function (w, d, t) {
-                w.TiktokAnalyticsObject=t;
-                var ttq=w[t]=w[t]||[];
-                ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"];
-                ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)));};};
-                for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);
-                ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e;};
-                ttq.load=function(e,n){
-                  var i="https://analytics.tiktok.com/i18n/pixel/events.js";
-                  ttq._i=ttq._i||{};
-                  ttq._i[e]=[];
-                  ttq._i[e]._u=i;
-                  ttq._t=ttq._t||{};
-                  ttq._t[e]=+new Date;
-                  ttq._o=ttq._o||{};
-                  ttq._o[e]=n||{};
-                  var o=document.createElement("script");
-                  o.type="text/javascript";
-                  o.async=!0;
-                  o.src=i+"?sdkid="+e+"&lib="+t;
-                  var a=document.getElementsByTagName("script")[0];
-                  a.parentNode.insertBefore(o,a);
-                };
-                
-                // IMPORTANT: Replace 'YOUR_PIXEL_ID_HERE' with your actual TikTok Pixel ID
-                ttq.load('YOUR_PIXEL_ID_HERE');
-                ttq.page();
-              }(window, document, 'ttq');
-            } catch (e) {
-              console.log('TikTok Pixel optional');
-            }
-          }, 100);
-        });
-      })();
+        // IMPORTANT: Replace 'YOUR_PIXEL_ID_HERE' with your actual TikTok Pixel ID
+        ttq.load('YOUR_PIXEL_ID_HERE');
+        ttq.page();
+      }(window, document, 'ttq');
     </script>
     <!-- End TikTok Pixel Base Code -->
 
-    <!-- Tailwind with warning suppression -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      // Suppress Tailwind warning
-      if (typeof window !== 'undefined' && window.console && window.console.warn) {
-        const originalWarn = console.warn;
-        console.warn = function(...args) {
-          if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) {
-            return;
-          }
-          originalWarn.apply(console, args);
-        };
-      }
-    </script>
-    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
-    
-    <!-- Favicon to fix 404 -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌚</text></svg>" type="image/svg+xml">
-    
     <style>
       body { font-family: 'Inter', sans-serif; }
       .font-serif { font-family: 'Playfair Display', serif; }
@@ -87,117 +30,19 @@
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fadeIn { animation: fadeIn 0.6s ease-out forwards; }
     </style>
-    
-    <!-- Import Maps - same as before -->
-    <script type="importmap">
-    {
-      "imports": {
-        "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-        "react/": "https://esm.sh/react@^19.2.4/",
-        "react": "https://esm.sh/react@^19.2.4",
-        "recharts": "https://esm.sh/recharts@^3.7.0"
-      }
-    }
-    </script>
-    
-    <!-- Supabase Integration - minimal, won't interfere -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script>
-      // Silent Supabase setup
-      (function() {
-        try {
-          const supabase = window.supabase.createClient(
-            'https://hwkotlfmxuczloonjziz.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y'
-          );
-          window.supabaseClient = supabase;
-          
-          // Product deletion function
-          window.adminDeleteProduct = async function(productId) {
-            try {
-              const { error } = await supabase
-                .from('products')
-                .delete()
-                .eq('id', productId);
-              return !error;
-            } catch (e) {
-              console.log('Delete error:', e);
-              return false;
-            }
-          };
-        } catch (e) {
-          console.log('Supabase optional');
-        }
-      })();
-    </script>
-    
-    <!-- Simple loader to show something while React loads -->
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const root = document.getElementById('root');
-        if (root && root.innerHTML === '') {
-          // Add minimal loading indicator
-          root.innerHTML = `
-            <div style="
-              position: fixed;
-              top: 0;
-              left: 0;
-              width: 100%;
-              height: 100%;
-              background: white;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              z-index: 9999;
-            ">
-              <div style="
-                width: 40px;
-                height: 40px;
-                border: 3px solid #f3f3f3;
-                border-top: 3px solid #000;
-                border-radius: 50%;
-                animation: spin 1s linear infinite;
-                margin-bottom: 15px;
-              "></div>
-              <p style="color: #666; font-size: 14px;">Loading ITX SHOP MEER...</p>
-              <style>
-                @keyframes spin {
-                  0% { transform: rotate(0deg); }
-                  100% { transform: rotate(360deg); }
-                }
-              </style>
-            </div>
-          `;
-          
-          // Auto-remove after 10 seconds if React hasn't loaded
-          setTimeout(function() {
-            const loader = root.querySelector('div');
-            if (loader && loader.style) {
-              loader.style.opacity = '0';
-              loader.style.transition = 'opacity 0.5s';
-              setTimeout(function() {
-                if (loader.parentNode === root) {
-                  root.removeChild(loader);
-                }
-              }, 500);
-            }
-          }, 10000);
-        }
-      });
-    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "recharts": "https://esm.sh/recharts@^3.7.0"
+  }
+}
+</script>
 </head>
   <body class="bg-white text-gray-900 selection:bg-black selection:text-white">
     <div id="root"></div>
-    
-    <!-- Error handler to prevent blank page -->
-    <script>
-      window.addEventListener('error', function(e) {
-        console.log('Error caught (site will continue):', e.message);
-        e.preventDefault();
-        return true;
-      });
-    </script>
   </body>
 </html>
