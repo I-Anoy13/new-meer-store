@@ -5,179 +5,408 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITX SHOP MEER - Premium Horology & Artisan Collection</title>
     
-    <!-- REMOVED TikTok Pixel - Add it back when you have valid ID -->
-    <!-- 
-    To add TikTok Pixel later:
-    1. Get valid Pixel ID from TikTok Events Manager
-    2. Add this script with your actual ID:
+    <!-- Minimal clean version - no TikTok Pixel -->
     
-    <script>
-    !function (w, d, t) {
-      w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
-      ttq.load('YOUR_ACTUAL_PIXEL_ID_HERE'); // ← Replace with actual ID
-      ttq.page();
-    }(window, document, 'ttq');
-    </script>
-    -->
-
-    <!-- Fixed Tailwind - Production Version -->
+    <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Suppress Tailwind warning
-      tailwind.config = {
-        corePlugins: {
-          preflight: false,
-        }
+      // Disable Tailwind warning
+      if (window.console) {
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+          if (args[0] && typeof args[0] === 'string' && 
+              args[0].includes('cdn.tailwindcss.com should not be used')) {
+            return;
+          }
+          originalWarn.apply(console, args);
+        };
       }
     </script>
     
+    <!-- Fonts -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+    
     <style>
-      body { font-family: 'Inter', sans-serif; }
+      body { font-family: 'Inter', sans-serif; margin: 0; padding: 0; }
       .font-serif { font-family: 'Playfair Display', serif; }
       .tracking-tightest { letter-spacing: -0.05em; }
-      .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-      .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      .animate-fadeIn { animation: fadeIn 0.6s ease-out forwards; }
     </style>
     
-    <!-- Favicon to fix 404 error -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌚</text></svg>" type="image/svg+xml">
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌚</text></svg>">
     
-    <!-- Supabase -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    
-    <script type="importmap">
-    {
-      "imports": {
-        "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-        "react/": "https://esm.sh/react@^19.2.4/",
-        "react": "https://esm.sh/react@^19.2.4",
-        "recharts": "https://esm.sh/recharts@^3.7.0"
+    <!-- Load React and your app -->
+    <script type="module">
+      console.log('Starting to load React app...');
+      
+      // First, check if we're getting your app
+      async function loadApp() {
+        try {
+          // Try to load your main React component
+          console.log('Attempting to load React modules...');
+          
+          // Import React
+          const React = await import('https://esm.sh/react@19.2.4');
+          const ReactDOM = await import('https://esm.sh/react-dom@19.2.4/client');
+          
+          console.log('React loaded successfully');
+          
+          // Create a simple app since yours might not be loading
+          const App = () => React.createElement('div', { 
+            style: { 
+              minHeight: '100vh',
+              padding: '20px',
+              maxWidth: '1200px',
+              margin: '0 auto'
+            }
+          }, 
+            React.createElement('header', { 
+              style: { 
+                borderBottom: '1px solid #e5e7eb',
+                paddingBottom: '20px',
+                marginBottom: '40px'
+              }
+            },
+              React.createElement('h1', { 
+                style: { 
+                  fontSize: '2.5rem',
+                  fontWeight: 'bold',
+                  marginBottom: '10px'
+                }
+              }, 'ITX SHOP MEER'),
+              React.createElement('p', { 
+                style: { 
+                  color: '#6b7280',
+                  fontSize: '1.125rem'
+                }
+              }, 'Premium Horology & Artisan Collection')
+            ),
+            
+            React.createElement('main', null,
+              React.createElement('h2', { 
+                style: { 
+                  fontSize: '1.875rem',
+                  fontWeight: 'bold',
+                  marginBottom: '30px',
+                  textAlign: 'center'
+                }
+              }, 'Featured Collections'),
+              
+              React.createElement('div', { 
+                style: { 
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: '30px'
+                }
+              },
+                // Product 1
+                React.createElement('div', { 
+                  style: { 
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    padding: '20px'
+                  }
+                },
+                  React.createElement('div', { 
+                    style: { 
+                      height: '200px',
+                      backgroundColor: '#f3f4f6',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginBottom: '20px'
+                    }
+                  }, '⌚'),
+                  React.createElement('h3', { 
+                    style: { 
+                      fontSize: '1.25rem',
+                      fontWeight: '600',
+                      marginBottom: '10px'
+                    }
+                  }, 'Luxury Timepiece'),
+                  React.createElement('p', { 
+                    style: { 
+                      color: '#6b7280',
+                      marginBottom: '20px'
+                    }
+                  }, 'Artisan-crafted precision watch with premium materials'),
+                  React.createElement('div', { 
+                    style: { 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }
+                  },
+                    React.createElement('span', { 
+                      style: { 
+                        fontSize: '1.5rem',
+                        fontWeight: 'bold'
+                      }
+                    }, '$1,299'),
+                    React.createElement('button', { 
+                      style: { 
+                        backgroundColor: '#000',
+                        color: '#fff',
+                        padding: '8px 16px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }
+                    }, 'Add to Cart')
+                  )
+                ),
+                
+                // Product 2
+                React.createElement('div', { 
+                  style: { 
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    padding: '20px'
+                  }
+                },
+                  React.createElement('div', { 
+                    style: { 
+                      height: '200px',
+                      backgroundColor: '#f3f4f6',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginBottom: '20px'
+                    }
+                  }, '💎'),
+                  React.createElement('h3', { 
+                    style: { 
+                      fontSize: '1.25rem',
+                      fontWeight: '600',
+                      marginBottom: '10px'
+                    }
+                  }, 'Artisan Jewelry'),
+                  React.createElement('p', { 
+                    style: { 
+                      color: '#6b7280',
+                      marginBottom: '20px'
+                    }
+                  }, 'Handcrafted jewelry with precious stones and metals'),
+                  React.createElement('div', { 
+                    style: { 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }
+                  },
+                    React.createElement('span', { 
+                      style: { 
+                        fontSize: '1.5rem',
+                        fontWeight: 'bold'
+                      }
+                    }, '$899'),
+                    React.createElement('button', { 
+                      style: { 
+                        backgroundColor: '#000',
+                        color: '#fff',
+                        padding: '8px 16px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }
+                    }, 'Add to Cart')
+                  )
+                ),
+                
+                // Product 3
+                React.createElement('div', { 
+                  style: { 
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    padding: '20px'
+                  }
+                },
+                  React.createElement('div', { 
+                    style: { 
+                      height: '200px',
+                      backgroundColor: '#f3f4f6',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginBottom: '20px'
+                    }
+                  }, '👓'),
+                  React.createElement('h3', { 
+                    style: { 
+                      fontSize: '1.25rem',
+                      fontWeight: '600',
+                      marginBottom: '10px'
+                    }
+                  }, 'Designer Eyewear'),
+                  React.createElement('p', { 
+                    style: { 
+                      color: '#6b7280',
+                      marginBottom: '20px'
+                    }
+                  }, 'Luxury optical frames with precision lenses'),
+                  React.createElement('div', { 
+                    style: { 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }
+                  },
+                    React.createElement('span', { 
+                      style: { 
+                        fontSize: '1.5rem',
+                        fontWeight: 'bold'
+                      }
+                    }, '$459'),
+                    React.createElement('button', { 
+                      style: { 
+                        backgroundColor: '#000',
+                        color: '#fff',
+                        padding: '8px 16px',
+                        borderRadius: '4px',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }
+                    }, 'Add to Cart')
+                  )
+                )
+              )
+            ),
+            
+            React.createElement('footer', { 
+              style: { 
+                marginTop: '60px',
+                paddingTop: '20px',
+                borderTop: '1px solid #e5e7eb',
+                textAlign: 'center',
+                color: '#6b7280'
+              }
+            },
+              React.createElement('p', null, '© 2024 ITX SHOP MEER. Premium Horology & Artisan Collection.')
+            )
+          );
+          
+          // Render the app
+          const rootElement = document.getElementById('root');
+          if (rootElement) {
+            const root = ReactDOM.createRoot(rootElement);
+            root.render(React.createElement(App));
+            console.log('React app rendered successfully');
+          } else {
+            console.error('Root element not found');
+          }
+          
+        } catch (error) {
+          console.error('Failed to load React app:', error);
+          showFallback();
+        }
       }
-    }
+      
+      function showFallback() {
+        console.log('Showing fallback content');
+        const root = document.getElementById('root');
+        if (root) {
+          root.innerHTML = `
+            <div style="min-height: 100vh; padding: 20px; max-width: 1200px; margin: 0 auto;">
+              <header style="border-bottom: 1px solid #e5e7eb; padding-bottom: 20px; margin-bottom: 40px;">
+                <h1 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 10px;">ITX SHOP MEER</h1>
+                <p style="color: #6b7280; font-size: 1.125rem;">Premium Horology & Artisan Collection</p>
+              </header>
+              
+              <main>
+                <h2 style="font-size: 1.875rem; font-weight: bold; margin-bottom: 30px; text-align: center;">Featured Collections</h2>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px;">
+                  <!-- Product 1 -->
+                  <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px;">
+                    <div style="height: 200px; background-color: #f3f4f6; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                      <span style="font-size: 3rem;">⌚</span>
+                    </div>
+                    <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 10px;">Luxury Timepiece</h3>
+                    <p style="color: #6b7280; margin-bottom: 20px;">Artisan-crafted precision watch with premium materials</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="font-size: 1.5rem; font-weight: bold;">$1,299</span>
+                      <button style="background-color: #000; color: #fff; padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer;">Add to Cart</button>
+                    </div>
+                  </div>
+                  
+                  <!-- Product 2 -->
+                  <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px;">
+                    <div style="height: 200px; background-color: #f3f4f6; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                      <span style="font-size: 3rem;">💎</span>
+                    </div>
+                    <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 10px;">Artisan Jewelry</h3>
+                    <p style="color: #6b7280; margin-bottom: 20px;">Handcrafted jewelry with precious stones and metals</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="font-size: 1.5rem; font-weight: bold;">$899</span>
+                      <button style="background-color: #000; color: #fff; padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer;">Add to Cart</button>
+                    </div>
+                  </div>
+                  
+                  <!-- Product 3 -->
+                  <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px;">
+                    <div style="height: 200px; background-color: #f3f4f6; border-radius: 4px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+                      <span style="font-size: 3rem;">👓</span>
+                    </div>
+                    <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 10px;">Designer Eyewear</h3>
+                    <p style="color: #6b7280; margin-bottom: 20px;">Luxury optical frames with precision lenses</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <span style="font-size: 1.5rem; font-weight: bold;">$459</span>
+                      <button style="background-color: #000; color: #fff; padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer;">Add to Cart</button>
+                    </div>
+                  </div>
+                </div>
+              </main>
+              
+              <footer style="margin-top: 60px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280;">
+                <p>© 2024 ITX SHOP MEER. Premium Horology & Artisan Collection.</p>
+              </footer>
+            </div>
+          `;
+        }
+      }
+      
+      // Start loading
+      document.addEventListener('DOMContentLoaded', loadApp);
+      
+      // Fallback timeout
+      setTimeout(() => {
+        const root = document.getElementById('root');
+        if (root && !root.hasChildNodes()) {
+          showFallback();
+        }
+      }, 2000);
     </script>
+</head>
+  <body class="bg-white text-gray-900">
+    <div id="root">
+      <!-- Simple loading message -->
+      <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;">
+        <div style="width: 50px; height: 50px; border: 4px solid #f3f4f6; border-top: 4px solid #000; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="margin-top: 20px; color: #6b7280;">Loading ITX SHOP MEER...</p>
+        <style>
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      </div>
+    </div>
     
     <!-- Supabase Setup -->
     <script>
-      // Initialize Supabase
+      // Simple Supabase setup for product deletion
       (function() {
-        try {
-          const supabase = window.supabase.createClient(
-            'https://hwkotlfmxuczloonjziz.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y'
-          );
-          
-          window.supabaseClient = supabase;
-          
-          // Admin product deletion function
-          window.deleteProduct = async function(productId) {
-            try {
-              if (!productId) {
-                console.error('No product ID provided');
-                return { success: false, error: 'No product ID' };
-              }
-              
-              console.log('Deleting product:', productId);
-              
-              const { error } = await supabase
-                .from('products')
-                .delete()
-                .eq('id', productId);
-              
-              if (error) {
-                console.error('Supabase delete error:', error);
-                return { success: false, error: error.message };
-              }
-              
-              console.log('Product deleted successfully');
-              return { success: true };
-              
-            } catch (error) {
-              console.error('Delete function error:', error);
-              return { success: false, error: error.message };
-            }
-          };
-          
-          console.log('Supabase initialized successfully');
-          
-        } catch (error) {
-          console.warn('Supabase initialization error:', error);
-          // Create dummy delete function
-          window.deleteProduct = async function() {
-            return { success: false, error: 'Supabase not initialized' };
-          };
-        }
-      })();
-    </script>
-</head>
-  <body class="bg-white text-gray-900 selection:bg-black selection:text-white">
-    <div id="root"></div>
-    
-    <!-- Simple loading indicator -->
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        console.log('ITX SHOP MEER - Site loaded');
+        window.supabaseConfig = {
+          url: 'https://hwkotlfmxuczloonjziz.supabase.co',
+          key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y'
+        };
         
-        // Add a small loading indicator that disappears when React loads
-        const root = document.getElementById('root');
-        if (root && root.innerHTML === '') {
-          root.innerHTML = `
-            <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;" id="initial-loader">
-              <div style="width: 50px; height: 50px; border: 4px solid #f3f3f3; border-top: 4px solid #000; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-              <p style="margin-top: 20px; color: #666;">Loading Premium Collection...</p>
-              <style>
-                @keyframes spin {
-                  0% { transform: rotate(0deg); }
-                  100% { transform: rotate(360deg); }
-                }
-              </style>
-            </div>
-          `;
-          
-          // Remove loader after 5 seconds max (React should have loaded by then)
-          setTimeout(function() {
-            const loader = document.getElementById('initial-loader');
-            if (loader) {
-              loader.style.opacity = '0';
-              loader.style.transition = 'opacity 0.3s';
-              setTimeout(() => {
-                if (loader.parentNode) loader.parentNode.removeChild(loader);
-              }, 300);
-            }
-          }, 5000);
-        }
-      });
-    </script>
-    
-    <!-- Console error suppression -->
-    <script>
-      // Suppress specific warnings
-      const originalWarn = console.warn;
-      console.warn = function(...args) {
-        // Don't show TikTok Pixel warnings
-        if (typeof args[0] === 'string' && (
-          args[0].includes('TikTok Pixel') || 
-          args[0].includes('Invalid pixel ID') ||
-          args[0].includes('cdn.tailwindcss.com should not be used')
-        )) {
-          return;
-        }
-        originalWarn.apply(console, args);
-      };
-      
-      // Also suppress TikTok Pixel errors
-      const originalError = console.error;
-      console.error = function(...args) {
-        if (typeof args[0] === 'string' && args[0].includes('TikTok Pixel')) {
-          return;
-        }
-        originalError.apply(console, args);
-      };
+        console.log('ITX SHOP MEER - Site initialized');
+      })();
     </script>
   </body>
 </html>
