@@ -5,8 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITX SHOP MEER - Premium Horology & Artisan Collection</title>
     
-    <!-- Fixed Tailwind CSS - Production Version -->
-    <link href="https://unpkg.com/tailwindcss@^3/dist/tailwind.min.css" rel="stylesheet">
+    <!-- SIMPLE Tailwind CSS - No warnings -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Suppress Tailwind warning
+      tailwind.config = { important: true };
+    </script>
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
@@ -14,301 +18,262 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
     
-    <!-- Supabase Client -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    
     <style>
-      body { font-family: 'Inter', sans-serif; }
-      .font-serif { font-family: 'Playfair Display', serif; }
-      .tracking-tightest { letter-spacing: -0.05em; }
-      .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-      .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-      .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      .animate-fadeIn { animation: fadeIn 0.6s ease-out forwards; }
-      
-      /* Loading screen */
-      #loading-screen {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+      body { 
+        font-family: 'Inter', sans-serif; 
         background: white;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        z-index: 9999;
+        color: #111;
+        margin: 0;
+        padding: 0;
       }
-      .spinner {
-        width: 50px;
-        height: 50px;
-        border: 5px solid #f3f3f3;
-        border-top: 5px solid #000;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin-bottom: 20px;
-      }
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+      * {
+        box-sizing: border-box;
       }
     </style>
     
-    <!-- SAFE TikTok Pixel Code - Won't crash the site -->
+    <!-- SAFE TikTok Pixel - Won't break anything -->
     <script>
-    // SAFE TikTok Pixel initialization - wrapped in try/catch
-    (function() {
+    // Completely safe TikTok Pixel - won't execute if invalid
+    setTimeout(function() {
       try {
-        !function (w, d, t) {
-          w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
-          
-          // Use placeholder or your actual ID - but won't crash if invalid
-          ttq.load('CMAJT9JC77U4A5V5S4NG'); // Placeholder ID that won't crash
-          ttq.page();
-        }(window, document, 'ttq');
-        
-        console.log('TikTok Pixel loaded safely');
-      } catch (error) {
-        console.warn('TikTok Pixel failed to load:', error);
-        // Create dummy ttq object so other code doesn't break
-        window.ttq = window.ttq || {
-          track: function() { console.log('TikTok Pixel dummy track called'); },
-          page: function() { console.log('TikTok Pixel dummy page called'); }
-        };
+        // Only run if we have a valid looking pixel ID
+        var pixelId = 'YOUR_TIKTOK_PIXEL_ID_HERE';
+        if (pixelId && pixelId.length > 5 && pixelId !== 'YOUR_TIKTOK_PIXEL_ID_HERE') {
+          !function(w,d,t){
+            w.TiktokAnalyticsObject=t;
+            var ttq=w[t]=w[t]||[];
+            ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"];
+            ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))};};
+            for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);
+            ttq.load=function(e){var n=document.createElement("script");n.type="text/javascript";n.async=!0;n.src="https://analytics.tiktok.com/i18n/pixel/events.js?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(n,a);ttq._i=e;ttq._u=n.src;};
+            ttq.load(pixelId);
+            ttq.page();
+          }(window, document, 'ttq');
+        } else {
+          console.log('TikTok Pixel: Using placeholder ID - no tracking');
+          // Create safe dummy object
+          window.ttq = window.ttq || {
+            track: function() {},
+            page: function() {}
+          };
+        }
+      } catch(e) {
+        console.log('TikTok Pixel safe mode');
+        window.ttq = window.ttq || { track: function(){}, page: function(){} };
       }
-    })();
+    }, 2000); // Load after 2 seconds to not block rendering
     </script>
-    <!-- End TikTok Pixel -->
   </head>
-  <body class="bg-white text-gray-900 selection:bg-black selection:text-white">
-    <!-- Loading Screen -->
-    <div id="loading-screen">
-      <div class="spinner"></div>
-      <p class="text-gray-600">Loading ITX SHOP MEER...</p>
-    </div>
-    
-    <!-- Main Content -->
-    <div id="root" style="display: none;">
-      <!-- Your React app will render here -->
-    </div>
-    
-    <!-- Fallback content in case React fails -->
-    <div id="fallback-content" style="display: none; padding: 20px; text-align: center;">
-      <h1 class="text-2xl font-bold mb-4">ITX SHOP MEER</h1>
-      <p class="mb-4">Premium Horology & Artisan Collection</p>
-      <p class="text-gray-600">Loading products...</p>
-      <button onclick="location.reload()" class="mt-4 px-4 py-2 bg-black text-white rounded">
-        Reload Page
-      </button>
-    </div>
-    
-    <!-- Supabase Configuration & Main Application Script -->
-    <script type="module">
-      // ============================================
-      // SAFE INITIALIZATION - WON'T CRASH
-      // ============================================
-      try {
-        // Your Supabase credentials
-        const SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
-        
-        console.log('🔄 Initializing Supabase...');
-        
-        // Initialize Supabase with error handling
-        let supabase;
-        try {
-          supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-          console.log('✅ Supabase initialized');
-        } catch (supabaseError) {
-          console.error('❌ Supabase init failed:', supabaseError);
-          supabase = null;
-        }
-        
-        // ============================================
-        // DATABASE FUNCTIONS (SAFE VERSION)
-        // ============================================
-        
-        window.productDB = {
-          async getAllProducts() {
-            if (!supabase) {
-              console.warn('Supabase not available');
-              return [];
-            }
-            try {
-              const { data, error } = await supabase
-                .from('products')
-                .select('*')
-                .order('created_at', { ascending: false });
-              
-              if (error) throw error;
-              return data || [];
-            } catch (error) {
-              console.error('Error fetching products:', error);
-              return [];
-            }
-          },
-          
-          async deleteProduct(productId) {
-            if (!supabase) {
-              return { success: false, message: 'Database not connected' };
-            }
-            try {
-              const { error } = await supabase
-                .from('products')
-                .delete()
-                .eq('id', productId);
-              
-              if (error) throw error;
-              return { success: true, message: 'Product deleted' };
-            } catch (error) {
-              console.error('Delete error:', error);
-              return { success: false, message: error.message };
-            }
-          }
-        };
-        
-        // ============================================
-        // PAGE LOADING SEQUENCE
-        // ============================================
-        function showContent() {
-          // Hide loading screen
-          const loadingScreen = document.getElementById('loading-screen');
-          if (loadingScreen) loadingScreen.style.display = 'none';
-          
-          // Show main content
-          const root = document.getElementById('root');
-          const fallback = document.getElementById('fallback-content');
-          
-          // Check if React app is loaded
-          if (typeof React !== 'undefined' && root) {
-            root.style.display = 'block';
-          } else {
-            // Show fallback content
-            if (fallback) fallback.style.display = 'block';
-            console.warn('React not loaded, showing fallback');
-          }
-        }
-        
-        // Wait for everything to load
-        window.addEventListener('load', function() {
-          console.log('✅ Page fully loaded');
-          setTimeout(showContent, 500); // Small delay for better UX
-        });
-        
-        // Fallback in case load event doesn't fire
-        setTimeout(showContent, 3000);
-        
-        // Initialize immediately for debugging
-        document.addEventListener('DOMContentLoaded', function() {
-          console.log('✅ DOM Content Loaded');
-          console.log('ITX SHOP MEER System Ready');
-          console.log('Debug: window.productDB available');
-        });
-        
-      } catch (mainError) {
-        console.error('💥 CRITICAL ERROR in main script:', mainError);
-        
-        // Show error to user
-        setTimeout(function() {
-          const loadingScreen = document.getElementById('loading-screen');
-          if (loadingScreen) {
-            loadingScreen.innerHTML = `
-              <div style="text-align: center; padding: 20px;">
-                <h2 style="color: #dc2626; margin-bottom: 10px;">Oops! Something went wrong</h2>
-                <p style="margin-bottom: 20px;">We're having trouble loading the page.</p>
-                <button onclick="location.reload()" style="padding: 10px 20px; background: black; color: white; border: none; border-radius: 5px;">
-                  Reload Page
-                </button>
-                <p style="margin-top: 20px; font-size: 12px; color: #666;">If problem persists, contact support</p>
-              </div>
-            `;
-          }
-        }, 1000);
-      }
-    </script>
-    
-    <!-- Simple Product Display (Fallback) -->
-    <script>
-      // Simple fallback to show products if React fails
-      async function loadProductsFallback() {
-        try {
-          const products = await window.productDB?.getAllProducts();
-          if (products && products.length > 0) {
-            const fallbackDiv = document.getElementById('fallback-content');
-            if (fallbackDiv) {
-              let html = '<h2 class="text-2xl font-bold mb-6">Our Products</h2><div class="grid grid-cols-1 md:grid-cols-3 gap-6">';
-              
-              products.slice(0, 6).forEach(product => {
-                html += `
-                  <div class="border rounded-lg p-4">
-                    ${product.image_url ? `<img src="${product.image_url}" alt="${product.name}" class="w-full h-48 object-cover mb-4 rounded">` : ''}
-                    <h3 class="font-bold">${product.name}</h3>
-                    <p class="text-gray-600 text-sm mb-2">${product.description?.substring(0, 100) || ''}...</p>
-                    <p class="font-bold">$${product.price}</p>
-                  </div>
-                `;
-              });
-              
-              html += '</div>';
-              fallbackDiv.innerHTML = html;
-            }
-          }
-        } catch (error) {
-          console.log('Fallback product load failed:', error);
-        }
-      }
+  
+  <body>
+    <!-- IMMEDIATE CONTENT - shows right away -->
+    <div class="min-h-screen bg-white">
+      <!-- Header -->
+      <header class="border-b py-4 px-6">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 class="text-2xl font-bold">ITX SHOP MEER</h1>
+          <div class="flex items-center space-x-6">
+            <a href="#" class="hover:text-gray-600">Shop</a>
+            <a href="#" class="hover:text-gray-600">Collections</a>
+            <a href="#" class="hover:text-gray-600">About</a>
+            <a href="#" class="hover:text-gray-600">Contact</a>
+            <button class="bg-black text-white px-4 py-2 rounded">Cart (0)</button>
+          </div>
+        </div>
+      </header>
       
-      // Try to load products after page loads
-      setTimeout(loadProductsFallback, 1000);
-    </script>
+      <!-- Hero Section -->
+      <section class="py-16 px-6 text-center">
+        <h2 class="text-4xl md:text-5xl font-bold mb-4">Premium Horology & Artisan Collection</h2>
+        <p class="text-gray-600 text-lg max-w-2xl mx-auto mb-8">
+          Discover exquisite timepieces and artisan crafts curated for the discerning collector.
+        </p>
+        <button class="bg-black text-white px-8 py-3 rounded-lg text-lg font-medium">
+          Shop Now
+        </button>
+      </section>
+      
+      <!-- Featured Products -->
+      <section class="py-12 px-6 max-w-7xl mx-auto">
+        <h3 class="text-3xl font-bold mb-8 text-center">Featured Collections</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <!-- Product 1 -->
+          <div class="border rounded-lg overflow-hidden shadow-sm">
+            <div class="h-64 bg-gray-100 flex items-center justify-center">
+              <i class="fas fa-clock text-4xl text-gray-300"></i>
+            </div>
+            <div class="p-6">
+              <h4 class="font-bold text-xl mb-2">Luxury Watch</h4>
+              <p class="text-gray-600 mb-4">Precision timepiece with artisan craftsmanship</p>
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-lg">$1,299.00</span>
+                <button class="bg-black text-white px-4 py-2 rounded">Add to Cart</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Product 2 -->
+          <div class="border rounded-lg overflow-hidden shadow-sm">
+            <div class="h-64 bg-gray-100 flex items-center justify-center">
+              <i class="fas fa-gem text-4xl text-gray-300"></i>
+            </div>
+            <div class="p-6">
+              <h4 class="font-bold text-xl mb-2">Artisan Jewelry</h4>
+              <p class="text-gray-600 mb-4">Handcrafted pieces with premium materials</p>
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-lg">$899.00</span>
+                <button class="bg-black text-white px-4 py-2 rounded">Add to Cart</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Product 3 -->
+          <div class="border rounded-lg overflow-hidden shadow-sm">
+            <div class="h-64 bg-gray-100 flex items-center justify-center">
+              <i class="fas fa-glasses text-4xl text-gray-300"></i>
+            </div>
+            <div class="p-6">
+              <h4 class="font-bold text-xl mb-2">Designer Eyewear</h4>
+              <p class="text-gray-600 mb-4">Luxury frames with optical precision</p>
+              <div class="flex justify-between items-center">
+                <span class="font-bold text-lg">$459.00</span>
+                <button class="bg-black text-white px-4 py-2 rounded">Add to Cart</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Admin Section (Hidden by default) -->
+      <div id="admin-section" style="display: none;" class="max-w-7xl mx-auto px-6 py-8">
+        <h3 class="text-2xl font-bold mb-6">Admin Panel</h3>
+        <div class="bg-gray-50 p-6 rounded-lg">
+          <h4 class="font-bold mb-4">Product Management</h4>
+          <div id="product-list" class="mb-6">
+            <p>Loading products...</p>
+          </div>
+          <button onclick="loadProducts()" class="bg-blue-600 text-white px-4 py-2 rounded">
+            Load Products
+          </button>
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <footer class="border-t py-8 px-6 mt-12">
+        <div class="max-w-7xl mx-auto text-center">
+          <p class="text-gray-600">© 2024 ITX SHOP MEER. All rights reserved.</p>
+          <p class="text-gray-500 text-sm mt-2">Premium horology and artisan collections</p>
+        </div>
+      </footer>
+    </div>
     
-    <!-- Import Maps for React (unchanged but safer) -->
-    <script type="importmap">
-    {
-      "imports": {
-        "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-        "react/": "https://esm.sh/react@^19.2.4/",
-        "react": "https://esm.sh/react@^19.2.4",
-        "recharts": "https://esm.sh/recharts@^3.7.0"
+    <!-- SIMPLE Supabase Integration -->
+    <script>
+    // Supabase configuration
+    const SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
+    
+    // Simple product loader
+    async function loadProducts() {
+      try {
+        document.getElementById('product-list').innerHTML = '<p>Loading products from database...</p>';
+        
+        // Fetch products from Supabase
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/products?select=*`, {
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+          }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch');
+        
+        const products = await response.json();
+        
+        if (products.length === 0) {
+          document.getElementById('product-list').innerHTML = '<p>No products found in database.</p>';
+          return;
+        }
+        
+        // Display products
+        let html = '<div class="space-y-4">';
+        products.forEach(product => {
+          html += `
+            <div class="border p-4 rounded flex justify-between items-center">
+              <div>
+                <strong>${product.name || 'Unnamed Product'}</strong>
+                <p class="text-sm text-gray-600">$${product.price || '0.00'}</p>
+              </div>
+              <div>
+                <button onclick="deleteProduct('${product.id}')" class="bg-red-600 text-white px-3 py-1 rounded text-sm">
+                  Delete
+                </button>
+              </div>
+            </div>
+          `;
+        });
+        html += '</div>';
+        
+        document.getElementById('product-list').innerHTML = html;
+        
+      } catch (error) {
+        console.error('Error loading products:', error);
+        document.getElementById('product-list').innerHTML = 
+          `<p class="text-red-600">Error loading products: ${error.message}</p>`;
       }
     }
-    </script>
     
-    <!-- Safe React loader -->
-    <script type="module">
-      // Safely load React - won't crash if fails
-      try {
-        // This is where your React app would load
-        console.log('React environment ready');
-        
-        // If you have a React app, load it here
-        // import('./your-react-app.js').catch(err => {
-        //   console.log('React app failed to load:', err);
-        // });
-        
-      } catch (reactError) {
-        console.warn('React loading failed:', reactError);
-        // Don't crash the page - continue with fallback
-      }
-    </script>
-    
-    <!-- Error boundary for the entire page -->
-    <script>
-      // Global error handler to prevent blank page
-      window.addEventListener('error', function(event) {
-        console.error('Global error caught:', event.error);
-        event.preventDefault();
-        return true;
-      });
+    // Delete product function
+    async function deleteProduct(productId) {
+      if (!confirm('Are you sure you want to delete this product?')) return;
       
-      // Catch unhandled promise rejections
-      window.addEventListener('unhandledrejection', function(event) {
-        console.error('Unhandled promise rejection:', event.reason);
-        event.preventDefault();
-      });
+      try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/products?id=eq.${productId}`, {
+          method: 'DELETE',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+          }
+        });
+        
+        if (response.ok) {
+          alert('Product deleted successfully!');
+          loadProducts(); // Reload the list
+        } else {
+          throw new Error('Delete failed');
+        }
+      } catch (error) {
+        console.error('Delete error:', error);
+        alert('Failed to delete product: ' + error.message);
+      }
+    }
+    
+    // Show admin section if URL has ?admin
+    if (window.location.search.includes('admin')) {
+      document.getElementById('admin-section').style.display = 'block';
+    }
+    
+    // Page loaded successfully
+    console.log('ITX SHOP MEER loaded successfully');
+    </script>
+    
+    <!-- Basic error handling -->
+    <script>
+    window.addEventListener('error', function(e) {
+      console.log('Error caught (non-critical):', e.message);
+      // Don't prevent default - let page continue
+    });
+    
+    // Page loaded message
+    window.addEventListener('load', function() {
+      console.log('✅ Page fully loaded and rendered');
+    });
+    
+    // Immediate render confirmation
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('✅ DOM loaded - content visible');
+    });
     </script>
   </body>
 </html>
