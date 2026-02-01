@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -6,21 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITX SHOP MEER - Premium Horology & Artisan Collection</title>
     
-    <!-- TikTok Pixel Base Code -->
-    <script>
-      !function (w, d, t) {
-        w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
-        
-        // IMPORTANT: Replace 'YOUR_PIXEL_ID_HERE' with your actual TikTok Pixel ID
-        ttq.load('YOUR_PIXEL_ID_HERE');
-        ttq.page();
-      }(window, document, 'ttq');
-    </script>
-    <!-- End TikTok Pixel Base Code -->
-
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fixed Tailwind CSS - Production Version -->
+    <link href="https://unpkg.com/tailwindcss@^3/dist/tailwind.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+    
+    <!-- Supabase Client -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    
     <style>
       body { font-family: 'Inter', sans-serif; }
       .font-serif { font-family: 'Playfair Display', serif; }
@@ -31,19 +27,630 @@
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fadeIn { animation: fadeIn 0.6s ease-out forwards; }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "recharts": "https://esm.sh/recharts@^3.7.0"
-  }
-}
-</script>
-</head>
+    
+    <!-- TikTok Pixel Code - STILL NEED YOUR TIKTOK PIXEL ID -->
+    <script>
+    !function (w, d, t) {
+      w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
+      
+      // IMPORTANT: You still need to add your TikTok Pixel ID here
+      // Get it from TikTok Events Manager → Pixel → Manage → Pixel Code
+      // Example: ttq.load('CM123456789ABCDEF');
+      ttq.load('YOUR_TIKTOK_PIXEL_ID_HERE'); <!-- REPLACE THIS -->
+      ttq.page();
+    }(window, document, 'ttq');
+    </script>
+    <!-- End TikTok Pixel -->
+  </head>
   <body class="bg-white text-gray-900 selection:bg-black selection:text-white">
     <div id="root"></div>
+    
+    <!-- Your React app will be loaded here -->
+    
+    <!-- Supabase Configuration & Main Application Script -->
+    <script type="module">
+      // ============================================
+      // SUPABASE CONFIGURATION WITH YOUR CREDENTIALS
+      // ============================================
+      // Your Supabase credentials (already inserted)
+      const SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
+      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
+      
+      // Initialize Supabase
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      
+      // ============================================
+      // DATABASE FUNCTIONS
+      // ============================================
+      
+      // 1. PRODUCT MANAGEMENT FUNCTIONS
+      window.productDB = {
+        // Get all products
+        async getAllProducts() {
+          try {
+            const { data, error } = await supabase
+              .from('products')
+              .select('*')
+              .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            return data || [];
+          } catch (error) {
+            console.error('Error fetching products:', error);
+            return [];
+          }
+        },
+        
+        // Add a new product
+        async addProduct(productData) {
+          try {
+            const { data, error } = await supabase
+              .from('products')
+              .insert([{
+                name: productData.name,
+                description: productData.description,
+                price: productData.price,
+                image_url: productData.image_url,
+                category: productData.category,
+                stock: productData.stock || 0,
+                featured: productData.featured || false
+              }])
+              .select();
+            
+            if (error) throw error;
+            return data ? data[0] : null;
+          } catch (error) {
+            console.error('Error adding product:', error);
+            return null;
+          }
+        },
+        
+        // FIXED: Product deletion function
+        async deleteProduct(productId) {
+          try {
+            console.log('Deleting product with ID:', productId);
+            
+            // First verify the product exists
+            const { data: product, error: fetchError } = await supabase
+              .from('products')
+              .select('id')
+              .eq('id', productId)
+              .single();
+            
+            if (fetchError) {
+              console.error('Product not found or error fetching:', fetchError);
+              return { 
+                success: false, 
+                message: fetchError.message || 'Product not found' 
+              };
+            }
+            
+            if (!product) {
+              return { 
+                success: false, 
+                message: 'Product not found in database' 
+              };
+            }
+            
+            // Delete the product
+            const { error: deleteError } = await supabase
+              .from('products')
+              .delete()
+              .eq('id', productId);
+            
+            if (deleteError) throw deleteError;
+            
+            console.log('Product deleted successfully from database');
+            return { 
+              success: true, 
+              message: 'Product deleted successfully' 
+            };
+            
+          } catch (error) {
+            console.error('Error deleting product:', error);
+            return { 
+              success: false, 
+              message: error.message || 'Failed to delete product' 
+            };
+          }
+        },
+        
+        // Update product
+        async updateProduct(productId, updateData) {
+          try {
+            const { data, error } = await supabase
+              .from('products')
+              .update(updateData)
+              .eq('id', productId)
+              .select();
+            
+            if (error) throw error;
+            return data ? data[0] : null;
+          } catch (error) {
+            console.error('Error updating product:', error);
+            return null;
+          }
+        },
+        
+        // Get single product by ID
+        async getProductById(productId) {
+          try {
+            const { data, error } = await supabase
+              .from('products')
+              .select('*')
+              .eq('id', productId)
+              .single();
+            
+            if (error) throw error;
+            return data;
+          } catch (error) {
+            console.error('Error fetching product:', error);
+            return null;
+          }
+        }
+      };
+      
+      // 2. ORDER MANAGEMENT FUNCTIONS
+      window.orderDB = {
+        // Create new order
+        async createOrder(orderData) {
+          try {
+            const { data, error } = await supabase
+              .from('orders')
+              .insert([{
+                customer_name: orderData.customer_name,
+                customer_email: orderData.customer_email,
+                customer_phone: orderData.customer_phone,
+                customer_address: orderData.customer_address,
+                products: orderData.products,
+                total_amount: orderData.total_amount,
+                status: 'pending',
+                payment_method: orderData.payment_method || 'cash'
+              }])
+              .select();
+            
+            if (error) throw error;
+            
+            // Track order with TikTok Pixel
+            if (window.ttq) {
+              window.ttq.track('CompletePayment', {
+                value: orderData.total_amount,
+                currency: 'USD',
+                contents: orderData.products.map(p => ({
+                  content_id: p.id,
+                  content_name: p.name,
+                  quantity: p.quantity,
+                  price: p.price
+                }))
+              });
+            }
+            
+            return data ? data[0] : null;
+          } catch (error) {
+            console.error('Error creating order:', error);
+            return null;
+          }
+        },
+        
+        // Get all orders (admin only)
+        async getAllOrders() {
+          try {
+            const { data, error } = await supabase
+              .from('orders')
+              .select('*')
+              .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            return data || [];
+          } catch (error) {
+            console.error('Error fetching orders:', error);
+            return [];
+          }
+        },
+        
+        // Update order status
+        async updateOrderStatus(orderId, status) {
+          try {
+            const { data, error } = await supabase
+              .from('orders')
+              .update({ status: status })
+              .eq('id', orderId)
+              .select();
+            
+            if (error) throw error;
+            return data ? data[0] : null;
+          } catch (error) {
+            console.error('Error updating order:', error);
+            return null;
+          }
+        },
+        
+        // Get orders by email (for customers)
+        async getOrdersByEmail(email) {
+          try {
+            const { data, error } = await supabase
+              .from('orders')
+              .select('*')
+              .eq('customer_email', email)
+              .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            return data || [];
+          } catch (error) {
+            console.error('Error fetching customer orders:', error);
+            return [];
+          }
+        }
+      };
+      
+      // 3. IMAGE UPLOAD FUNCTION
+      window.storageDB = {
+        async uploadProductImage(file, productId) {
+          try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${productId || 'temp'}_${Date.now()}.${fileExt}`;
+            const filePath = `product-images/${fileName}`;
+            
+            const { data, error } = await supabase.storage
+              .from('product-images')
+              .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false
+              });
+            
+            if (error) throw error;
+            
+            // Get public URL
+            const { data: { publicUrl } } = supabase.storage
+              .from('product-images')
+              .getPublicUrl(filePath);
+            
+            return publicUrl;
+          } catch (error) {
+            console.error('Error uploading image:', error);
+            return null;
+          }
+        },
+        
+        // Delete product image
+        async deleteProductImage(imageUrl) {
+          try {
+            if (!imageUrl) return true;
+            
+            // Extract file path from URL
+            const urlParts = imageUrl.split('/');
+            const filePath = urlParts.slice(-2).join('/');
+            
+            const { error } = await supabase.storage
+              .from('product-images')
+              .remove([filePath]);
+            
+            if (error) throw error;
+            return true;
+          } catch (error) {
+            console.error('Error deleting image:', error);
+            return false;
+          }
+        }
+      };
+      
+      // 4. CATEGORY MANAGEMENT
+      window.categoryDB = {
+        async getCategories() {
+          try {
+            const { data, error } = await supabase
+              .from('products')
+              .select('category')
+              .not('category', 'is', null);
+            
+            if (error) throw error;
+            
+            // Get unique categories
+            const categories = [...new Set(data.map(item => item.category))];
+            return categories.filter(cat => cat && cat.trim() !== '');
+          } catch (error) {
+            console.error('Error fetching categories:', error);
+            return [];
+          }
+        }
+      };
+      
+      // ============================================
+      // PRODUCT DELETION FIX - USE THIS IN ADMIN
+      // ============================================
+      window.fixProductDeletion = async function(productId, elementSelector = null) {
+        console.log('Admin: Deleting product ID:', productId);
+        
+        // Show loading state
+        window.showNotification('Deleting product...', 'info');
+        
+        // Method 1: Try direct Supabase deletion
+        const result = await window.productDB.deleteProduct(productId);
+        
+        if (result.success) {
+          console.log('✅ Product deleted successfully from database');
+          
+          // Remove from UI if element exists
+          if (elementSelector) {
+            const productElement = document.querySelector(elementSelector);
+            if (productElement) {
+              productElement.style.opacity = '0';
+              productElement.style.transform = 'translateY(-10px)';
+              setTimeout(() => {
+                productElement.remove();
+              }, 300);
+            }
+          }
+          
+          // Alternative: Remove by data attribute
+          const elements = document.querySelectorAll(`[data-product-id="${productId}"]`);
+          elements.forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-10px)';
+            setTimeout(() => {
+              el.remove();
+            }, 300);
+          });
+          
+          // Show success message
+          window.showNotification('✅ Product deleted successfully!', 'success');
+          
+          // Refresh products if there's a refresh function
+          if (window.refreshProductList) {
+            setTimeout(() => window.refreshProductList(), 500);
+          }
+          
+          return true;
+        } else {
+          console.error('❌ Deletion failed:', result.message);
+          window.showNotification(`❌ Failed: ${result.message}`, 'error');
+          return false;
+        }
+      };
+      
+      // ============================================
+      // ADMIN PANEL HELPER FUNCTIONS
+      // ============================================
+      window.adminPanel = {
+        // Initialize admin panel
+        init: function() {
+          console.log('Admin Panel Initialized');
+          this.setupDeleteButtons();
+        },
+        
+        // Setup delete buttons with proper event listeners
+        setupDeleteButtons: function() {
+          document.addEventListener('click', function(e) {
+            // Check if delete button was clicked
+            if (e.target.classList.contains('delete-product-btn') || 
+                e.target.closest('.delete-product-btn')) {
+              
+              const button = e.target.classList.contains('delete-product-btn') 
+                ? e.target 
+                : e.target.closest('.delete-product-btn');
+              
+              const productId = button.getAttribute('data-product-id');
+              const productName = button.getAttribute('data-product-name') || 'this product';
+              
+              if (!productId) {
+                console.error('No product ID found on delete button');
+                return;
+              }
+              
+              // Confirm deletion
+              if (confirm(`Are you sure you want to delete "${productName}"? This action cannot be undone.`)) {
+                // Get parent element for removal
+                const productElement = button.closest('[data-product-item]') || 
+                                      button.closest('.product-item') ||
+                                      button.closest('tr') ||
+                                      button.closest('li') ||
+                                      button.parentElement;
+                
+                const selector = productElement ? `[data-product-id="${productId}"]` : null;
+                
+                // Call the fixed deletion function
+                window.fixProductDeletion(productId, selector);
+              }
+            }
+          });
+        },
+        
+        // Bulk delete products
+        deleteMultipleProducts: async function(productIds) {
+          if (!productIds || productIds.length === 0) {
+            window.showNotification('No products selected for deletion', 'warning');
+            return;
+          }
+          
+          if (!confirm(`Delete ${productIds.length} selected products?`)) {
+            return;
+          }
+          
+          let successCount = 0;
+          let failCount = 0;
+          
+          for (const productId of productIds) {
+            const result = await window.productDB.deleteProduct(productId);
+            if (result.success) {
+              successCount++;
+              
+              // Remove from UI
+              const elements = document.querySelectorAll(`[data-product-id="${productId}"]`);
+              elements.forEach(el => el.remove());
+            } else {
+              failCount++;
+            }
+          }
+          
+          window.showNotification(
+            `Deleted ${successCount} products. ${failCount > 0 ? `Failed: ${failCount}` : ''}`,
+            failCount > 0 ? 'warning' : 'success'
+          );
+          
+          // Refresh if needed
+          if (window.refreshProductList) {
+            window.refreshProductList();
+          }
+        }
+      };
+      
+      // ============================================
+      // NOTIFICATION SYSTEM
+      // ============================================
+      window.showNotification = function(message, type = 'info') {
+        // Remove existing notification
+        const existing = document.getElementById('global-notification');
+        if (existing) existing.remove();
+        
+        // Create new notification
+        const notification = document.createElement('div');
+        notification.id = 'global-notification';
+        notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 ${
+          type === 'success' ? 'bg-green-500 text-white' :
+          type === 'error' ? 'bg-red-500 text-white' :
+          type === 'warning' ? 'bg-yellow-500 text-white' :
+          'bg-blue-500 text-white'
+        }`;
+        notification.innerHTML = `
+          <div class="flex items-center">
+            <i class="fas ${
+              type === 'success' ? 'fa-check-circle' :
+              type === 'error' ? 'fa-exclamation-circle' :
+              type === 'warning' ? 'fa-exclamation-triangle' :
+              'fa-info-circle'
+            } mr-2"></i>
+            <span>${message}</span>
+          </div>
+        `;
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateY(-20px)';
+        
+        document.body.appendChild(notification);
+        
+        // Animate in
+        setTimeout(() => {
+          notification.style.opacity = '1';
+          notification.style.transform = 'translateY(0)';
+        }, 10);
+        
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+          notification.style.opacity = '0';
+          notification.style.transform = 'translateY(-20px)';
+          setTimeout(() => {
+            if (notification.parentNode) {
+              notification.parentNode.removeChild(notification);
+            }
+          }, 300);
+        }, 5000);
+        
+        // Click to dismiss
+        notification.addEventListener('click', () => {
+          notification.style.opacity = '0';
+          notification.style.transform = 'translateY(-20px)';
+          setTimeout(() => {
+            if (notification.parentNode) {
+              notification.parentNode.removeChild(notification);
+            }
+          }, 300);
+        });
+      };
+      
+      // ============================================
+      // INITIALIZATION
+      // ============================================
+      document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 ITX SHOP MEER - System Initialized');
+        console.log('📦 Supabase Connected:', SUPABASE_URL);
+        console.log('📊 Available functions:');
+        console.log('- window.productDB.getAllProducts()');
+        console.log('- window.productDB.deleteProduct(productId)');
+        console.log('- window.orderDB.createOrder(orderData)');
+        console.log('- window.adminPanel.init()');
+        console.log('- window.fixProductDeletion(productId)');
+        
+        // Initialize admin panel
+        window.adminPanel.init();
+        
+        // Check if TikTok Pixel is loaded
+        if (window.ttq) {
+          console.log('✅ TikTok Pixel: Active');
+        } else {
+          console.warn('⚠️ TikTok Pixel: Not loaded - Add your Pixel ID in the script tag');
+          window.showNotification('TikTok Pixel not configured. Add your Pixel ID.', 'warning');
+        }
+        
+        // Test Supabase connection
+        supabase.auth.getSession().then(({ data }) => {
+          if (data.session) {
+            console.log('✅ Supabase: Connected (Authenticated)');
+          } else {
+            console.log('✅ Supabase: Connected (Anonymous)');
+          }
+          
+          // Test product table connection
+          window.productDB.getAllProducts().then(products => {
+            console.log(`📦 Loaded ${products.length} products from database`);
+          }).catch(err => {
+            console.error('❌ Error connecting to products table:', err);
+            window.showNotification('Database connection issue. Check table exists.', 'error');
+          });
+        }).catch(err => {
+          console.error('❌ Supabase Connection Error:', err);
+          window.showNotification('Supabase connection failed. Check credentials.', 'error');
+        });
+        
+        // Setup automatic product deletion for admin buttons
+        console.log('🔧 Product deletion system ready');
+      });
+    </script>
+    
+    <!-- Quick Admin Console Helper -->
+    <script>
+      // Quick commands for browser console
+      window.ITXAdmin = {
+        // Delete product by ID (use in console)
+        delete: async function(productId) {
+          return await window.fixProductDeletion(productId);
+        },
+        
+        // List all products
+        list: async function() {
+          const products = await window.productDB.getAllProducts();
+          console.log('📋 Products:', products);
+          return products;
+        },
+        
+        // Test database connection
+        test: async function() {
+          console.log('🧪 Testing database connection...');
+          const products = await window.productDB.getAllProducts();
+          console.log(`✅ Connected. Found ${products.length} products.`);
+          return true;
+        },
+        
+        // Fix all delete buttons
+        fixButtons: function() {
+          window.adminPanel.init();
+          console.log('🔧 Delete buttons re-initialized');
+        }
+      };
+      
+      console.log('💻 Admin console available: window.ITXAdmin');
+      console.log('   Commands: ITXAdmin.delete("product-id"), ITXAdmin.list(), ITXAdmin.test()');
+    </script>
+    
+    <!-- Import Maps for React (unchanged) -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+        "react/": "https://esm.sh/react@^19.2.4/",
+        "react": "https://esm.sh/react@^19.2.4",
+        "recharts": "https://esm.sh/recharts@^3.7.0"
+      }
+    }
+    </script>
   </body>
 </html>
