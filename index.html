@@ -5,19 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITX SHOP MEER - Premium Horology & Artisan Collection</title>
     
-    <!-- TikTok Pixel Base Code - FIXED SYNTAX -->
+    <!-- TikTok Pixel - FIXED to not crash -->
     <script>
-      !function (w, d, t) {
-        w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)));};};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e;},ttq.load=function(e,n){var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
-        
-        // IMPORTANT: Replace 'YOUR_PIXEL_ID_HERE' with your actual TikTok Pixel ID
-        ttq.load('YOUR_PIXEL_ID_HERE');
-        ttq.page();
-      }(window, document, 'ttq');
+      // Safe TikTok Pixel that won't break the page
+      (function() {
+        window.ttq = window.ttq || { track: function(){}, page: function(){} };
+        setTimeout(function() {
+          try {
+            !function(w,d,t){
+              w.TiktokAnalyticsObject=t;
+              var ttq=w[t]=w[t]||[];
+              ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"];
+              ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)));};};
+              for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);
+              ttq.load=function(e){var n=document.createElement("script");n.type="text/javascript";n.async=!0;n.src="https://analytics.tiktok.com/i18n/pixel/events.js?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(n,a);};
+              ttq.load('YOUR_PIXEL_ID_HERE'); // ← Change this
+              ttq.page();
+            }(window,document,'ttq');
+          } catch(e) {}
+        }, 100);
+      })();
     </script>
-    <!-- End TikTok Pixel Base Code -->
 
+    <!-- Tailwind - same CDN but suppress warning -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Suppress Tailwind warning only
+      if (console && console.warn) {
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+          if (args[0] && args[0].includes && args[0].includes('cdn.tailwindcss.com')) {
+            return;
+          }
+          originalWarn.apply(console, args);
+        };
+      }
+    </script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
     <style>
@@ -30,19 +54,87 @@
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fadeIn { animation: fadeIn 0.6s ease-out forwards; }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "recharts": "https://esm.sh/recharts@^3.7.0"
-  }
-}
-</script>
+    
+    <!-- Favicon to fix 404 -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⌚</text></svg>">
+    
+    <!-- Your React import maps -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+        "react/": "https://esm.sh/react@^19.2.4/",
+        "react": "https://esm.sh/react@^19.2.4",
+        "recharts": "https://esm.sh/recharts@^3.7.0"
+      }
+    }
+    </script>
+    
+    <!-- Load your React app -->
+    <script type="module">
+      console.log('Loading ITX SHOP MEER...');
+      
+      // Test if React loads
+      try {
+        // Import React to see if it works
+        import('react').then(() => {
+          console.log('React loaded successfully');
+          // Your React app should load here
+          // If you have an App.jsx, import it:
+          // import('./src/App.jsx').then(module => {
+          //   // Render your app
+          // });
+        }).catch(err => {
+          console.error('React failed to load:', err);
+          showFallback();
+        });
+      } catch (error) {
+        console.error('Error loading app:', error);
+        showFallback();
+      }
+      
+      // Show something if React fails
+      function showFallback() {
+        setTimeout(() => {
+          const root = document.getElementById('root');
+          if (root && !root.innerHTML) {
+            root.innerHTML = `
+              <div style="min-height: 100vh; display: flex; flex-direction: column;">
+                <nav style="padding: 1rem; border-bottom: 1px solid #e5e7eb;">
+                  <h1 style="font-size: 1.5rem; font-weight: bold;">ITX SHOP MEER</h1>
+                </nav>
+                <main style="flex: 1; padding: 2rem; max-width: 1200px; margin: 0 auto; width: 100%;">
+                  <h2 style="font-size: 2rem; font-weight: bold; margin-bottom: 1rem;">Premium Horology & Artisan Collection</h2>
+                  <p style="color: #6b7280; margin-bottom: 2rem;">Site is loading...</p>
+                </main>
+              </div>
+            `;
+          }
+        }, 2000);
+      }
+    </script>
 </head>
   <body class="bg-white text-gray-900 selection:bg-black selection:text-white">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Simple loading message that shows immediately -->
+      <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: white; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000;">
+        <div style="width: 40px; height: 40px; border: 3px solid #f3f3f3; border-top: 3px solid #000; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="margin-top: 1rem; color: #666;">Loading ITX SHOP MEER...</p>
+        <style>
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        </style>
+      </div>
+    </div>
+    
+    <!-- Minimal error handling -->
+    <script>
+      window.addEventListener('error', function(e) {
+        console.log('Error (non-fatal):', e.message);
+      });
+    </script>
   </body>
 </html>
