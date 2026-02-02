@@ -201,23 +201,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const SQL_FIX_SCRIPT = `
--- 1. FIX THE 'id' COLUMN (Change from UUID to TEXT)
--- This is critical because the app uses custom string IDs like 'PROD-...'
+-- 1. CHANGE ID COLUMN FROM UUID TO TEXT (IMPORTANT)
+-- Your screenshot shows 'uuid' but the app uses 'PROD-...' string IDs
 ALTER TABLE public.products ALTER COLUMN id TYPE text;
 
--- 2. ENSURE ALL COLUMNS EXIST
+-- 2. ENSURE COLUMNS MATCH APP EXPECTATIONS
+-- If columns like 'image_url' or 'stock' exist, we sync them
+DO $$ 
+BEGIN
+    -- Rename 'image_url' to 'image' if 'image_url' exists but 'image' doesn't
+    IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image_url') 
+    AND NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image') THEN
+        ALTER TABLE public.products RENAME COLUMN image_url TO image;
+    END IF;
+
+    -- Rename 'stock' to 'inventory' if 'stock' exists but 'inventory' doesn't
+    IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'stock') 
+    AND NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'inventory') THEN
+        ALTER TABLE public.products RENAME COLUMN stock TO inventory;
+    END IF;
+END $$;
+
+-- 3. ADD MISSING COLUMNS IF THEY STILL DON'T EXIST
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image text;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS inventory integer DEFAULT 0;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS variants jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS reviews jsonb DEFAULT '[]'::jsonb;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS video text;
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS rating numeric DEFAULT 5;
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS reviews jsonb DEFAULT '[]'::jsonb;
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS created_at timestamp with time zone DEFAULT now();
 
--- 3. ENSURE PERMISSIONS ARE OPEN
+-- 4. OPEN PERMISSIONS & DISABLE RLS
 ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
 GRANT ALL ON public.products TO anon, authenticated, service_role;
 
--- 4. REFRESH TABLE CACHE
+-- 5. FORCE REFRESH SUPABASE SCHEMA CACHE (VITAL)
 NOTIFY pgrst, 'reload schema';
 `;
 
@@ -256,20 +273,15 @@ NOTIFY pgrst, 'reload schema';
       console.error('DATABASE ERROR:', error);
       
       const errorMsg = error.message.toLowerCase();
-      const isMissingColumn = errorMsg.includes('column') || errorMsg.includes('not found');
-      const isUuidError = errorMsg.includes('uuid') || errorMsg.includes('invalid input syntax');
-
-      if (isMissingColumn || isUuidError) {
-        let diagnostic = "DATABASE MISMATCH DETECTED:\n\n";
-        if (isUuidError) diagnostic += "- Your 'id' column is likely 'uuid' type but needs to be 'text'.\n";
-        if (isMissingColumn) diagnostic += "- Your 'products' table is missing columns like 'image' or 'variants'.\n";
-        
-        if (window.confirm(`${diagnostic}\nWould you like to copy the REPAIR SQL script to your clipboard?`)) {
+      
+      // If error is about uuid or missing columns
+      if (errorMsg.includes('uuid') || errorMsg.includes('column') || errorMsg.includes('not found')) {
+        if (window.confirm(`CRITICAL DATABASE MISMATCH:\n\n1. ID column is UUID but must be TEXT.\n2. Column names (image/variants) are missing or cached.\n\nWould you like to copy the ONE-CLICK REPAIR SQL?`)) {
           navigator.clipboard.writeText(SQL_FIX_SCRIPT);
           alert('SQL COPIED! Go to Supabase > SQL Editor > Paste > Run.');
         }
       } else {
-        alert(`PUBLISH ERROR: ${error.message}`);
+        alert(`PUBLISH FAILED: ${error.message}`);
       }
     } finally {
       setIsSaving(false);
@@ -434,33 +446,36 @@ NOTIFY pgrst, 'reload schema';
 
                 <div className="pt-12 border-t border-gray-100">
                   <h3 className="text-lg font-black uppercase tracking-widest text-red-600 mb-4 flex items-center italic">
-                    <i className="fas fa-hammer mr-3"></i> Sync Database Schema
+                    <i className="fas fa-satellite-dish mr-3"></i> Ultimate DB Sync Tool
                   </h3>
                   <p className="text-xs text-gray-500 mb-6 font-medium leading-relaxed">
-                    If you are seeing <strong>"invalid input syntax for type uuid"</strong> or <strong>"could not find image column"</strong>, your table needs a structural fix. 
-                    This script changes your <strong>id</strong> column to <strong>text</strong> and adds missing columns.
+                    If you are seeing <strong>"missing columns"</strong> or <strong>"uuid error"</strong>, this script will:
+                    <br/>1. Change ID from UUID to TEXT.
+                    <br/>2. Automatically rename <strong>image_url</strong> to <strong>image</strong>.
+                    <br/>3. Automatically rename <strong>stock</strong> to <strong>inventory</strong>.
+                    <br/>4. Force Supabase to refresh its memory.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <button 
                       type="button"
                       onClick={() => {
                         navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-                        alert('FIX SCRIPT COPIED!\n\n1. Go to Supabase > SQL Editor\n2. New Query > Paste > Run.\n\nThis fix allows the app to save custom IDs and images.');
+                        alert('SQL COPIED!\n\n1. Go to Supabase > SQL Editor\n2. New Query > Paste > Run.\n\nThis will fix the column names and ID type instantly.');
                       }} 
                       className="bg-black text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-lg"
                     >
-                      Copy Fix SQL (UUID to Text)
+                      Copy Ultimate Fix SQL
                     </button>
                     <button 
                       type="button"
                       onClick={async () => {
                         const { data, error } = await supabase.from('products').select('*').limit(1);
-                        if (error) alert(`DIAGNOSTIC FAILED:\n${error.message}\n\nTIP: Run the fix script above.`);
+                        if (error) alert(`DIAGNOSTIC FAILED:\n${error.message}`);
                         else alert(`DIAGNOSTIC PASSED:\nConnected to 'products' table successfully.`);
                       }} 
                       className="bg-gray-100 text-black border border-gray-200 px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition"
                     >
-                      Test Connection
+                      Check Connection
                     </button>
                   </div>
                 </div>
