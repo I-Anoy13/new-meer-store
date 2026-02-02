@@ -172,28 +172,44 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
     setUploading(true);
+    const BUCKET_NAME = 'product-images'; // Must exactly match Supabase
+    
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       
-      // Corrected bucket name to 'product-images'
-      const { error: uploadError } = await supabase.storage
-        .from('product-images')
+      console.log(`Attempting upload to bucket: "${BUCKET_NAME}"...`);
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(BUCKET_NAME)
         .upload(fileName, file, {
           cacheControl: '3600',
           upsert: false
         });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Supabase Storage Error Details:', uploadError);
+        throw uploadError;
+      }
 
-      const { data } = supabase.storage
-        .from('product-images')
+      const { data: publicUrlData } = supabase.storage
+        .from(BUCKET_NAME)
         .getPublicUrl(fileName);
 
-      setProductForm(prev => ({ ...prev, image: data.publicUrl }));
+      setProductForm(prev => ({ ...prev, image: publicUrlData.publicUrl }));
+      console.log('Upload successful:', publicUrlData.publicUrl);
     } catch (error: any) { 
-      alert('Vault Storage Error: ' + error.message + '. Please ensure your bucket "product-images" exists and has public "Insert" permissions.'); 
+      console.error('Full Upload Error Object:', error);
+      alert(
+        `VAULT STORAGE ERROR:\n\n` +
+        `Problem: ${error.message}\n\n` +
+        `CHECKLIST:\n` +
+        `1. Is your bucket named exactly "${BUCKET_NAME}"?\n` +
+        `2. Is the bucket set to "Public" in Supabase?\n` +
+        `3. Did you add "Insert" and "Select" RLS policies for anonymous users?`
+      ); 
     }
     finally { setUploading(false); }
   };
