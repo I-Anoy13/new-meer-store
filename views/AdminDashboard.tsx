@@ -222,6 +222,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const SQL_FIX_SCRIPT = `
+-- 1. Rename 'product' to 'products' if it exists
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'product' AND table_schema = 'public') THEN
+    ALTER TABLE public.product RENAME TO products;
+  END IF;
+END $$;
+
+-- 2. Create 'products' table if it doesn't exist
 CREATE TABLE IF NOT EXISTS public.products (
   id text primary key,
   name text not null,
@@ -237,7 +246,18 @@ CREATE TABLE IF NOT EXISTS public.products (
   created_at timestamp with time zone default now()
 );
 
--- Reset RLS for development
+-- 3. Add 'image' column if it's missing (in case table was created manually)
+DO $$ 
+BEGIN
+  IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image') THEN
+    ALTER TABLE public.products ADD COLUMN image text;
+  END IF;
+  IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'variants') THEN
+    ALTER TABLE public.products ADD COLUMN variants jsonb DEFAULT '[]'::jsonb;
+  END IF;
+END $$;
+
+-- 4. Open up permissions for the app
 ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
 GRANT ALL ON public.products TO anon, authenticated, service_role;
 `;
@@ -264,6 +284,7 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
     };
 
     try {
+      // Explicitly using 'products' table
       const { error } = await supabase
         .from('products')
         .upsert([productData], { onConflict: 'id' });
@@ -275,12 +296,12 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
       alert('SUCCESS: Timepiece published to ITX Vault.');
     } catch (error: any) {
       console.error('DATABASE ERROR:', error);
-      const isMissingColumn = error.message.includes('column') || error.message.includes('not found');
+      const isMissingTableOrColumn = error.message.includes('column') || error.message.includes('not found') || error.message.includes('relation');
       
-      if (isMissingColumn) {
-        if (window.confirm(`DATABASE SCHEMA MISMATCH:\n\nYour 'products' table is missing required columns (likely 'image' or 'variants').\n\nWould you like to copy the SQL Fix Script to your clipboard? Paste it into the Supabase SQL Editor and run it.`)) {
+      if (isMissingTableOrColumn) {
+        if (window.confirm(`DATABASE MISMATCH:\n\nYour database table is either named 'product' (singular) or is missing columns like 'image'.\n\nWould you like to copy the SQL FIX SCRIPT? This will rename your table to 'products' and add all missing columns automatically.`)) {
           navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-          alert('SQL Script copied! Go to Supabase > SQL Editor > New Query > Paste > Run.');
+          alert('SQL Script copied! Paste it into the Supabase SQL Editor and click RUN.');
         }
       } else {
         alert(`PUBLISH ERROR: ${error.message}`);
@@ -374,16 +395,16 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
             </div>
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                <table className="w-full text-left">
-                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">SKU / Model</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Inventory</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Editions / Variants</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Base Price</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Action</th></tr></thead>
+                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">SKU / Model</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Inventory</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Product Lineup</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Base Price</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Action</th></tr></thead>
                   <tbody>{filteredProducts.map(p => (
-                    <tr key={p.id} className="border-t border-gray-50 group hover:bg-gray-50/50 transition-colors">
+                    <tr key={p.id} className="border-t border-gray-50 group hover:bg-gray-50/50 transition-colors text-black">
                       <td className="px-10 py-8 flex items-center space-x-4">
                         <div className="relative">
                           <img src={p.image} onError={handleImageError} className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-gray-100" />
                           {p.video && <div className="absolute -bottom-1 -right-1 bg-blue-600 text-white text-[7px] px-1 rounded-sm"><i className="fas fa-video"></i></div>}
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-black uppercase italic text-sm text-black">{p.name}</span>
+                          <span className="font-black uppercase italic text-sm">{p.name}</span>
                           <span className="text-[9px] text-gray-400 font-bold tracking-widest uppercase">{p.category}</span>
                         </div>
                       </td>
@@ -408,7 +429,7 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
                           )}
                         </div>
                       </td>
-                      <td className="px-10 py-8 text-right font-serif font-bold italic text-xl text-black">Rs. {p.price.toLocaleString()}</td>
+                      <td className="px-10 py-8 text-right font-serif font-bold italic text-xl">Rs. {p.price.toLocaleString()}</td>
                       <td className="px-10 py-8 text-right whitespace-nowrap">
                         <button onClick={() => openModal(p)} className="text-blue-600 mr-6 font-black uppercase text-[10px] tracking-widest hover:underline">Modify</button>
                         <button onClick={(e) => handleDelete(e, p.id)} className="text-red-600 font-black uppercase text-[10px] tracking-widest hover:underline">Remove</button>
@@ -428,7 +449,7 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
               <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={orderStatusFilter} onChange={(e) => setOrderStatusFilter(e.target.value)}><option value="All">ALL STATUSES</option><option value="Pending">PENDING</option><option value="Confirmed">CONFIRMED</option><option value="Shipped">SHIPPED</option><option value="Delivered">DELIVERED</option></select>
               <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={orderSort} onChange={(e) => setOrderSort(e.target.value as any)}><option value="date-desc">NEWEST FIRST</option><option value="total-desc">TOTAL: HIGH-LOW</option></select>
             </div>
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden text-black">
                <table className="w-full text-left">
                   <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">Order ID</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Customer</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Date</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Total</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Status</th></tr></thead>
                   <tbody>{filteredOrders.map(o => (<tr key={o.id} className="border-t border-gray-50"><td className="px-10 py-8 font-black text-xs text-blue-600">#{o.id}</td><td className="px-10 py-8 flex flex-col"><span className="font-black uppercase italic">{o.customer.name}</span><span className="text-[9px] text-gray-400 font-bold">{o.customer.city}</span></td><td className="px-10 py-8 text-[10px] font-black text-gray-500">{new Date(o.date).toLocaleDateString()}</td><td className="px-10 py-8 font-serif font-bold italic">Rs. {o.total.toLocaleString()}</td><td className="px-10 py-8"><select value={o.status} onChange={(e) => handleStatusChange(o.id, e.target.value as any)} className="bg-gray-50 border border-gray-200 text-[10px] font-black px-4 py-2 rounded-xl focus:ring-1 focus:ring-black outline-none"><option value="Pending">PENDING</option><option value="Confirmed">CONFIRMED</option><option value="Shipped">SHIPPED</option><option value="Delivered">DELIVERED</option><option value="Cancelled">CANCELLED</option></select></td></tr>))}</tbody>
@@ -451,32 +472,32 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
 
                 <div className="pt-12 border-t border-gray-100">
                   <h3 className="text-lg font-black uppercase tracking-widest text-red-600 mb-4 flex items-center italic">
-                    <i className="fas fa-microchip mr-3"></i> Database Health & Repair
+                    <i className="fas fa-hammer mr-3"></i> Database Schema Repair
                   </h3>
                   <p className="text-xs text-gray-500 mb-6 font-medium leading-relaxed">
-                    If products fail to publish, your Supabase <strong>products</strong> table might be missing columns like <code className="bg-gray-100 px-1 rounded text-black">image</code> or <code className="bg-gray-100 px-1 rounded text-black">variants</code>.
+                    Use this tool if you are seeing errors about missing columns like <strong>"image"</strong> or table names like <strong>"product"</strong> vs <strong>"products"</strong>.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <button 
                       type="button"
                       onClick={async () => {
                         const { data, error } = await supabase.from('products').select('*').limit(1);
-                        if (error) alert(`STATUS: CRITICAL ERROR\n${error.message}`);
-                        else alert(`STATUS: HEALTHY\nVault is connected and responding.`);
+                        if (error) alert(`STATUS: CRITICAL SCHEMA ERROR\nReason: ${error.message}\n\nTIP: Run the Repair Script below.`);
+                        else alert(`STATUS: HEALTHY\nVault is synchronized with 'products' table.`);
                       }} 
                       className="bg-gray-100 text-black border border-gray-200 px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition"
                     >
-                      Test Connection
+                      Diagnose Table
                     </button>
                     <button 
                       type="button"
                       onClick={() => {
                         navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-                        alert('SQL FIX SCRIPT COPIED!\n\n1. Go to Supabase SQL Editor\n2. Create "New Query"\n3. Paste the script\n4. Click "Run"');
+                        alert('SQL REPAIR SCRIPT COPIED!\n\n1. Go to Supabase > SQL Editor\n2. Click "New Query"\n3. Paste the script\n4. Click "Run"\n\nThis will rename your "product" table and add the "image" column automatically.');
                       }} 
                       className="bg-red-50 text-red-600 border border-red-100 px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition"
                     >
-                      Copy SQL Repair Script
+                      Copy Schema Repair SQL
                     </button>
                   </div>
                 </div>
@@ -489,7 +510,7 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
           <div className="bg-white rounded-[2.5rem] w-full max-w-2xl p-10 overflow-y-auto max-h-[90vh] custom-scrollbar">
             <h2 className="text-2xl font-serif font-bold italic uppercase mb-8 text-black border-b border-gray-100 pb-4">
-              {editingProduct ? `Modify Record: ${editingProduct.name}` : 'New Vault Entry'}
+              {editingProduct ? `Modify Entry: ${editingProduct.name}` : 'Register New Timepiece'}
             </h2>
             <form onSubmit={handleSaveProduct} className="space-y-6">
                <div className="flex flex-col items-center mb-6">
@@ -504,12 +525,12 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
                    ) : (
                      <>
                        <i className={`fas ${uploading ? 'fa-spinner fa-spin' : 'fa-camera'} text-gray-300 text-3xl mb-3`}></i>
-                       <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center px-4">Upload Timepiece Image</span>
+                       <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center px-4">Upload Display Image</span>
                      </>
                    )}
                    <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
                  </div>
-                 {productForm.image && <p className="text-[8px] text-green-600 font-black uppercase tracking-[0.2em] mt-3 italic"><i className="fas fa-check-circle mr-1"></i> Visual Asset Staged</p>}
+                 {productForm.image && <p className="text-[8px] text-green-600 font-black uppercase tracking-[0.2em] mt-3 italic"><i className="fas fa-check-circle mr-1"></i> Image Staged for ITX Vault</p>}
                </div>
                
                <div className="space-y-4">
@@ -520,32 +541,32 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
                  
                  <div className="grid grid-cols-1 gap-4">
                     <label className="block text-[10px] font-black uppercase text-gray-400 px-1 italic">Artisan Narrative</label>
-                    <textarea required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold h-32 resize-none outline-none text-black placeholder:text-gray-300" placeholder="Describe the history and movement..." value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} />
+                    <textarea required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold h-32 resize-none outline-none text-black placeholder:text-gray-300" placeholder="Describe the craftsmanship and origins..." value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} />
                  </div>
                  
                  <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1 italic">Base Valuation (PKR)</label>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1 italic">Retail Price (PKR)</label>
                       <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black" placeholder="Price" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1 italic">Inventory Count</label>
-                      <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black" placeholder="Quantity" value={productForm.inventory || ''} onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})} />
+                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1 italic">Vault Inventory</label>
+                      <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black" placeholder="Stock Level" value={productForm.inventory || ''} onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})} />
                     </div>
                  </div>
 
                  <div className="pt-6 border-t border-gray-100">
                     <div className="flex justify-between items-center mb-6">
                       <h3 className="text-[11px] font-black uppercase tracking-widest text-black flex items-center">
-                        <i className="fas fa-sliders mr-2 text-blue-600"></i> Custom Editions
+                        <i className="fas fa-layer-group mr-2 text-blue-600"></i> Product Variations
                       </h3>
-                      <button type="button" onClick={addVariant} className="text-[8px] font-black bg-blue-600 text-white px-3 py-2 rounded-lg uppercase tracking-widest hover:bg-black transition">+ Add Variant</button>
+                      <button type="button" onClick={addVariant} className="text-[8px] font-black bg-blue-600 text-white px-3 py-2 rounded-lg uppercase tracking-widest hover:bg-black transition">+ New Variant</button>
                     </div>
                     <div className="space-y-3">
                       {productForm.variants.map((variant) => (
                         <div key={variant.id} className="grid grid-cols-12 gap-3 items-center bg-gray-50/50 p-3 rounded-2xl border border-gray-100 group">
                           <div className="col-span-6">
-                            <input className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-black" placeholder="e.g. Gold Plated" value={variant.name} onChange={e => updateVariant(variant.id, 'name', e.target.value)} />
+                            <input className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-black" placeholder="Variant Name (e.g. Gold Plated)" value={variant.name} onChange={e => updateVariant(variant.id, 'name', e.target.value)} />
                           </div>
                           <div className="col-span-4">
                             <input type="number" className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-black" placeholder="Price" value={variant.price || ''} onChange={e => updateVariant(variant.id, 'price', Number(e.target.value))} />
@@ -556,7 +577,7 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
                         </div>
                       ))}
                       {productForm.variants.length === 0 && (
-                        <p className="text-[8px] text-gray-300 text-center py-4 border border-dashed border-gray-200 rounded-2xl font-black uppercase tracking-widest italic">No custom variants defined for this SKU</p>
+                        <p className="text-[8px] text-gray-300 text-center py-4 border border-dashed border-gray-200 rounded-2xl font-black uppercase tracking-widest italic">No custom variations added</p>
                       )}
                     </div>
                  </div>
@@ -564,9 +585,9 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
 
                <div className="flex space-x-4 pt-10 sticky bottom-0 bg-white pb-2">
                   <button type="submit" disabled={uploading || isSaving} className="flex-grow bg-black text-white py-6 rounded-2xl font-black uppercase italic hover:bg-blue-600 transition disabled:bg-gray-400 shadow-2xl flex items-center justify-center space-x-3">
-                    {isSaving ? <><i className="fas fa-satellite fa-spin"></i> <span>Synchronizing Vault...</span></> : (editingProduct ? <>Update Record</> : <>Publish to Store</>)}
+                    {isSaving ? <><i className="fas fa-satellite fa-spin"></i> <span>Syncing ITX Vault...</span></> : (editingProduct ? <>Update Record</> : <>Publish to Store</>)}
                   </button>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="bg-gray-100 text-black px-10 py-6 rounded-2xl font-black uppercase hover:bg-gray-200 transition">Discard</button>
+                  <button type="button" onClick={() => setIsModalOpen(false)} className="bg-gray-100 text-black px-10 py-6 rounded-2xl font-black uppercase hover:bg-gray-200 transition">Cancel</button>
                </div>
             </form>
           </div>
