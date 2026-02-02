@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { CartItem, Product, Order, User, UserRole } from './types';
@@ -16,7 +17,7 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 
 const App: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,12 +39,9 @@ const App: React.FC = () => {
       if (error) throw error;
       if (data && data.length > 0) {
         setProducts(data);
-      } else {
-        setProducts(MOCK_PRODUCTS);
       }
     } catch (error) {
-      console.error('Error fetching products:', error);
-      setProducts(MOCK_PRODUCTS);
+      console.warn('Using local product vault (Supabase unreachable)');
     }
   }, []);
 
@@ -59,7 +57,7 @@ const App: React.FC = () => {
         setOrders(data);
       }
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.warn('Could not sync order ledger from Supabase');
     }
   }, []);
 
@@ -69,16 +67,16 @@ const App: React.FC = () => {
     const initData = async () => {
       setLoading(true);
       
-      // Use a race to prevent hanging if Supabase is on a cold start or blocked
-      const failsafeTimeout = new Promise(resolve => setTimeout(resolve, 6000));
+      // Attempt to fetch, but don't let it block the app for more than 4 seconds
+      const timeoutPromise = new Promise(resolve => setTimeout(resolve, 4000));
       
       try {
         await Promise.race([
           Promise.all([fetchProducts(), fetchOrders()]),
-          failsafeTimeout
+          timeoutPromise
         ]);
       } catch (e) {
-        console.warn('Sync taking too long, proceeding with local vault cache.');
+        console.error('Data initialization encountered an error:', e);
       }
 
       if (mounted) setLoading(false);
@@ -127,7 +125,7 @@ const App: React.FC = () => {
     ));
   };
 
-  const handleSetProducts = async (newProductsAction: React.SetStateAction<Product[]>) => {
+  const handleSetProducts = (newProductsAction: React.SetStateAction<Product[]>) => {
     setProducts(newProductsAction);
   };
 
@@ -141,17 +139,17 @@ const App: React.FC = () => {
   const clearCart = () => setCart([]);
 
   const placeOrder = async (order: Order) => {
-    const { data, error } = await supabase.from('orders').insert([order]);
-    if (error) {
-      console.error('Error placing order to Supabase:', error);
-      setOrders(prev => [order, ...prev]);
-    } else {
-      setOrders(prev => [order, ...prev]);
+    try {
+      const { error } = await supabase.from('orders').insert([order]);
+      if (error) throw error;
+    } catch (e) {
+      console.error('Failed to save order to database:', e);
     }
+    setOrders(prev => [order, ...prev]);
     clearCart();
   };
 
-  const handleUpdateOrders = async (newOrdersAction: React.SetStateAction<Order[]>) => {
+  const handleUpdateOrders = (newOrdersAction: React.SetStateAction<Order[]>) => {
     setOrders(newOrdersAction);
   };
 
@@ -165,8 +163,8 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-black border-t-blue-600 rounded-full animate-spin mb-4"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Synchronizing ITX Vault...</p>
+          <div className="w-12 h-12 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Loading ITX Vault...</p>
         </div>
       </div>
     );
