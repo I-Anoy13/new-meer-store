@@ -33,7 +33,6 @@ const App: React.FC = () => {
 
   const [user, setUser] = useState<User | null>(null);
 
-  // Sync Products from Supabase
   const fetchProducts = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -49,7 +48,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Sync Orders from Supabase - Mapping specific user schema
   const fetchOrders = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -61,10 +59,9 @@ const App: React.FC = () => {
       if (error) throw error;
       
       if (data) {
-        // Map DB columns to our Order type
         const mappedOrders: Order[] = data.map(row => ({
           id: row.order_id || `ORD-${row.id}`,
-          items: row.items || [],
+          items: Array.isArray(row.items) ? row.items : [],
           total: row.total_pkr || row.total || 0,
           status: (row.status ? row.status.charAt(0).toUpperCase() + row.status.slice(1) : 'Pending') as Order['status'],
           customer: {
@@ -148,37 +145,45 @@ const App: React.FC = () => {
 
   const clearCart = () => setCart([]);
 
-  const placeOrder = async (order: Order) => {
-    // Optimistic local update
-    setOrders(prev => [order, ...prev]);
-    clearCart();
-
+  const placeOrder = async (order: Order): Promise<boolean> => {
     try {
       const firstItem = order.items[0];
       
-      // MAP TO USER TABLE SCHEMA EXACTLY
+      // PREPARE PAYLOAD FOR USER'S EXACT SCHEMA
       const dbPayload = {
         order_id: order.id,
         customer_name: order.customer.name,
         customer_phone: order.customer.phone,
         customer_city: order.customer.city || 'N/A',
         customer_address: order.customer.address,
-        product_id: firstItem?.product.id || 'N/A',
+        product_id: String(firstItem?.product.id || 'N/A'),
         product_name: firstItem?.product.name || 'N/A',
         product_price: firstItem?.product.price || 0,
-        subtotal_pkr: order.total,
-        total_pkr: order.total,
-        status: order.status.toLowerCase(), // Schema uses lower case
+        product_image: firstItem?.product.image || '',
+        subtotal_pkr: Math.round(order.total),
+        shipping_pkr: 0, // App currently has free shipping
+        total_pkr: Math.round(order.total),
+        status: order.status.toLowerCase(),
+        payment_method: 'cod',
         items: JSON.parse(JSON.stringify(order.items)),
         source: 'Web App'
       };
 
       const { error } = await supabase.from('orders').insert([dbPayload]);
+      
       if (error) {
         console.error('Supabase Order Insert Failed:', error.message);
+        alert(`Order sync failed: ${error.message}`);
+        return false;
       }
+
+      // Successful insert -> update local state
+      setOrders(prev => [order, ...prev]);
+      clearCart();
+      return true;
     } catch (e) {
       console.error('Critical Order Placement Error:', e);
+      return false;
     }
   };
 
