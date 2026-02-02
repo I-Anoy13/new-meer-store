@@ -2,12 +2,17 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../types';
+import { PLACEHOLDER_IMAGE } from '../constants';
 
 interface HomeProps {
   products: Product[];
 }
 
 const Home: React.FC<HomeProps> = ({ products }) => {
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    e.currentTarget.src = PLACEHOLDER_IMAGE;
+  };
+
   return (
     <div className="animate-fadeIn">
       {/* Hero Section - Watch Store Edition */}
@@ -59,6 +64,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
                 <img 
                   src={product.image} 
                   alt={product.name} 
+                  onError={handleImageError}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000"
                 />
                 <div className="absolute top-6 left-6 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest text-black shadow-sm">

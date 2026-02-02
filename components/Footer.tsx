@@ -14,13 +14,14 @@ const Footer: React.FC = () => {
               <li><Link to="/terms-of-service" className="hover:text-blue-600 transition italic">Terms of Service</Link></li>
               <li><Link to="/refund-policy" className="hover:text-blue-600 transition italic">Refund Policy (COD)</Link></li>
               <li><Link to="/shipping-policy" className="hover:text-blue-600 transition italic">Shipping Procedures</Link></li>
+              <li><Link to="/admin" className="text-gray-300 hover:text-black transition italic text-[10px] mt-4 block uppercase tracking-widest font-black">Admin Console</Link></li>
             </ul>
           </div>
           <div>
             <h4 className="font-black text-[11px] uppercase tracking-[0.3em] text-gray-400 mb-6">Client Services</h4>
             <ul className="space-y-3 text-sm text-gray-600 font-medium">
               <li><Link to="/refund-policy" className="hover:text-blue-600 transition italic">COD Verification</Link></li>
-              <li><Link to="/" className="hover:text-blue-600 transition italic">Contact Concierge</Link></li>
+              <li><Link to="/" className="hover:text-blue-600 transition italic">Support Inquiry</Link></li>
               <li><Link to="/" className="hover:text-blue-600 transition italic">Global FAQ</Link></li>
             </ul>
           </div>

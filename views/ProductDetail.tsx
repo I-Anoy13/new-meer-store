@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Product, Order } from '../types';
-import { TRUST_BADGES } from '../constants';
+import { TRUST_BADGES, PLACEHOLDER_IMAGE } from '../constants';
 
 interface ProductDetailProps {
   products: Product[];
@@ -21,6 +21,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
 
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    e.currentTarget.src = PLACEHOLDER_IMAGE;
+  };
+
   // Fake Purchase Notification Logic
   const [purchaseNotice, setPurchaseNotice] = useState<{ name: string, city: string } | null>(null);
   const [showPurchaseNotice, setShowPurchaseNotice] = useState(false);
@@ -37,7 +41,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       }, 5000); // Show for 5 seconds
     };
 
-    // Trigger faster on first landing
     const initialDelay = setTimeout(triggerNotice, 2000);
     const interval = setInterval(triggerNotice, 20000); 
 
@@ -47,7 +50,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     };
   }, []);
 
-  // Dynamic Viewer Logic - 3 second gap
   const [viewers, setViewers] = useState(() => Math.floor(Math.random() * (25 - 12 + 1)) + 12);
   
   useEffect(() => {
@@ -61,7 +63,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     return () => clearInterval(viewerTimer);
   }, []);
 
-  // Flash Sale Timer Logic (60 Minutes)
   const [timeLeft, setTimeLeft] = useState(3600);
 
   useEffect(() => {
@@ -88,7 +89,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   if (!product) {
     return (
       <div className="container mx-auto px-4 py-32 text-center">
-        <h2 className="text-3xl font-bold tracking-tight">TIMEPIECE NOT FOUND</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-black">TIMEPIECE NOT FOUND</h2>
         <Link to="/" className="text-blue-600 mt-6 inline-block font-semibold hover:underline">Return to Collection</Link>
       </div>
     );
@@ -136,7 +137,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       {/* Flash Sale Banner */}
       <div className="bg-red-600 text-white py-3 text-center overflow-hidden">
         <div className="container mx-auto px-4 flex items-center justify-center space-x-4">
-          <span className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] animate-pulse">
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">
             Exclusive Flash Sale — 25% Reserved Discount
           </span>
           <div className="h-4 w-px bg-white/30 hidden md:block"></div>
@@ -159,17 +160,25 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                   muted 
                   loop 
                   playsInline 
+                  onError={(e) => {
+                    const video = e.currentTarget;
+                    video.style.display = 'none';
+                    if (video.parentElement) {
+                      const img = document.createElement('img');
+                      img.src = product.image;
+                      img.className = 'w-full h-full object-cover';
+                      img.onerror = () => { img.src = PLACEHOLDER_IMAGE; };
+                      video.parentElement.appendChild(img);
+                    }
+                  }}
                   className="w-full h-full object-cover" 
                 />
               ) : (
                 <img 
                   src={product.image} 
                   alt={product.name} 
+                  onError={handleImageError}
                   className="w-full h-full object-cover" 
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=800';
-                  }}
                 />
               )}
               
@@ -183,10 +192,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
           </div>
 
           <div className="lg:col-span-7 flex flex-col justify-center relative">
-            
-            {/* NEW: Fake Purchase Notification positioned "OVER DESCRIPTION" */}
-            <div className={`absolute -top-4 right-0 z-40 transition-all duration-700 transform ${showPurchaseNotice ? 'translate-y-0 opacity-100' : '-translate-y-8 opacity-0 pointer-events-none'}`}>
-              <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-4 min-w-[280px]">
+            <div className={`absolute -top-6 right-0 z-40 transition-all duration-700 transform ${showPurchaseNotice ? 'translate-y-0 opacity-100' : '-translate-y-8 opacity-0 pointer-events-none'}`}>
+              <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-4 min-w-[300px]">
                 <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center shrink-0 animate-bounce">
                   <i className="fas fa-shopping-bag text-xs"></i>
                 </div>
@@ -218,7 +225,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <span className="text-xs font-bold text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full uppercase tracking-wider border border-blue-100 italic font-serif">Order Now Pay Cash On Delivery</span>
             </div>
 
-            {/* Dynamic Live Shopper Urgency */}
             <div className="mb-10 flex items-center space-x-2 text-gray-500 transition-all">
                <i className="fas fa-eye text-sm text-green-500 animate-pulse"></i>
                <span className="text-xs font-bold uppercase tracking-widest">
@@ -228,14 +234,13 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
             <p className="text-gray-600 text-lg leading-relaxed mb-6 max-w-2xl font-medium">{product.description}</p>
 
-            {/* Social Proof - 10,000+ Happy Customers (Below Description) */}
             <div className="mb-10 flex items-center space-x-5 bg-gray-50/50 p-6 rounded-2xl border border-gray-100 max-w-fit shadow-sm">
               <div className="flex -space-x-3">
-                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=120&auto=format&fit=crop" alt="" />
-                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=120&auto=format&fit=crop" alt="" />
-                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=120&auto=format&fit=crop" alt="" />
-                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=120&auto=format&fit=crop" alt="" />
-                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=120&auto=format&fit=crop" alt="" />
+                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=120&auto=format&fit=crop" alt="Pakistani Customer 1" />
+                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?q=80&w=120&auto=format&fit=crop" alt="Pakistani Customer 2" />
+                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?q=80&w=120&auto=format&fit=crop" alt="Pakistani Customer 3" />
+                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?q=80&w=120&auto=format&fit=crop" alt="Pakistani Customer 4" />
+                <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=120&auto=format&fit=crop" alt="Pakistani Customer 5" />
                 <div className="h-12 w-12 rounded-full ring-4 ring-white bg-black flex items-center justify-center text-[10px] font-black text-white">+82</div>
               </div>
               <div className="flex flex-col">
@@ -303,19 +308,20 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
             <div className="p-8 md:p-12">
               {!orderSuccess ? (
                 <>
-                  <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-3xl font-serif font-bold uppercase italic tracking-tighter text-black">Acquisition Registry</h2>
+                  <div className="flex justify-between items-start mb-8">
+                    <h2 className="text-xl md:text-2xl font-serif font-bold uppercase italic tracking-tighter text-black leading-tight max-w-[90%]">
+                      For Successful Delivery Please Give Complete Details
+                    </h2>
                     <button onClick={() => setIsOrderModalOpen(false)} className="text-gray-400 hover:text-black transition">
                       <i className="fas fa-times text-2xl"></i>
                     </button>
                   </div>
                   
-                  {/* Trust Badge / Happy Customers inside Modal */}
                   <div className="mb-8 flex items-center space-x-4 bg-gray-50/80 p-4 rounded-2xl border border-gray-100">
                     <div className="flex -space-x-2">
-                      <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=80&auto=format&fit=crop" alt="" />
-                      <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=80&auto=format&fit=crop" alt="" />
-                      <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=80&auto=format&fit=crop" alt="" />
+                      <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=80&auto=format&fit=crop" alt="" />
+                      <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?q=80&w=80&auto=format&fit=crop" alt="" />
+                      <img className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?q=80&w=80&auto=format&fit=crop" alt="" />
                     </div>
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-widest text-black">10,000+ Happy Customers</p>
@@ -327,7 +333,11 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
                   <form onSubmit={handleQuickOrder} className="space-y-6">
                     <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 flex items-center space-x-6 mb-4 text-black">
-                      <img src={product.image} className="w-16 h-16 rounded-xl object-cover shadow-md" />
+                      <img 
+                        src={product.image} 
+                        onError={handleImageError}
+                        className="w-16 h-16 rounded-xl object-cover shadow-md" 
+                      />
                       <div>
                         <p className="font-black text-sm uppercase tracking-tight">{product.name}</p>
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">
@@ -363,10 +373,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                 </>
               ) : (
                 <div className="text-center py-10">
-                  <div className="w-24 h-24 bg-black text-white rounded-full flex items-center justify-center mx-auto mb-10 text-4xl shadow-2xl">
+                  <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-10 text-4xl shadow-2xl">
                     <i className="fas fa-check"></i>
                   </div>
-                  <h3 className="text-4xl font-serif font-bold uppercase mb-3 italic text-black">Registry Logged</h3>
+                  <h3 className="text-4xl font-serif font-bold uppercase mb-3 italic text-black">Order Confirmed</h3>
                   <p className="text-gray-500 mb-10 font-bold italic text-sm tracking-widest">Order Ledger ID: <span className="text-black">#{orderSuccess.id}</span></p>
                   <div className="bg-gray-50 p-8 rounded-[2rem] mb-12 border border-gray-100 shadow-inner">
                     <p className="text-gray-700 font-black text-[11px] uppercase tracking-[0.3em] italic leading-relaxed">

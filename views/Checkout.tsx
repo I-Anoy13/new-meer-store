@@ -35,7 +35,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
         status: 'Pending',
         customer: {
           name: formData.name,
-          email: '', // Not requested in new simple form
+          email: '',
           phone: formData.phone,
           address: `${formData.address}, ${formData.city}`
         },
@@ -55,7 +55,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
         <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-lg animate-bounce">
           <i className="fas fa-check"></i>
         </div>
-        <h1 className="text-4xl font-black uppercase tracking-tighter mb-4">Thank You for Your Order!</h1>
+        <h1 className="text-4xl font-black uppercase tracking-tighter mb-4 text-black">Thank You for Your Order!</h1>
         <p className="text-gray-600 mb-8 max-w-md mx-auto text-lg">
           Your order has been placed successfully. Your Order ID is <span className="font-black text-black">#{orderId}</span>.
         </p>
@@ -65,7 +65,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
             Your parcel will be delivered within 3-4 days.
           </p>
         </div>
-        <Link to="/" className="bg-black text-white px-10 py-4 rounded-full font-black uppercase tracking-tight hover:scale-105 transition-transform inline-block">
+        <Link to="/" className="bg-black text-white px-10 py-4 rounded-full font-black uppercase tracking-tight hover:scale-105 transition-transform inline-block italic">
           Continue Shopping
         </Link>
       </div>
@@ -75,7 +75,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
   if (cart.length === 0) {
     return (
       <div className="container mx-auto px-4 py-32 text-center">
-        <h2 className="text-2xl font-black mb-4">YOUR BAG IS EMPTY</h2>
+        <h2 className="text-2xl font-black mb-4 text-black">YOUR BAG IS EMPTY</h2>
         <Link to="/" className="text-blue-600 font-bold">Return to Shop</Link>
       </div>
     );
@@ -87,14 +87,14 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
         <div className="lg:col-span-7">
           <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-xl shadow-gray-100/50">
             <div className="mb-10 text-center lg:text-left">
-              <h2 className="text-3xl font-black uppercase tracking-tighter italic">Cash On Delivery</h2>
+              <h2 className="text-3xl font-black uppercase tracking-tighter italic text-black">Cash On Delivery</h2>
               <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-2">Complete your details to place order</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 gap-6">
+              <div className="grid grid-cols-1 gap-6 text-black">
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2">Full Name</label>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 italic">Full Name</label>
                   <input 
                     required
                     type="text" 
@@ -105,7 +105,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2">Phone Number</label>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 italic">Phone Number</label>
                   <input 
                     required
                     type="tel" 
@@ -116,7 +116,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2">City</label>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 italic">City</label>
                   <input 
                     required
                     type="text" 
@@ -127,7 +127,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2">Full Address</label>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 italic">Full Address</label>
                   <textarea 
                     required
                     className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 font-bold focus:outline-none focus:ring-2 focus:ring-black transition h-32 resize-none" 
@@ -142,7 +142,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl shadow-blue-500/20 disabled:bg-gray-400 group relative overflow-hidden"
+                  className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl shadow-blue-500/20 disabled:bg-gray-400 group relative overflow-hidden italic"
                 >
                   {isSubmitting ? (
                     <i className="fas fa-circle-notch fa-spin"></i>
@@ -160,17 +160,17 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
 
         <div className="lg:col-span-5">
           <div className="bg-gray-50 rounded-[2.5rem] p-8 border border-gray-200 sticky top-24">
-            <h4 className="text-xs font-black uppercase tracking-widest mb-8 flex items-center">
+            <h4 className="text-xs font-black uppercase tracking-widest mb-8 flex items-center text-black">
               <i className="fas fa-shopping-bag mr-3 text-blue-600"></i> Order Review
             </h4>
-            <div className="space-y-5 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar mb-8">
+            <div className="space-y-5 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar mb-8 text-black">
               {cart.map((item, i) => (
                 <div key={i} className="flex space-x-4 items-center bg-white p-3 rounded-2xl border border-gray-100">
                   <div className="w-16 h-16 rounded-xl overflow-hidden border border-gray-50 shrink-0">
                     <img src={item.product.image} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-grow min-w-0">
-                    <p className="text-xs font-black truncate">{item.product.name}</p>
+                    <p className="text-xs font-black truncate uppercase">{item.product.name}</p>
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Qty: {item.quantity}</p>
                   </div>
                   <p className="text-sm font-black whitespace-nowrap">Rs. {(item.product.price * item.quantity).toLocaleString()}</p>
@@ -178,7 +178,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
               ))}
             </div>
             
-            <div className="pt-6 border-t border-gray-200 space-y-4">
+            <div className="pt-6 border-t border-gray-200 space-y-4 text-black">
               <div className="flex justify-between text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
                 <span>Shipping Fee</span>
                 <span className="text-green-600">Free Delivery</span>
@@ -189,15 +189,15 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
               </div>
             </div>
 
-            {/* Social Proof Section - Happy Customers */}
+            {/* Social Proof Section - Happy Customers with Pakistani style DPs */}
             <div className="mt-8 pt-8 border-t border-gray-200">
               <div className="flex flex-col items-center">
                 <div className="flex -space-x-3 mb-4">
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop" alt="" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=100&auto=format&fit=crop" alt="" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=100&auto=format&fit=crop" alt="" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop" alt="" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=100&auto=format&fit=crop" alt="" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 1" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 2" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 3" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 4" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 5" />
                   <div className="h-10 w-10 rounded-full ring-4 ring-gray-50 bg-black flex items-center justify-center text-[10px] font-black text-white">+82</div>
                 </div>
                 <div className="text-center">
@@ -214,7 +214,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
             </div>
 
             <div className="mt-8 p-4 bg-white rounded-2xl border border-gray-200 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">
                 <i className="fas fa-info-circle mr-1 text-blue-500"></i> No advance payment required
               </p>
             </div>

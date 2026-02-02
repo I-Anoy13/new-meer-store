@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { CartItem, Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
+import { supabase } from './lib/supabase';
 import Home from './views/Home';
 import ProductDetail from './views/ProductDetail';
 import CartView from './views/CartView';
@@ -16,18 +17,12 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 
 const App: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('products');
-    return saved ? JSON.parse(saved) : MOCK_PRODUCTS;
-  });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('cart');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [orders, setOrders] = useState<Order[]>(() => {
-    const saved = localStorage.getItem('orders');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -37,17 +32,44 @@ const App: React.FC = () => {
 
   const [user, setUser] = useState<User | null>(null);
 
+  // Sync Products from Supabase
+  const fetchProducts = useCallback(async () => {
+    const { data, error } = await supabase.from('products').select('*');
+    if (error) {
+      console.error('Error fetching products:', error);
+      setProducts(MOCK_PRODUCTS);
+    } else if (data && data.length > 0) {
+      setProducts(data);
+    } else {
+      setProducts(MOCK_PRODUCTS);
+    }
+  }, []);
+
+  // Sync Orders from Supabase
+  const fetchOrders = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .order('date', { ascending: false });
+    if (error) {
+      console.error('Error fetching orders:', error);
+    } else if (data) {
+      setOrders(data);
+    }
+  }, []);
+
+  useEffect(() => {
+    const initData = async () => {
+      setLoading(true);
+      await Promise.all([fetchProducts(), fetchOrders()]);
+      setLoading(false);
+    };
+    initData();
+  }, [fetchProducts, fetchOrders]);
+
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cart));
   }, [cart]);
-
-  useEffect(() => {
-    localStorage.setItem('products', JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem('orders', JSON.stringify(orders));
-  }, [orders]);
 
   useEffect(() => {
     localStorage.setItem('systemPassword', systemPassword);
@@ -84,15 +106,32 @@ const App: React.FC = () => {
     ));
   };
 
-  const deleteProduct = useCallback((productId: string) => {
-    setProducts(prev => prev.filter(p => p.id !== productId));
+  const handleSetProducts = async (newProductsAction: React.SetStateAction<Product[]>) => {
+    setProducts(newProductsAction);
+  };
+
+  const deleteProduct = useCallback(async (productId: string) => {
+    const { error } = await supabase.from('products').delete().eq('id', productId);
+    if (!error) {
+      setProducts(prev => prev.filter(p => p.id !== productId));
+    }
   }, []);
 
   const clearCart = () => setCart([]);
 
-  const placeOrder = (order: Order) => {
-    setOrders(prev => [order, ...prev]);
+  const placeOrder = async (order: Order) => {
+    const { data, error } = await supabase.from('orders').insert([order]);
+    if (error) {
+      console.error('Error placing order to Supabase:', error);
+      setOrders(prev => [order, ...prev]);
+    } else {
+      setOrders(prev => [order, ...prev]);
+    }
     clearCart();
+  };
+
+  const handleUpdateOrders = async (newOrdersAction: React.SetStateAction<Order[]>) => {
+    setOrders(newOrdersAction);
   };
 
   const login = (role: UserRole) => {
@@ -100,6 +139,17 @@ const App: React.FC = () => {
   };
 
   const logout = () => setUser(null);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-black border-t-blue-600 rounded-full animate-spin mb-4"></div>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Synchronizing ITX Vault...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <HashRouter>
@@ -115,10 +165,10 @@ const App: React.FC = () => {
             <Route path="/admin/*" element={
               <AdminDashboard 
                 products={products} 
-                setProducts={setProducts} 
+                setProducts={handleSetProducts} 
                 deleteProduct={deleteProduct} 
                 orders={orders} 
-                setOrders={setOrders} 
+                setOrders={handleUpdateOrders} 
                 user={user} 
                 login={login}
                 systemPassword={systemPassword}

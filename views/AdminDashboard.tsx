@@ -2,13 +2,15 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Product, Order, User, UserRole, Variant } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { supabase } from '../lib/supabase';
+import { PLACEHOLDER_IMAGE } from '../constants';
 
 interface AdminDashboardProps {
   products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  setProducts: (action: React.SetStateAction<Product[]>) => void;
   deleteProduct: (productId: string) => void;
   orders: Order[];
-  setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
+  setOrders: (action: React.SetStateAction<Order[]>) => void;
   user: User | null;
   login: (role: UserRole) => void;
   systemPassword: string;
@@ -32,10 +34,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [loginError, setLoginError] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    e.currentTarget.src = PLACEHOLDER_IMAGE;
+  };
+
+  // Monthly Sales Trend Data Calculation
+  const salesTrendData = useMemo(() => {
+    const data = [];
+    const now = new Date();
+    
+    // Calculate for last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthLabel = d.toLocaleString('default', { month: 'short' });
+      const yearLabel = d.getFullYear();
+      
+      const monthlyOrders = orders.filter(o => {
+        const orderDate = new Date(o.date);
+        return orderDate.getMonth() === d.getMonth() && orderDate.getFullYear() === d.getFullYear();
+      });
+
+      const revenue = monthlyOrders.reduce((sum, o) => sum + o.total, 0);
+      const volume = monthlyOrders.length;
+
+      data.push({
+        name: `${monthLabel} ${yearLabel}`,
+        revenue,
+        orders: volume
+      });
+    }
+    return data;
+  }, [orders]);
+
+  // Filter & Sort States
+  const [productSearch, setProductSearch] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('All');
+  const [productStockFilter, setProductStockFilter] = useState('All');
+  const [productSort, setProductSort] = useState<'name-asc' | 'name-desc' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc'>('name-asc');
+
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('All');
+  const [orderSort, setOrderSort] = useState<'date-desc' | 'date-asc' | 'total-desc' | 'total-asc'>('date-desc');
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [newPassword, setNewPassword] = useState('');
-  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false);
 
   const [productForm, setProductForm] = useState<{
     name: string;
@@ -62,15 +107,71 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const activeProductsCount = products.length;
   const lowStockCount = products.filter(p => p.inventory < 10).length;
 
-  const chartData = useMemo(() => [
-    { name: 'Mon', sales: totalRevenue * 0.1 || 1200 },
-    { name: 'Tue', sales: totalRevenue * 0.15 || 2800 },
-    { name: 'Wed', sales: totalRevenue * 0.12 || 2100 },
-    { name: 'Thu', sales: totalRevenue * 0.2 || 4500 },
-    { name: 'Fri', sales: totalRevenue * 0.18 || 3800 },
-    { name: 'Sat', sales: totalRevenue * 0.25 || 6800 },
-    { name: 'Sun', sales: totalRevenue * 0.3 || 9200 },
-  ], [totalRevenue]);
+  const filteredProducts = useMemo(() => {
+    let result = [...products];
+
+    if (productSearch) {
+      result = result.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()));
+    }
+
+    if (productCategoryFilter !== 'All') {
+      result = result.filter(p => p.category === productCategoryFilter);
+    }
+
+    if (productStockFilter === 'Low') {
+      result = result.filter(p => p.inventory < 10 && p.inventory > 0);
+    } else if (productStockFilter === 'Out') {
+      result = result.filter(p => p.inventory === 0);
+    }
+
+    result.sort((a, b) => {
+      switch (productSort) {
+        case 'name-asc': return a.name.localeCompare(b.name);
+        case 'name-desc': return b.name.localeCompare(a.name);
+        case 'price-asc': return a.price - b.price;
+        case 'price-desc': return b.price - a.price;
+        case 'stock-asc': return a.inventory - b.inventory;
+        case 'stock-desc': return b.inventory - a.inventory;
+        default: return 0;
+      }
+    });
+
+    return result;
+  }, [products, productSearch, productCategoryFilter, productStockFilter, productSort]);
+
+  const filteredOrders = useMemo(() => {
+    let result = [...orders];
+
+    if (orderSearch) {
+      result = result.filter(o => 
+        o.customer.name.toLowerCase().includes(orderSearch.toLowerCase()) || 
+        o.id.toLowerCase().includes(orderSearch.toLowerCase())
+      );
+    }
+
+    if (orderStatusFilter !== 'All') {
+      result = result.filter(o => o.status === orderStatusFilter);
+    }
+
+    result.sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      switch (orderSort) {
+        case 'date-desc': return dateB - dateA;
+        case 'date-asc': return dateA - dateB;
+        case 'total-desc': return b.total - a.total;
+        case 'total-asc': return a.total - b.total;
+        default: return 0;
+      }
+    });
+
+    return result;
+  }, [orders, orderSearch, orderStatusFilter, orderSort]);
+
+  const categories = useMemo(() => {
+    const cats = new Set(products.map(p => p.category));
+    return ['All', ...Array.from(cats)];
+  }, [products]);
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,34 +190,59 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
     setSystemPassword(newPassword);
-    setPasswordChangeSuccess(true);
-    setTimeout(() => setPasswordChangeSuccess(false), 3000);
+    alert("Passkey Updated Successfully");
   };
 
-  const handleDelete = (e: React.MouseEvent, productId: string) => {
+  const handleDelete = async (e: React.MouseEvent, productId: string) => {
     e.preventDefault();
-    e.stopPropagation();
     if (window.confirm('WARNING: Are you sure you want to permanently delete this product from the ITX database?')) {
       deleteProduct(productId);
     }
   };
 
-  const handleStatusChange = (orderId: string, status: Order['status']) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
-    if (selectedOrder?.id === orderId) {
-      setSelectedOrder(prev => prev ? { ...prev, status } : null);
+  const handleStatusChange = async (orderId: string, status: Order['status']) => {
+    const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+    if (!error) {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
     }
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `product-images/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('products')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('products')
+        .getPublicUrl(filePath);
+
+      setProductForm(prev => ({ ...prev, image: data.publicUrl }));
+    } catch (error: any) {
+      alert('Error uploading image: ' + error.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingProduct) {
-      setProducts(prev => prev.map(p => p.id === editingProduct.id ? { 
-        ...p, 
-        ...productForm,
-        rating: p.rating,
-        reviews: p.reviews 
-      } as Product : p));
+      const updatedProduct = { ...editingProduct, ...productForm };
+      const { error } = await supabase.from('products').update(updatedProduct).eq('id', editingProduct.id);
+      if (!error) {
+        setProducts(prev => prev.map(p => p.id === editingProduct.id ? updatedProduct : p));
+      }
     } else {
       const newProduct: Product = {
         ...productForm,
@@ -124,7 +250,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         rating: 5,
         reviews: []
       } as Product;
-      setProducts(prev => [newProduct, ...prev]);
+      const { error } = await supabase.from('products').insert([newProduct]);
+      if (!error) {
+        setProducts(prev => [newProduct, ...prev]);
+      }
     }
     closeModal();
   };
@@ -163,31 +292,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditingProduct(null);
   };
 
-  const addVariant = () => {
-    setProductForm({
-      ...productForm,
-      variants: [...productForm.variants, { id: Date.now().toString(), name: '', price: productForm.price }]
-    });
-  };
-
-  const removeVariant = (id: string) => {
-    setProductForm({
-      ...productForm,
-      variants: productForm.variants.filter(v => v.id !== id)
-    });
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProductForm(prev => ({ ...prev, image: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   if (!user) {
     return (
       <div className="container mx-auto px-4 py-40 flex flex-col items-center">
@@ -196,21 +300,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
         <h2 className="text-4xl font-serif italic font-bold tracking-tight uppercase mb-8 text-black">ITX SHOP MEER CONSOLE</h2>
         <form onSubmit={handleAdminLogin} className="w-full max-w-sm space-y-4">
-          <div>
-            <input 
-              type="password" 
-              placeholder="System Password" 
-              className={`w-full p-6 bg-white border ${loginError ? 'border-red-500' : 'border-gray-100'} rounded-2xl font-black text-center outline-none focus:ring-1 focus:ring-black transition shadow-sm text-black`}
-              value={adminPasswordInput}
-              onChange={(e) => setAdminPasswordInput(e.target.value)}
-            />
-            {loginError && <p className="text-red-500 text-[10px] font-black uppercase tracking-widest text-center mt-3">Access Denied: Invalid Authentication Key</p>}
-          </div>
+          <input 
+            type="password" 
+            placeholder="System Password" 
+            className={`w-full p-6 bg-white border ${loginError ? 'border-red-500' : 'border-gray-100'} rounded-2xl font-black text-center outline-none focus:ring-1 focus:ring-black transition shadow-sm text-black`}
+            value={adminPasswordInput}
+            onChange={(e) => setAdminPasswordInput(e.target.value)}
+          />
           <button type="submit" className="w-full p-6 bg-black text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl flex items-center justify-center">
             Log into ITX System <i className="fas fa-key ml-4"></i>
           </button>
         </form>
-        <p className="mt-8 text-[10px] text-gray-400 font-bold uppercase tracking-[0.4em]">Secured Management Interface • Port 8080</p>
       </div>
     );
   }
@@ -224,260 +324,434 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               ITX <span className="ml-4 text-blue-600 not-italic font-black text-2xl tracking-[0.2em] uppercase">Control</span>
             </h1>
             <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.4em] flex items-center">
-              <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span> {user.name} • ITX SHOP MEER AUTHENTICATED
+              <span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span> {user.name} • Live Supabase Connected
             </p>
           </div>
           
           <div className="flex bg-white rounded-2xl p-2 border border-gray-200 shadow-sm overflow-x-auto">
-            {[
-              { id: 'overview', icon: 'fa-chart-line', label: 'Overview' },
-              { id: 'products', icon: 'fa-box', label: 'Inventory' },
-              { id: 'orders', icon: 'fa-shopping-cart', label: 'Orders' },
-              { id: 'settings', icon: 'fa-cog', label: 'Settings' }
-            ].map(tab => (
+            {['overview', 'products', 'orders', 'settings'].map(tab => (
               <button 
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)} 
-                className={`px-10 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center whitespace-nowrap ${activeTab === tab.id ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black hover:bg-gray-50'}`}
+                key={tab}
+                onClick={() => setActiveTab(tab as any)} 
+                className={`px-10 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black hover:bg-gray-50'}`}
               >
-                <i className={`fas ${tab.icon} mr-3`}></i> {tab.label}
+                {tab}
               </button>
             ))}
           </div>
         </div>
 
         {activeTab === 'overview' && (
-          <div className="animate-fadeIn space-y-12">
+          <div className="space-y-10">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
-              {[
-                { label: 'Cumulative Sales', value: `Rs. ${totalRevenue.toLocaleString()}`, icon: 'fa-wallet', bg: 'bg-black', text: 'text-white', target: 'orders' },
-                { label: 'Active Dispatches', value: pendingOrdersCount.toString(), icon: 'fa-truck-loading', bg: 'bg-white', text: 'text-black', target: 'orders' },
-                { label: 'Stock Catalog', value: activeProductsCount.toString(), icon: 'fa-layer-group', bg: 'bg-white', text: 'text-black', target: 'products' },
-                { label: 'Critical Stock', value: lowStockCount.toString(), icon: 'fa-triangle-exclamation', bg: 'bg-red-500', text: 'text-white', target: 'products' }
-              ].map((stat, i) => (
-                <div 
-                  key={i} 
-                  onClick={() => setActiveTab(stat.target as any)}
-                  className={`${stat.bg} ${stat.text} p-10 rounded-3xl border border-gray-100 shadow-sm group cursor-pointer transition-all hover:-translate-y-1 hover:shadow-2xl`}
-                >
-                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-8 ${stat.bg === 'bg-white' ? 'bg-gray-50 text-blue-600' : 'bg-white/20 text-white'}`}>
-                    <i className={`fas ${stat.icon}`}></i>
-                  </div>
-                  <p className="text-[11px] font-black uppercase tracking-widest opacity-60 mb-3">{stat.label}</p>
-                  <p className="text-4xl font-black tracking-tighter">{stat.value}</p>
-                </div>
-              ))}
+              <div className="bg-black text-white p-10 rounded-3xl shadow-xl">
+                  <p className="text-[11px] font-black uppercase opacity-60 mb-3">Total Revenue (PKR)</p>
+                  <p className="text-4xl font-black">Rs. {totalRevenue.toLocaleString()}</p>
+              </div>
+              <div className="bg-white p-10 rounded-3xl border border-gray-100 shadow-sm">
+                  <p className="text-[11px] font-black uppercase text-gray-400 mb-3">Pending Orders</p>
+                  <p className="text-4xl font-black text-black">{pendingOrdersCount}</p>
+              </div>
+              <div className="bg-white p-10 rounded-3xl border border-gray-100 shadow-sm">
+                  <p className="text-[11px] font-black uppercase text-gray-400 mb-3">Vault SKU Items</p>
+                  <p className="text-4xl font-black text-black">{activeProductsCount}</p>
+              </div>
+              <div className="bg-red-500 text-white p-10 rounded-3xl shadow-lg">
+                  <p className="text-[11px] font-black uppercase opacity-60 mb-3">Low Stock Alerts</p>
+                  <p className="text-4xl font-black">{lowStockCount}</p>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-              <div className="lg:col-span-2 bg-white rounded-3xl p-12 border border-gray-100 shadow-sm">
-                <h3 className="text-xl font-serif italic font-bold uppercase tracking-widest mb-12 text-black">Acquisition Velocity</h3>
-                <div className="h-[450px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#2563eb" stopOpacity={0.1}/>
-                          <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 900, fill: '#9ca3af', letterSpacing: '0.1em'}} dy={15} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 900, fill: '#9ca3af'}} dx={-10} />
-                      <Tooltip 
-                        contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', fontWeight: '900', fontSize: '12px', textTransform: 'uppercase'}} 
-                      />
-                      <Area type="monotone" dataKey="sales" stroke="#2563eb" strokeWidth={4} fillOpacity={1} fill="url(#chartGrad)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+            {/* Sales Trends Section */}
+            <div className="bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-sm">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+                <div>
+                  <h3 className="text-2xl font-serif italic font-bold text-black uppercase tracking-tight">Monthly Performance Trends</h3>
+                  <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">Rolling 6-Month Sales Ledger</p>
+                </div>
+                <div className="flex space-x-6">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-3 h-3 bg-black rounded-full"></span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Revenue</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Order Volume</span>
+                  </div>
                 </div>
               </div>
-              
-              <div className="bg-gray-950 rounded-3xl p-12 text-white shadow-2xl flex flex-col">
-                <h3 className="text-xl font-serif italic font-bold uppercase tracking-widest mb-10 border-b border-white/5 pb-6">Recent Ledger Activity</h3>
-                <div className="space-y-8 flex-grow overflow-y-auto custom-scrollbar pr-4">
-                  {orders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-24 text-gray-800">
-                      <i className="fas fa-inbox text-5xl mb-6"></i>
-                      <p className="text-[12px] font-black uppercase tracking-[0.3em]">System Idling</p>
-                    </div>
-                  ) : (
-                    orders.slice(0, 10).map(o => (
-                      <div 
-                        key={o.id} 
-                        onClick={() => { setSelectedOrder(o); setActiveTab('orders'); }}
-                        className="flex justify-between items-center border-b border-white/5 pb-6 hover:bg-white/5 cursor-pointer transition p-4 rounded-2xl"
-                      >
-                        <div className="min-w-0 pr-6">
-                          <p className="text-[13px] font-black uppercase tracking-widest truncate italic">{o.customer.name}</p>
-                          <p className="text-[11px] text-gray-500 font-bold tracking-widest uppercase mt-2">Rs. {o.total.toLocaleString()}</p>
-                        </div>
-                        <i className="fas fa-chevron-right text-[11px] text-gray-700"></i>
-                      </div>
-                    ))
-                  )}
-                </div>
+
+              <div className="h-[400px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={salesTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#000000" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="#000000" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }}
+                      dy={10}
+                    />
+                    <YAxis 
+                      yAxisId="left"
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }}
+                      tickFormatter={(value) => `Rs.${(value / 1000)}k`}
+                    />
+                    <YAxis 
+                      yAxisId="right"
+                      orientation="right"
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fontSize: 10, fontWeight: 900, fill: '#3b82f6' }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        borderRadius: '16px', 
+                        border: '1px solid #f1f1f1', 
+                        boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                        padding: '12px'
+                      }}
+                      itemStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}
+                      labelStyle={{ fontSize: '11px', fontWeight: 900, marginBottom: '8px', borderBottom: '1px solid #f1f1f1', paddingBottom: '4px' }}
+                    />
+                    <Area 
+                      yAxisId="left"
+                      type="monotone" 
+                      dataKey="revenue" 
+                      stroke="#000000" 
+                      strokeWidth={3}
+                      fillOpacity={1} 
+                      fill="url(#colorRevenue)" 
+                    />
+                    <Area 
+                      yAxisId="right"
+                      type="monotone" 
+                      dataKey="orders" 
+                      stroke="#3b82f6" 
+                      strokeWidth={3}
+                      fillOpacity={1} 
+                      fill="url(#colorOrders)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
         )}
 
         {activeTab === 'products' && (
-          <div className="animate-fadeIn space-y-10">
-            <div className="flex justify-between items-center">
-              <h2 className="text-4xl font-serif italic font-bold uppercase tracking-tight text-black">Inventory Registry</h2>
-              <button onClick={() => openModal()} className="bg-black text-white px-10 py-5 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl italic">
-                <i className="fas fa-plus mr-4"></i> Add New SKU
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <h2 className="text-4xl font-serif italic font-bold uppercase text-black">Inventory Registry</h2>
+              <button onClick={() => openModal()} className="bg-black text-white px-10 py-5 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl">
+                Add New SKU
               </button>
             </div>
-            
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Search Timepieces..." 
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black transition"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                />
+                <i className="fas fa-search absolute right-4 top-1/2 -translate-y-1/2 text-gray-300"></i>
+              </div>
+              <select 
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black transition"
+                value={productCategoryFilter}
+                onChange={(e) => setProductCategoryFilter(e.target.value)}
+              >
+                {categories.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
+              </select>
+              <select 
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black transition"
+                value={productStockFilter}
+                onChange={(e) => setProductStockFilter(e.target.value)}
+              >
+                <option value="All">ALL STOCK LEVELS</option>
+                <option value="Low">LOW STOCK ( &lt; 10 )</option>
+                <option value="Out">OUT OF STOCK</option>
+              </select>
+              <select 
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black transition"
+                value={productSort}
+                onChange={(e) => setProductSort(e.target.value as any)}
+              >
+                <option value="name-asc">NAME: A-Z</option>
+                <option value="name-desc">NAME: Z-A</option>
+                <option value="price-asc">PRICE: LOW-HIGH</option>
+                <option value="price-desc">PRICE: HIGH-LOW</option>
+                <option value="stock-asc">STOCK: LOW-HIGH</option>
+                <option value="stock-desc">STOCK: HIGH-LOW</option>
+              </select>
+            </div>
+
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
+               <table className="w-full text-left">
                   <thead className="bg-gray-50/50">
                     <tr>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Timepiece Details</th>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Stock status</th>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">MSRP (PKR)</th>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">Actions</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">SKU</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Stock</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">Price</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50 text-black font-bold">
-                    {products.map(p => (
-                      <tr key={p.id} className="hover:bg-gray-50/40 transition-colors group">
-                        <td className="px-10 py-8">
-                          <div className="flex items-center space-x-6">
-                            <div className="w-16 h-16 rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 shadow-sm">
-                              <img src={p.image} className="w-full h-full object-cover" />
-                            </div>
-                            <div>
-                              <p className="font-black text-lg text-black uppercase tracking-tight italic font-serif">{p.name}</p>
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mt-2">{p.category}</p>
-                            </div>
-                          </div>
-                        </td>
+                  <tbody>
+                    {filteredProducts.map(p => (
+                      <tr key={p.id} className="border-t border-gray-50">
                         <td className="px-10 py-8">
                           <div className="flex items-center space-x-4">
-                            <span className={`w-3 h-3 rounded-full ${p.inventory > 10 ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                            <p className="font-black text-xs text-gray-700 uppercase tracking-widest">{p.inventory} UNITS</p>
+                            <img 
+                              src={p.image} 
+                              onError={handleImageError}
+                              className="w-10 h-10 rounded-lg object-cover" 
+                            />
+                            <span className="font-black uppercase italic">{p.name}</span>
                           </div>
                         </td>
-                        <td className="px-10 py-8 text-right font-serif font-bold text-lg italic tracking-tighter">{(p.price).toLocaleString()}</td>
                         <td className="px-10 py-8">
-                          <div className="flex justify-end space-x-4">
-                            <button onClick={() => openModal(p)} className="w-12 h-12 rounded-xl bg-gray-50 text-gray-400 hover:bg-black hover:text-white transition flex items-center justify-center border border-gray-100 shadow-sm"><i className="fas fa-edit text-xs"></i></button>
-                            <button onClick={(e) => handleDelete(e, p.id)} className="w-12 h-12 rounded-xl bg-red-50 text-red-500 hover:bg-red-600 hover:text-white transition flex items-center justify-center border border-red-100 shadow-sm"><i className="fas fa-trash-alt text-xs"></i></button>
-                          </div>
+                          <span className={`font-black text-[10px] px-3 py-1 rounded-full ${p.inventory < 10 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                            {p.inventory} UNITS
+                          </span>
+                        </td>
+                        <td className="px-10 py-8 text-right font-serif font-bold italic">Rs. {p.price.toLocaleString()}</td>
+                        <td className="px-10 py-8 text-right">
+                           <button onClick={() => openModal(p)} className="text-blue-600 mr-4 font-black uppercase text-[10px] hover:underline">Edit</button>
+                           <button onClick={(e) => handleDelete(e, p.id)} className="text-red-600 font-black uppercase text-[10px] hover:underline">Delete</button>
                         </td>
                       </tr>
                     ))}
+                    {filteredProducts.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-10 py-20 text-center text-gray-400 font-black uppercase tracking-widest">No matching items found in the vault</td>
+                      </tr>
+                    )}
                   </tbody>
-                </table>
-              </div>
+               </table>
             </div>
           </div>
         )}
 
         {activeTab === 'orders' && (
-          <div className="animate-fadeIn space-y-10">
-            <h2 className="text-4xl font-serif italic font-bold uppercase tracking-tight text-black">Fulfillment Archive</h2>
+          <div className="space-y-8">
+            <h2 className="text-4xl font-serif italic font-bold uppercase text-black">Live Fulfilment Ledger</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Search Customer or Order ID..." 
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black transition"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                />
+                <i className="fas fa-search absolute right-4 top-1/2 -translate-y-1/2 text-gray-300"></i>
+              </div>
+              <select 
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black transition"
+                value={orderStatusFilter}
+                onChange={(e) => setOrderStatusFilter(e.target.value)}
+              >
+                <option value="All">ALL STATUSES</option>
+                <option value="Pending">PENDING</option>
+                <option value="Confirmed">CONFIRMED</option>
+                <option value="Shipped">SHIPPED</option>
+                <option value="Delivered">DELIVERED</option>
+                <option value="Cancelled">CANCELLED</option>
+              </select>
+              <select 
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black transition"
+                value={orderSort}
+                onChange={(e) => setOrderSort(e.target.value as any)}
+              >
+                <option value="date-desc">DATE: NEWEST FIRST</option>
+                <option value="date-asc">DATE: OLDEST FIRST</option>
+                <option value="total-desc">TOTAL: HIGH-LOW</option>
+                <option value="total-asc">TOTAL: LOW-HIGH</option>
+              </select>
+            </div>
+
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
+               <table className="w-full text-left">
                   <thead className="bg-gray-50/50">
                     <tr>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Order Ledger</th>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Client Details</th>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Total (COD)</th>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Phase</th>
-                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400 text-right">Audit</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Order ID</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Customer</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Date</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Total</th>
+                      <th className="px-10 py-8 text-[11px] font-black uppercase tracking-widest text-gray-400">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50 text-black font-bold">
-                    {orders.map(o => (
-                      <tr key={o.id} className="hover:bg-gray-50/30 transition">
-                        <td className="px-10 py-8 font-black text-xs text-blue-600 tracking-widest">#{o.id}</td>
+                  <tbody>
+                    {filteredOrders.map(o => (
+                      <tr key={o.id} className="border-t border-gray-50">
+                        <td className="px-10 py-8 font-black text-xs text-blue-600">#{o.id}</td>
                         <td className="px-10 py-8">
-                          <p className="font-black text-base uppercase tracking-tight italic font-serif">{o.customer.name}</p>
-                          <p className="text-[11px] font-black text-gray-400 italic mt-1">{o.customer.phone}</p>
+                          <div className="flex flex-col">
+                            <span className="font-black uppercase italic">{o.customer.name}</span>
+                            <span className="text-[9px] text-gray-400 font-bold">{o.customer.city}</span>
+                          </div>
                         </td>
-                        <td className="px-10 py-8 font-serif font-bold text-lg italic tracking-tighter">Rs. {o.total.toLocaleString()}</td>
+                        <td className="px-10 py-8 text-[10px] font-black text-gray-500">{new Date(o.date).toLocaleDateString()}</td>
+                        <td className="px-10 py-8 font-serif font-bold italic">Rs. {o.total.toLocaleString()}</td>
                         <td className="px-10 py-8">
-                          <select 
+                           <select 
                             value={o.status}
                             onChange={(e) => handleStatusChange(o.id, e.target.value as any)}
-                            className="bg-gray-50 border border-gray-200 text-[10px] font-black uppercase px-6 py-3 rounded-xl outline-none cursor-pointer hover:bg-white transition shadow-sm italic"
-                          >
+                            className="bg-gray-50 border border-gray-200 text-[10px] font-black uppercase px-4 py-2 rounded-xl focus:ring-1 focus:ring-black outline-none"
+                           >
                             <option value="Pending">PENDING</option>
                             <option value="Confirmed">CONFIRMED</option>
                             <option value="Shipped">SHIPPED</option>
                             <option value="Delivered">DELIVERED</option>
                             <option value="Cancelled">CANCELLED</option>
-                          </select>
-                        </td>
-                        <td className="px-10 py-8 text-right">
-                          <button 
-                            onClick={() => setSelectedOrder(o)}
-                            className="bg-black text-white text-[10px] font-black uppercase px-8 py-3.5 rounded-xl hover:bg-blue-600 transition tracking-[0.2em] shadow-lg italic"
-                          >
-                            Inspection
-                          </button>
+                           </select>
                         </td>
                       </tr>
                     ))}
+                    {filteredOrders.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-10 py-20 text-center text-gray-400 font-black uppercase tracking-widest">No matching orders found in the ledger</td>
+                      </tr>
+                    )}
                   </tbody>
-                </table>
-              </div>
+               </table>
             </div>
           </div>
         )}
 
         {activeTab === 'settings' && (
-          <div className="animate-fadeIn space-y-12">
-            <h2 className="text-4xl font-serif italic font-bold uppercase tracking-tight text-black">Console Settings</h2>
-            <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-12 max-w-2xl">
-              <h3 className="text-xl font-serif italic font-bold uppercase mb-8">System Authentication</h3>
-              <form onSubmit={handlePasswordChange} className="space-y-6">
+          <div className="bg-white rounded-[2.5rem] p-12 max-w-2xl border border-gray-100 shadow-sm">
+             <h2 className="text-4xl font-serif italic font-bold uppercase mb-8 text-black">Console Settings</h2>
+             <form onSubmit={handlePasswordChange} className="space-y-6">
                 <div>
-                  <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 italic">New Management Password</label>
+                  <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 italic">New Console Passkey</label>
                   <input 
                     type="password" 
                     className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-5 font-bold focus:ring-1 focus:ring-black outline-none transition text-black"
-                    placeholder="Set a new system key"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                   />
                 </div>
                 <button type="submit" className="bg-black text-white px-10 py-5 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl italic">
-                  Update System Key
+                  Update Passkey
                 </button>
-                {passwordChangeSuccess && (
-                  <p className="text-green-600 text-[10px] font-black uppercase tracking-widest mt-4">
-                    <i className="fas fa-check-circle mr-2"></i> System Key Updated Successfully
-                  </p>
-                )}
-              </form>
-              
-              <div className="mt-16 pt-12 border-t border-gray-100 space-y-4">
-                 <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400">System Information</h4>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 p-6 rounded-2xl">
-                       <p className="text-[9px] font-black uppercase text-gray-400 mb-1">Store Name</p>
-                       <p className="text-xs font-black uppercase italic">ITX SHOP MEER</p>
-                    </div>
-                    <div className="bg-gray-50 p-6 rounded-2xl">
-                       <p className="text-[9px] font-black uppercase text-gray-400 mb-1">Environment</p>
-                       <p className="text-xs font-black uppercase italic">Production Console</p>
-                    </div>
-                 </div>
-              </div>
-            </div>
+             </form>
           </div>
         )}
       </div>
 
-      {/* Audit Modal & Product Modal remain same as previous version but ensures branding is ITX SHOP MEER */}
-      {/* ... (Existing selectedOrder and isModalOpen logic) ... */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl p-10 overflow-y-auto max-h-[90vh] custom-scrollbar">
+            <h2 className="text-2xl font-serif font-bold italic uppercase mb-8 text-black">{editingProduct ? 'Edit Timepiece' : 'Register New Timepiece'}</h2>
+            <form onSubmit={handleSaveProduct} className="space-y-6">
+               <div className="flex flex-col items-center mb-6">
+                 <div 
+                   onClick={() => fileInputRef.current?.click()}
+                   className="w-32 h-32 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-blue-500 transition-colors overflow-hidden relative group"
+                 >
+                   {productForm.image ? (
+                     <>
+                       <img 
+                        src={productForm.image} 
+                        onError={handleImageError}
+                        className="w-full h-full object-cover" 
+                       />
+                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                         <i className="fas fa-camera text-white"></i>
+                       </div>
+                     </>
+                   ) : (
+                     <>
+                       <i className={`fas ${uploading ? 'fa-spinner fa-spin' : 'fa-camera'} text-gray-300 text-2xl mb-2`}></i>
+                       <span className="text-[8px] font-black text-gray-400 uppercase">Upload Frame</span>
+                     </>
+                   )}
+                   <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleImageUpload} 
+                    className="hidden" 
+                    accept="image/*"
+                   />
+                 </div>
+                 <p className="mt-2 text-[9px] font-black text-gray-400 uppercase tracking-widest">Click icon to upload asset</p>
+               </div>
+
+               <input 
+                required
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold text-black focus:ring-1 focus:ring-black outline-none"
+                placeholder="Timepiece Name"
+                value={productForm.name}
+                onChange={e => setProductForm({...productForm, name: e.target.value})}
+               />
+               <textarea 
+                required
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold text-black h-32 resize-none focus:ring-1 focus:ring-black outline-none"
+                placeholder="Artisanal Description"
+                value={productForm.description}
+                onChange={e => setProductForm({...productForm, description: e.target.value})}
+               />
+               <div className="grid grid-cols-2 gap-6">
+                  <input 
+                    required type="number"
+                    className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold text-black focus:ring-1 focus:ring-black outline-none"
+                    placeholder="MSRP (PKR)"
+                    value={productForm.price || ''}
+                    onChange={e => setProductForm({...productForm, price: Number(e.target.value)})}
+                  />
+                  <input 
+                    required type="number"
+                    className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold text-black focus:ring-1 focus:ring-black outline-none"
+                    placeholder="Inventory Count"
+                    value={productForm.inventory || ''}
+                    onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})}
+                  />
+               </div>
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-1">Asset URL Reference</label>
+                 <input 
+                  required
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold text-black focus:ring-1 focus:ring-black outline-none"
+                  placeholder="Master Image URL (Auto-filled on upload)"
+                  value={productForm.image}
+                  onChange={e => setProductForm({...productForm, image: e.target.value})}
+                 />
+               </div>
+               <div className="space-y-2">
+                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-1">Video Resource (Optional)</label>
+                 <input 
+                  className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold text-black focus:ring-1 focus:ring-black outline-none"
+                  placeholder="Asset Video URL (MP4)"
+                  value={productForm.video}
+                  onChange={e => setProductForm({...productForm, video: e.target.value})}
+                 />
+               </div>
+               <div className="flex space-x-4 pt-4">
+                  <button type="submit" disabled={uploading} className="flex-grow bg-black text-white py-5 rounded-xl font-black uppercase tracking-widest italic hover:bg-blue-600 transition disabled:bg-gray-400">
+                    {editingProduct ? 'Update ITX Database' : 'Register in ITX Vault'}
+                  </button>
+                  <button type="button" onClick={closeModal} className="bg-gray-100 text-black px-10 py-5 rounded-xl font-black uppercase tracking-widest italic hover:bg-gray-200 transition">Cancel</button>
+               </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
