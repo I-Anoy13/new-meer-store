@@ -49,17 +49,34 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Sync Orders from Supabase
+  // Sync Orders from Supabase - Mapping specific user schema
   const fetchOrders = useCallback(async () => {
     setIsSyncing(true);
     try {
       const { data, error } = await supabase
         .from('orders')
         .select('*')
-        .order('date', { ascending: false });
+        .order('created_at', { ascending: false });
+      
       if (error) throw error;
+      
       if (data) {
-        setOrders(data);
+        // Map DB columns to our Order type
+        const mappedOrders: Order[] = data.map(row => ({
+          id: row.order_id || `ORD-${row.id}`,
+          items: row.items || [],
+          total: row.total_pkr || row.total || 0,
+          status: (row.status ? row.status.charAt(0).toUpperCase() + row.status.slice(1) : 'Pending') as Order['status'],
+          customer: {
+            name: row.customer_name || 'Anonymous',
+            email: '',
+            phone: row.customer_phone || '',
+            address: row.customer_address || '',
+            city: row.customer_city || ''
+          },
+          date: row.created_at || row.date
+        }));
+        setOrders(mappedOrders);
       }
     } catch (error) {
       console.warn('Sync Orders Error:', error);
@@ -137,20 +154,28 @@ const App: React.FC = () => {
     clearCart();
 
     try {
-      // Ensure we only send necessary clean data to Supabase
-      const cleanOrder = {
-        id: order.id,
-        items: JSON.parse(JSON.stringify(order.items)), // Deep clone to break any references
-        total: order.total,
-        status: order.status,
-        customer: JSON.parse(JSON.stringify(order.customer)),
-        date: order.date
+      const firstItem = order.items[0];
+      
+      // MAP TO USER TABLE SCHEMA EXACTLY
+      const dbPayload = {
+        order_id: order.id,
+        customer_name: order.customer.name,
+        customer_phone: order.customer.phone,
+        customer_city: order.customer.city || 'N/A',
+        customer_address: order.customer.address,
+        product_id: firstItem?.product.id || 'N/A',
+        product_name: firstItem?.product.name || 'N/A',
+        product_price: firstItem?.product.price || 0,
+        subtotal_pkr: order.total,
+        total_pkr: order.total,
+        status: order.status.toLowerCase(), // Schema uses lower case
+        items: JSON.parse(JSON.stringify(order.items)),
+        source: 'Web App'
       };
 
-      const { error } = await supabase.from('orders').insert([cleanOrder]);
+      const { error } = await supabase.from('orders').insert([dbPayload]);
       if (error) {
         console.error('Supabase Order Insert Failed:', error.message);
-        // We might want to alert the admin specifically if this fails in a production scenario
       }
     } catch (e) {
       console.error('Critical Order Placement Error:', e);

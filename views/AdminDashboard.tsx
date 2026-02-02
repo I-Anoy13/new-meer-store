@@ -157,8 +157,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleStatusChange = async (orderId: string, status: Order['status']) => {
-    const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
-    if (!error) setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    // Map to the correct order_id column and lower case status for the DB
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: status.toLowerCase() })
+      .eq('order_id', orderId);
+    
+    if (!error) {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    } else {
+      console.error('Update status error:', error.message);
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
