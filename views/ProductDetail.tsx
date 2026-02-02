@@ -21,6 +21,21 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
 
+  // Body scroll lock implementation
+  useEffect(() => {
+    if (isOrderModalOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.height = '100vh';
+    } else {
+      document.body.style.overflow = 'unset';
+      document.body.style.height = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+      document.body.style.height = 'auto';
+    };
+  }, [isOrderModalOpen]);
+
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     e.currentTarget.src = PLACEHOLDER_IMAGE;
   };
@@ -66,16 +81,14 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   if (!product) {
     return (
       <div className="container mx-auto px-4 py-32 text-center">
-        <h2 className="text-3xl font-bold tracking-tight text-black uppercase italic font-serif">Timepiece Not Found</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-black uppercase italic font-serif">Product Not Found</h2>
         <Link to="/" className="text-blue-600 mt-6 inline-block font-black uppercase text-xs tracking-widest hover:underline">Return to Collection</Link>
       </div>
     );
   }
 
-  // Calculate current price based on selection
   const variantObj = product.variants?.find(v => v.id === selectedVariant);
   const currentPrice = variantObj?.price || product.price;
-  // Fix: Define variantName at component level to be accessible in both handleQuickOrder and the JSX modal
   const variantName = variantObj?.name || "Standard Edition";
 
   const handleQuickOrder = async (e: React.FormEvent) => {
@@ -130,7 +143,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       <div className="container mx-auto px-6 py-12 lg:py-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
           <div className="lg:col-span-5">
-            <div className="relative aspect-[4/5] min-h-[500px] w-full bg-gray-50 rounded-2xl overflow-hidden shadow-sm group border border-gray-100 flex items-center justify-center">
+            <div className="relative aspect-[4/5] min-h-[400px] w-full bg-gray-50 rounded-2xl overflow-hidden shadow-sm group border border-gray-100 flex items-center justify-center">
               {product.video ? (
                 <video src={product.video} poster={product.image} autoPlay muted loop playsInline className="w-full h-full object-cover" />
               ) : (
@@ -139,20 +152,19 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <div className="absolute top-6 left-6 z-10">
                 <div className="bg-black/80 backdrop-blur-md text-white px-4 py-2 rounded-full flex items-center space-x-2 border border-white/10 shadow-lg">
                   <span className="w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
-                  <span className="text-[10px] font-black uppercase tracking-widest text-red-100">Limited Collection</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-red-100">Exclusive Drop</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="lg:col-span-7 flex flex-col justify-center relative">
-            {/* Live Purchase Notification */}
             <div className={`absolute -top-6 right-0 z-40 transition-all duration-700 transform ${showPurchaseNotice ? 'translate-y-0 opacity-100' : '-translate-y-8 opacity-0 pointer-events-none'}`}>
-              <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-4 min-w-[300px]">
+              <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-4 min-w-[280px]">
                 <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center shrink-0 animate-bounce"><i className="fas fa-shopping-bag text-xs"></i></div>
                 <div>
-                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-600 mb-0.5">Live Acquisition</p>
-                  <p className="text-[11px] font-bold text-black leading-tight">{purchaseNotice?.name} from {purchaseNotice?.city}<br/><span className="text-gray-400 italic">ordered this item just now</span></p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-600 mb-0.5">Live Order</p>
+                  <p className="text-[11px] font-bold text-black leading-tight">{purchaseNotice?.name} from {purchaseNotice?.city}<br/><span className="text-gray-400 italic">just acquired this piece</span></p>
                 </div>
               </div>
             </div>
@@ -160,7 +172,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
             <div className="flex items-center space-x-3 mb-4">
               <span className="text-gray-500 font-bold uppercase tracking-widest text-[11px]">{product.category} Series</span>
               <div className="h-1 w-1 bg-gray-300 rounded-full"></div>
-              <span className="text-red-600 font-black uppercase tracking-widest text-[11px] flex items-center"><i className="fas fa-fire mr-1"></i> High Demand</span>
+              <span className="text-red-600 font-black uppercase tracking-widest text-[11px] flex items-center"><i className="fas fa-fire mr-1"></i> High Interest</span>
             </div>
 
             <h1 className="text-4xl lg:text-7xl font-serif font-bold tracking-tight text-black mb-6 leading-tight uppercase italic">{product.name}</h1>
@@ -170,12 +182,11 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                  <span className="text-4xl font-black text-black tracking-tighter">Rs. {currentPrice.toLocaleString()}</span>
                  <span className="text-[11px] text-gray-400 line-through font-bold">Rs. {(currentPrice * 1.25).toLocaleString()}</span>
               </div>
-              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full uppercase tracking-wider border border-blue-100 italic font-serif">Order Now Pay Cash On Delivery</span>
+              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full uppercase tracking-wider border border-blue-100 italic font-serif">Order Now — Cash On Delivery</span>
             </div>
 
             <p className="text-gray-600 text-lg leading-relaxed mb-8 max-w-2xl font-medium italic">{product.description}</p>
 
-            {/* Product Variants Selection - Visual Buttons */}
             {product.variants && product.variants.length > 0 && (
               <div className="mb-10">
                 <p className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-4 italic">Available Editions</p>
@@ -198,7 +209,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             )}
 
-            {/* Social Proof - Positioned over the CTA button */}
             <div className="mb-8 p-6 bg-gray-50/50 rounded-3xl border border-gray-100 border-dashed">
               <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-8">
                 <div className="flex -space-x-4">
@@ -208,10 +218,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                   <div className="h-12 w-12 rounded-full ring-4 ring-white bg-black flex items-center justify-center text-[11px] font-black text-white shadow-sm">+8k</div>
                 </div>
                 <div className="text-center sm:text-left">
-                  <p className="text-[14px] font-black uppercase tracking-[0.2em] text-black italic leading-none">10,000+ Happy Customers</p>
+                  <p className="text-[14px] font-black uppercase tracking-[0.2em] text-black italic leading-none">Global Enthusiasts</p>
                   <div className="flex justify-center sm:justify-start text-yellow-500 mt-2 space-x-1">
                     {[1,2,3,4,5].map(i => <i key={i} className="fas fa-star text-[12px]"></i>)}
-                    <span className="ml-3 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">(4.9/5 Average Rating)</span>
+                    <span className="ml-3 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">(4.9/5 Rating)</span>
                   </div>
                 </div>
               </div>
@@ -224,7 +234,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                 <button onClick={() => setQuantity(quantity + 1)} className="p-3 text-gray-400 hover:text-black transition"><i className="fas fa-plus text-xs"></i></button>
               </div>
               <button onClick={() => setIsOrderModalOpen(true)} className="flex-grow bg-black text-white font-black text-[12px] uppercase tracking-[0.3em] py-6 px-12 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-[0.98] relative overflow-hidden group italic">
-                <span className="relative z-10">Order Now — Cash On Delivery</span>
+                <span className="relative z-10">Cash On Delivery</span>
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-black opacity-0 group-hover:opacity-100 transition-opacity"></div>
               </button>
             </div>
@@ -242,16 +252,16 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       </div>
 
       {isOrderModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-xl overflow-hidden shadow-2xl border border-gray-100 overflow-y-auto max-h-[95vh] custom-scrollbar">
-            <div className="p-8 md:p-12">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn overflow-hidden">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-xl h-full sm:h-auto sm:max-h-[95vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden m-0 sm:m-4">
+            <div className="p-8 md:p-12 overflow-y-auto custom-scrollbar flex-grow">
               {!orderSuccess ? (
                 <>
                   <div className="flex justify-between items-start mb-8 text-black">
-                    <h2 className="text-xl md:text-2xl font-serif font-bold uppercase italic tracking-tighter leading-tight max-w-[90%]">For Successful Delivery Please Give Complete Details</h2>
-                    <button onClick={() => setIsOrderModalOpen(false)} className="text-gray-400 hover:text-black transition"><i className="fas fa-times text-2xl"></i></button>
+                    <h2 className="text-xl md:text-2xl font-serif font-bold uppercase italic tracking-tighter leading-tight max-w-[90%]">Shipping Information</h2>
+                    <button onClick={() => setIsOrderModalOpen(false)} className="text-gray-400 hover:text-black transition p-2"><i className="fas fa-times text-2xl"></i></button>
                   </div>
-                  <form onSubmit={handleQuickOrder} className="space-y-6">
+                  <form onSubmit={handleQuickOrder} className="space-y-6 pb-6">
                     <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 flex items-center space-x-6 mb-4 text-black">
                       <img src={product.image} onError={handleImageError} className="w-16 h-16 rounded-xl object-cover shadow-md" />
                       <div>
@@ -261,35 +271,35 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Recipient Full Name</label>
-                      <input required type="text" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="Your Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Full Recipient Name</label>
+                      <input required type="text" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="Enter Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Active Phone Contact</label>
+                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Contact Number</label>
                       <input required type="tel" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="03XX-XXXXXXX" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                     </div>
                     <div className="grid grid-cols-2 gap-6">
                       <div>
                         <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">City</label>
-                        <input required type="text" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="e.g. Karachi" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
+                        <input required type="text" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="e.g. Lahore" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
                       </div>
-                      <div className="flex flex-col justify-end pb-4 text-right"><span className="text-[10px] font-black text-green-600 uppercase italic tracking-widest">Free Shipping</span></div>
+                      <div className="flex flex-col justify-end pb-4 text-right"><span className="text-[10px] font-black text-green-600 uppercase italic tracking-widest">Free Express Shipping</span></div>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Logistical Address</label>
-                      <textarea required className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none h-24 resize-none text-black focus:ring-1 focus:ring-black transition" placeholder="Full Detailed Shipping Address..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Delivery Address</label>
+                      <textarea required className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none h-24 resize-none text-black focus:ring-1 focus:ring-black transition" placeholder="Full Street, House, Area details..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
                     </div>
-                    <button type="submit" disabled={isSubmitting} className="w-full bg-black text-white font-black uppercase py-6 rounded-xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-sm italic">
-                      {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Order Now — Cash On Delivery`}
+                    <button type="submit" disabled={isSubmitting} className="w-full bg-black text-white font-black uppercase py-6 rounded-xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-sm italic active:scale-95 transition-transform">
+                      {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete Order — Cash On Delivery`}
                     </button>
                   </form>
                 </>
               ) : (
-                <div className="text-center py-10">
+                <div className="text-center py-10 flex flex-col items-center justify-center h-full">
                   <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-10 text-4xl shadow-2xl"><i className="fas fa-check"></i></div>
-                  <h3 className="text-4xl font-serif font-bold uppercase mb-3 italic text-black">Order Confirmed</h3>
-                  <p className="text-gray-500 mb-10 font-bold italic text-sm tracking-widest">Order Ledger ID: <span className="text-black">#{orderSuccess.id}</span></p>
-                  <button onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} className="w-full bg-black text-white font-black uppercase tracking-[0.4em] py-5 rounded-xl shadow-lg hover:bg-gray-800 transition text-xs italic">Back to ITX Collection</button>
+                  <h3 className="text-4xl font-serif font-bold uppercase mb-3 italic text-black">Order Placed</h3>
+                  <p className="text-gray-500 mb-10 font-bold italic text-sm tracking-widest">Ref: <span className="text-black">#{orderSuccess.id}</span></p>
+                  <button onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-5 rounded-xl shadow-lg hover:bg-gray-800 transition text-xs italic">Back to Store</button>
                 </div>
               )}
             </div>

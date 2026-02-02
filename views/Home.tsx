@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../types';
@@ -14,7 +15,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
 
   return (
     <div className="animate-fadeIn">
-      {/* Hero Section - Watch Store Edition */}
+      {/* Hero Section */}
       <section className="relative h-[80vh] bg-black text-white flex items-center overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img 
@@ -36,7 +37,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
             </p>
             <div className="flex space-x-4">
               <button className="bg-white text-black font-black px-10 py-5 rounded-full text-xs uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all transform hover:scale-105">
-                Explore The Vault
+                Explore Collection
               </button>
               <button className="border border-white/20 text-white font-black px-10 py-5 rounded-full text-xs uppercase tracking-[0.2em] hover:bg-white/10 transition-all">
                 The Heritage
@@ -51,7 +52,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
         <div className="flex flex-col md:flex-row items-end justify-between mb-16 gap-4">
           <div className="max-w-xl">
             <span className="text-blue-600 font-black uppercase tracking-widest text-[10px] mb-2 block">Curated Releases</span>
-            <h2 className="text-4xl font-black uppercase italic tracking-tighter text-black">Vault Collection</h2>
+            <h2 className="text-4xl font-black uppercase italic tracking-tighter text-black">The Collection</h2>
           </div>
           <Link to="/" className="text-[10px] font-black uppercase tracking-widest border-b-2 border-black pb-1 hover:text-blue-600 hover:border-blue-600 transition">Browse Archive</Link>
         </div>
@@ -93,7 +94,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
         </div>
       </section>
 
-      {/* Trust Badges - Watch Boutique Edition */}
+      {/* Trust Badges */}
       <section className="bg-gray-50 py-20 border-y border-gray-100">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-12">

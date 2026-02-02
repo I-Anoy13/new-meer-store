@@ -45,12 +45,12 @@ const App: React.FC = () => {
           last_seen: new Date().toISOString() 
         }, { onConflict: 'id' });
       } catch (e) {
-        // Fallback or ignore if table doesn't exist yet
+        // Fallback or ignore
       }
     };
 
     sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 30000); // Heartbeat every 30s
+    const interval = setInterval(sendHeartbeat, 30000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -62,7 +62,7 @@ const App: React.FC = () => {
       if (data) {
         const mappedProducts: Product[] = data.map(row => ({
           id: String(row.id),
-          name: row.name || 'Untitled Timepiece',
+          name: row.name || 'Untitled Item',
           description: row.description || '',
           price: Number(row.price_pkr || row.price || 0),
           image: row.image || row.image_url || 'https://via.placeholder.com/800x1000',
@@ -123,7 +123,7 @@ const App: React.FC = () => {
       try {
         await Promise.all([fetchProducts(), fetchOrders()]);
       } catch (e) {
-        console.error('Data initialization error:', e);
+        console.error('Data init error:', e);
       }
       if (mounted) setLoading(false);
     };
@@ -215,7 +215,7 @@ const App: React.FC = () => {
   };
 
   const login = (role: UserRole) => {
-    setUser({ id: '1', name: 'Store Manager', email: 'manager@elitehorology.pk', role });
+    setUser({ id: '1', name: 'Store Manager', email: 'manager@itxshop.pk', role });
   };
 
   const logout = () => setUser(null);
@@ -225,7 +225,7 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Opening ITX Secure Vault...</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Securely loading store data...</p>
         </div>
       </div>
     );
@@ -239,7 +239,7 @@ const App: React.FC = () => {
         {isSyncing && (
           <div className="fixed top-20 right-6 z-[1000] animate-pulse">
             <div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center">
-              <i className="fas fa-sync fa-spin mr-2"></i> Syncing Vault
+              <i className="fas fa-sync fa-spin mr-2"></i> Syncing Data
             </div>
           </div>
         )}

@@ -10,7 +10,7 @@ interface AIConciergeProps {
 const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<{role: 'user' | 'ai', text: string}[]>([
-    { role: 'ai', text: "Welcome to the ITX Vault. I am your personal horologist. How may I assist you in selecting your next masterpiece today?" }
+    { role: 'ai', text: "Welcome to ITX SHOP MEER. I am your personal shopping consultant. How may I assist you in selecting your next masterpiece today?" }
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -33,7 +33,6 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
     setIsTyping(true);
 
     try {
-      // Fix: Follow @google/genai initialization rules exactly
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const productContext = products.map(p => 
@@ -50,25 +49,25 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
         ],
         config: {
           systemInstruction: `You are the ITX AI Concierge, a master horologist and luxury sales expert for "ITX SHOP MEER". 
-          Your tone is sophisticated, professional, and slightly poetic, fitting for high-end watches.
+          Your tone is sophisticated, professional, and slightly poetic, fitting for high-end artisan items.
           
           Context of available products:
           ${productContext}
 
           Rules:
           1. Only recommend products from the provided list.
-          2. Focus on craftsmanship, engineering, and style suitability (e.g., formal, professional, adventurous).
+          2. Focus on craftsmanship, engineering, and style suitability.
           3. Mention prices in PKR (Rs.).
           4. Always refer to the customer as "Guest" or "Sir/Madam" with high respect.
           5. Keep responses concise but impactful.`
         }
       });
 
-      const aiResponse = response.text || "I apologize, my connection to the vault is momentarily disrupted. How else can I help?";
+      const aiResponse = response.text || "I apologize, my connection is momentarily disrupted. How else can I help?";
       setMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
     } catch (error) {
       console.error("AI Error:", error);
-      setMessages(prev => [...prev, { role: 'ai', text: "The vault's security protocols are currently high. Please browse our collection while I re-establish connection." }]);
+      setMessages(prev => [...prev, { role: 'ai', text: "Our security protocols are currently high. Please browse our collection while I re-establish connection." }]);
     } finally {
       setIsTyping(false);
     }
@@ -82,7 +81,7 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
           <div className="bg-black p-6 flex justify-between items-center">
             <div>
               <h3 className="text-white font-serif italic text-lg leading-tight uppercase">ITX AI Concierge</h3>
-              <p className="text-blue-400 text-[9px] font-black uppercase tracking-widest mt-1">Master Horologist Active</p>
+              <p className="text-blue-400 text-[9px] font-black uppercase tracking-widest mt-1">Master Consultant Active</p>
             </div>
             <button onClick={() => setIsOpen(false)} className="text-white/50 hover:text-white transition">
               <i className="fas fa-times text-xl"></i>
@@ -141,7 +140,7 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
         )}
       </button>
 
-      {/* WhatsApp Quick Link (Bottom Left of Floating Area) */}
+      {/* WhatsApp Quick Link */}
       <a 
         href="https://wa.me/923XXXXXXXXX" 
         target="_blank" 
