@@ -36,6 +36,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [loginError, setLoginError] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     e.currentTarget.src = PLACEHOLDER_IMAGE;
@@ -86,7 +87,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     name: '',
     description: '',
     price: 0,
-    category: '',
+    category: 'Luxury Artisan',
     inventory: 0,
     image: '',
     video: '',
@@ -174,13 +175,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
     
     setUploading(true);
-    const BUCKET_NAME = 'product-images'; // Must exactly match Supabase
+    const BUCKET_NAME = 'product-images';
     
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
-      console.log(`Attempting upload to bucket: "${BUCKET_NAME}"...`);
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
@@ -189,52 +188,97 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           upsert: false
         });
 
-      if (uploadError) {
-        console.error('Supabase Storage Error Details:', uploadError);
-        throw uploadError;
-      }
+      if (uploadError) throw uploadError;
 
       const { data: publicUrlData } = supabase.storage
         .from(BUCKET_NAME)
         .getPublicUrl(fileName);
 
       setProductForm(prev => ({ ...prev, image: publicUrlData.publicUrl }));
-      console.log('Upload successful:', publicUrlData.publicUrl);
     } catch (error: any) { 
-      console.error('Full Upload Error Object:', error);
-      alert(
-        `VAULT STORAGE ERROR:\n\n` +
-        `Problem: ${error.message}\n\n` +
-        `CHECKLIST:\n` +
-        `1. Is your bucket named exactly "${BUCKET_NAME}"?\n` +
-        `2. Is the bucket set to "Public" in Supabase?\n` +
-        `3. Did you add "Insert" and "Select" RLS policies for anonymous users?`
-      ); 
+      alert(`VAULT STORAGE ERROR: ${error.message}`); 
     }
     finally { setUploading(false); }
   };
 
+  const addVariant = () => {
+    const newVariant: Variant = {
+      id: `VAR-${Date.now()}`,
+      name: '',
+      price: productForm.price || 0
+    };
+    setProductForm(prev => ({ ...prev, variants: [...prev.variants, newVariant] }));
+  };
+
+  const removeVariant = (id: string) => {
+    setProductForm(prev => ({ ...prev, variants: prev.variants.filter(v => v.id !== id) }));
+  };
+
+  const updateVariant = (id: string, field: keyof Variant, value: any) => {
+    setProductForm(prev => ({
+      ...prev,
+      variants: prev.variants.map(v => v.id === id ? { ...v, [field]: value } : v)
+    }));
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingProduct) {
-      const updated = { ...editingProduct, ...productForm };
-      const { error } = await supabase.from('products').update(updated).eq('id', editingProduct.id);
-      if (!error) setProducts(prev => prev.map(p => p.id === editingProduct.id ? updated : p));
-    } else {
-      const newP: Product = { ...productForm, id: `PROD-${Date.now()}`, rating: 5, reviews: [] } as Product;
-      const { error } = await supabase.from('products').insert([newP]);
-      if (!error) setProducts(prev => [newP, ...prev]);
+    setIsSaving(true);
+    
+    try {
+      if (editingProduct) {
+        const updated = { ...editingProduct, ...productForm };
+        const { error } = await supabase.from('products').update(updated).eq('id', editingProduct.id);
+        if (error) throw error;
+        setProducts(prev => prev.map(p => p.id === editingProduct.id ? updated : p));
+      } else {
+        const newP: Product = { 
+          ...productForm, 
+          id: `PROD-${Date.now()}`, 
+          rating: 5, 
+          reviews: [] 
+        } as Product;
+        const { error } = await supabase.from('products').insert([newP]);
+        if (error) throw error;
+        setProducts(prev => [newP, ...prev]);
+      }
+      
+      setIsModalOpen(false);
+      refreshData(); // Ensure the app syncs everything immediately
+      alert('Product saved successfully to ITX Vault.');
+    } catch (error: any) {
+      console.error('Save Product Error:', error);
+      alert(`FAILED TO PUBLISH: ${error.message}\n\nCheck if your 'products' table has columns for all fields (name, description, price, category, inventory, image, video, variants).`);
+    } finally {
+      setIsSaving(false);
     }
-    setIsModalOpen(false);
   };
 
   const openModal = (product?: Product) => {
     if (product) {
       setEditingProduct(product);
-      setProductForm({ name: product.name, description: product.description, price: product.price, category: product.category, inventory: product.inventory, image: product.image, video: product.video || '', variants: product.variants || [] });
+      setProductForm({ 
+        name: product.name, 
+        description: product.description, 
+        price: product.price, 
+        category: product.category, 
+        inventory: product.inventory, 
+        image: product.image, 
+        video: product.video || '', 
+        variants: product.variants || [] 
+      });
     } else {
       setEditingProduct(null);
-      setProductForm({ name: '', description: '', price: 0, category: 'Luxury Artisan', inventory: 0, image: '', video: '', variants: [] });
+      setProductForm({ 
+        name: '', 
+        description: '', 
+        price: 0, 
+        category: 'Luxury Artisan', 
+        inventory: 0, 
+        image: '', 
+        video: '', 
+        variants: [] 
+      });
     }
     setIsModalOpen(true);
   };
@@ -280,28 +324,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="bg-white p-10 rounded-3xl border border-gray-100 shadow-sm"><p className="text-[11px] font-black uppercase text-gray-400 mb-3">Vault SKU Items</p><p className="text-4xl font-black text-black">{activeProductsCount}</p></div>
               <div className="bg-red-500 text-white p-10 rounded-3xl shadow-lg"><p className="text-[11px] font-black uppercase opacity-60 mb-3">Low Stock Alerts</p><p className="text-4xl font-black">{lowStockCount}</p></div>
             </div>
-            <div className="bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-sm">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-                <div><h3 className="text-2xl font-serif italic font-bold text-black uppercase tracking-tight">Monthly Performance Trends</h3><p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mt-1">Rolling 6-Month Sales Ledger</p></div>
-              </div>
-              <div className="h-[400px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={salesTrendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#000000" stopOpacity={0.1}/><stop offset="95%" stopColor="#000000" stopOpacity={0}/></linearGradient>
-                      <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }} dy={10} />
-                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }} tickFormatter={(val) => `Rs.${(val / 1000)}k`} />
-                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900, fill: '#3b82f6' }} />
-                    <Tooltip contentStyle={{ borderRadius: '16px', border: '1px solid #f1f1f1', padding: '12px' }} itemStyle={{ fontSize: '10px', fontWeight: 900 }} labelStyle={{ fontSize: '11px', fontWeight: 900 }} />
-                    <Area yAxisId="left" type="monotone" dataKey="revenue" stroke="#000000" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
-                    <Area yAxisId="right" type="monotone" dataKey="orders" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorOrders)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </div>
         )}
 
@@ -316,8 +338,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                <table className="w-full text-left">
-                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">SKU</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Stock</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Price</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Action</th></tr></thead>
-                  <tbody>{filteredProducts.map(p => (<tr key={p.id} className="border-t border-gray-50"><td className="px-10 py-8 flex items-center space-x-4"><img src={p.image} onError={handleImageError} className="w-10 h-10 rounded-lg object-cover" /><span className="font-black uppercase italic">{p.name}</span></td><td className="px-10 py-8"><span className={`font-black text-[10px] px-3 py-1 rounded-full ${p.inventory < 10 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{p.inventory} UNITS</span></td><td className="px-10 py-8 text-right font-serif font-bold italic">Rs. {p.price.toLocaleString()}</td><td className="px-10 py-8 text-right"><button onClick={() => openModal(p)} className="text-blue-600 mr-4 font-black uppercase text-[10px]">Edit</button><button onClick={(e) => handleDelete(e, p.id)} className="text-red-600 font-black uppercase text-[10px]">Delete</button></td></tr>))}</tbody>
+                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">SKU / Model</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Stock</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Variants</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Base Price</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Action</th></tr></thead>
+                  <tbody>{filteredProducts.map(p => (<tr key={p.id} className="border-t border-gray-50"><td className="px-10 py-8 flex items-center space-x-4"><img src={p.image} onError={handleImageError} className="w-10 h-10 rounded-lg object-cover" /><span className="font-black uppercase italic">{p.name}</span></td><td className="px-10 py-8"><span className={`font-black text-[10px] px-3 py-1 rounded-full ${p.inventory < 10 ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>{p.inventory} UNITS</span></td><td className="px-10 py-8"><span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{p.variants?.length || 0} Options</span></td><td className="px-10 py-8 text-right font-serif font-bold italic">Rs. {p.price.toLocaleString()}</td><td className="px-10 py-8 text-right"><button onClick={() => openModal(p)} className="text-blue-600 mr-4 font-black uppercase text-[10px]">Edit</button><button onClick={(e) => handleDelete(e, p.id)} className="text-red-600 font-black uppercase text-[10px]">Delete</button></td></tr>))}</tbody>
                </table>
             </div>
           </div>
@@ -362,14 +384,50 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                    <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
                  </div>
                </div>
-               <input required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Name" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
-               <textarea required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold h-32 resize-none outline-none" placeholder="Description" value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} />
-               <div className="grid grid-cols-2 gap-6">
-                  <input required type="number" className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Price (PKR)" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} />
-                  <input required type="number" className="bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Stock" value={productForm.inventory || ''} onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})} />
+               
+               <div className="space-y-4">
+                 <input required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black" placeholder="Model Name (e.g. Royal Oak Skeleton)" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
+                 <textarea required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold h-32 resize-none outline-none text-black" placeholder="Detailed Product Narrative..." value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} />
+                 
+                 <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 italic">Base Retail Price</label>
+                      <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black" placeholder="Price (PKR)" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 italic">Vault Inventory</label>
+                      <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black" placeholder="Stock Level" value={productForm.inventory || ''} onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})} />
+                    </div>
+                 </div>
+
+                 {/* Variants Section */}
+                 <div className="pt-6 border-t border-gray-100">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-[11px] font-black uppercase tracking-widest text-black">Product Variants / Options</h3>
+                      <button type="button" onClick={addVariant} className="text-[10px] font-black uppercase text-blue-600 hover:text-blue-800 transition">+ Add Edition</button>
+                    </div>
+                    <div className="space-y-3">
+                      {productForm.variants.map((variant) => (
+                        <div key={variant.id} className="grid grid-cols-12 gap-3 items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                          <div className="col-span-6">
+                            <input className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold text-black" placeholder="e.g. Rose Gold" value={variant.name} onChange={e => updateVariant(variant.id, 'name', e.target.value)} />
+                          </div>
+                          <div className="col-span-4">
+                            <input type="number" className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold text-black" placeholder="Price" value={variant.price || ''} onChange={e => updateVariant(variant.id, 'price', Number(e.target.value))} />
+                          </div>
+                          <div className="col-span-2 text-right">
+                            <button type="button" onClick={() => removeVariant(variant.id)} className="text-red-500 hover:text-red-700 transition"><i className="fas fa-trash-alt text-xs"></i></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                 </div>
                </div>
-               <div className="flex space-x-4 pt-4">
-                  <button type="submit" disabled={uploading} className="flex-grow bg-black text-white py-5 rounded-xl font-black uppercase italic hover:bg-blue-600 transition disabled:bg-gray-400">{editingProduct ? 'Update Vault' : 'Register SKU'}</button>
+
+               <div className="flex space-x-4 pt-10">
+                  <button type="submit" disabled={uploading || isSaving} className="flex-grow bg-black text-white py-5 rounded-xl font-black uppercase italic hover:bg-blue-600 transition disabled:bg-gray-400">
+                    {isSaving ? <i className="fas fa-circle-notch fa-spin"></i> : (editingProduct ? 'Update ITX Vault' : 'Publish to Collection')}
+                  </button>
                   <button type="button" onClick={() => setIsModalOpen(false)} className="bg-gray-100 text-black px-10 py-5 rounded-xl font-black uppercase">Cancel</button>
                </div>
             </form>
