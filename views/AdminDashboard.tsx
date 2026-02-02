@@ -157,7 +157,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleStatusChange = async (orderId: string, status: Order['status']) => {
-    // Map to the correct order_id column and lower case status for the DB
     const { error } = await supabase
       .from('orders')
       .update({ status: status.toLowerCase() })
@@ -175,12 +174,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!file) return;
     setUploading(true);
     try {
-      const fileName = `${Math.random()}.${file.name.split('.').pop()}`;
-      const { error: uploadError } = await supabase.storage.from('products').upload(`product-images/${fileName}`, file);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      
+      // Corrected bucket name to 'product-images'
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
       if (uploadError) throw uploadError;
-      const { data } = supabase.storage.from('products').getPublicUrl(`product-images/${fileName}`);
+
+      const { data } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(fileName);
+
       setProductForm(prev => ({ ...prev, image: data.publicUrl }));
-    } catch (error: any) { alert('Error: ' + error.message); }
+    } catch (error: any) { 
+      alert('Vault Storage Error: ' + error.message + '. Please ensure your bucket "product-images" exists and has public "Insert" permissions.'); 
+    }
     finally { setUploading(false); }
   };
 
