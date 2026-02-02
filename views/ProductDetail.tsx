@@ -21,19 +21,20 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
 
-  // Body scroll lock implementation
+  // MOBILE UX: Body scroll lock implementation
   useEffect(() => {
     if (isOrderModalOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
       document.body.style.overflow = 'hidden';
-      document.body.style.height = '100vh';
-    } else {
-      document.body.style.overflow = 'unset';
-      document.body.style.height = 'auto';
+      // On some mobile browsers, we might need to set height as well
+      const originalHeight = document.body.style.height;
+      document.body.style.height = '100%';
+      
+      return () => {
+        document.body.style.overflow = originalStyle;
+        document.body.style.height = originalHeight;
+      };
     }
-    return () => {
-      document.body.style.overflow = 'unset';
-      document.body.style.height = 'auto';
-    };
   }, [isOrderModalOpen]);
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
@@ -252,54 +253,51 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       </div>
 
       {isOrderModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn overflow-hidden">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-xl h-full sm:h-auto sm:max-h-[95vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden m-0 sm:m-4">
-            <div className="p-8 md:p-12 overflow-y-auto custom-scrollbar flex-grow">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn overflow-hidden p-4">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-xl max-h-[95vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden">
+            <div className="p-6 md:p-10 overflow-y-auto custom-scrollbar flex-grow">
               {!orderSuccess ? (
                 <>
-                  <div className="flex justify-between items-start mb-8 text-black">
+                  <div className="flex justify-between items-start mb-6 text-black">
                     <h2 className="text-xl md:text-2xl font-serif font-bold uppercase italic tracking-tighter leading-tight max-w-[90%]">Shipping Information</h2>
                     <button onClick={() => setIsOrderModalOpen(false)} className="text-gray-400 hover:text-black transition p-2"><i className="fas fa-times text-2xl"></i></button>
                   </div>
-                  <form onSubmit={handleQuickOrder} className="space-y-6 pb-6">
-                    <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 flex items-center space-x-6 mb-4 text-black">
-                      <img src={product.image} onError={handleImageError} className="w-16 h-16 rounded-xl object-cover shadow-md" />
+                  <form onSubmit={handleQuickOrder} className="space-y-5">
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center space-x-4 mb-4 text-black">
+                      <img src={product.image} onError={handleImageError} className="w-12 h-12 rounded-xl object-cover shadow-md" />
                       <div>
-                        <p className="font-black text-sm uppercase tracking-tight italic">{product.name}</p>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Edition: {variantName}</p>
-                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1">PKR {(currentPrice * quantity).toLocaleString()}</p>
+                        <p className="font-black text-xs uppercase tracking-tight italic">{product.name}</p>
+                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-0.5">PKR {(currentPrice * quantity).toLocaleString()} • {variantName}</p>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Full Recipient Name</label>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 px-1 italic">Full Name</label>
                       <input required type="text" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="Enter Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Contact Number</label>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 px-1 italic">Phone Number</label>
                       <input required type="tel" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="03XX-XXXXXXX" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                     </div>
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">City</label>
-                        <input required type="text" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="e.g. Lahore" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
-                      </div>
-                      <div className="flex flex-col justify-end pb-4 text-right"><span className="text-[10px] font-black text-green-600 uppercase italic tracking-widest">Free Express Shipping</span></div>
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 px-1 italic">City</label>
+                      <input required type="text" className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition" placeholder="e.g. Karachi" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Delivery Address</label>
-                      <textarea required className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none h-24 resize-none text-black focus:ring-1 focus:ring-black transition" placeholder="Full Street, House, Area details..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 px-1 italic">Full Delivery Address</label>
+                      <textarea required className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none h-20 resize-none text-black focus:ring-1 focus:ring-black transition" placeholder="House no, Street name, Area..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
                     </div>
-                    <button type="submit" disabled={isSubmitting} className="w-full bg-black text-white font-black uppercase py-6 rounded-xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-sm italic active:scale-95 transition-transform">
-                      {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete Order — Cash On Delivery`}
+                    <button type="submit" disabled={isSubmitting} className="w-full bg-black text-white font-black uppercase py-5 rounded-xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-xs italic active:scale-95">
+                      {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Confirm Order — Cash On Delivery`}
                     </button>
+                    <p className="text-[9px] text-center font-black uppercase text-green-600 tracking-widest italic pt-2">Free Express Shipping Nationwide</p>
                   </form>
                 </>
               ) : (
                 <div className="text-center py-10 flex flex-col items-center justify-center h-full">
-                  <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-10 text-4xl shadow-2xl"><i className="fas fa-check"></i></div>
-                  <h3 className="text-4xl font-serif font-bold uppercase mb-3 italic text-black">Order Placed</h3>
-                  <p className="text-gray-500 mb-10 font-bold italic text-sm tracking-widest">Ref: <span className="text-black">#{orderSuccess.id}</span></p>
-                  <button onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-5 rounded-xl shadow-lg hover:bg-gray-800 transition text-xs italic">Back to Store</button>
+                  <div className="w-20 h-20 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-3xl shadow-2xl"><i className="fas fa-check"></i></div>
+                  <h3 className="text-3xl font-serif font-bold uppercase mb-2 italic text-black">Order Successful</h3>
+                  <p className="text-gray-500 mb-8 font-bold italic text-sm tracking-widest">ID: <span className="text-black">#{orderSuccess.id}</span></p>
+                  <button onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-5 rounded-xl shadow-lg hover:bg-gray-800 transition text-[10px] italic">Close</button>
                 </div>
               )}
             </div>

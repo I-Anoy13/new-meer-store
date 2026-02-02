@@ -36,7 +36,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
               Curating Pakistan's most exclusive timepieces. Experience artisan engineering delivered via our premium Cash On Delivery service.
             </p>
             <div className="flex space-x-4">
-              <button className="bg-white text-black font-black px-10 py-5 rounded-full text-xs uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all transform hover:scale-105">
+              <button onClick={() => document.getElementById('collection')?.scrollIntoView({behavior: 'smooth'})} className="bg-white text-black font-black px-10 py-5 rounded-full text-xs uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all transform hover:scale-105">
                 Explore Collection
               </button>
               <button className="border border-white/20 text-white font-black px-10 py-5 rounded-full text-xs uppercase tracking-[0.2em] hover:bg-white/10 transition-all">
@@ -48,7 +48,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
       </section>
 
       {/* Featured Products */}
-      <section className="container mx-auto px-4 py-24">
+      <section id="collection" className="container mx-auto px-4 py-24">
         <div className="flex flex-col md:flex-row items-end justify-between mb-16 gap-4">
           <div className="max-w-xl">
             <span className="text-blue-600 font-black uppercase tracking-widest text-[10px] mb-2 block">Curated Releases</span>
@@ -117,7 +117,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
                 <i className="fas fa-shield-halved text-2xl group-hover:text-white"></i>
               </div>
               <h4 className="font-black uppercase tracking-widest text-xs mb-2 text-black">7-Day Return</h4>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Collection Covered</p>
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Listing Coverage</p>
             </div>
             <div className="flex flex-col items-center text-center group">
               <div className="w-16 h-16 rounded-3xl bg-white flex items-center justify-center mb-6 shadow-sm border border-gray-100 group-hover:bg-blue-600 transition-colors duration-500">
