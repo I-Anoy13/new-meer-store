@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 const RefundPolicy: React.FC = () => {
@@ -8,7 +7,7 @@ const RefundPolicy: React.FC = () => {
       
       <div className="prose prose-lg text-gray-800 space-y-8 font-medium italic leading-relaxed">
         <p>
-          We have a <strong>30-day return policy</strong>, which means you have 30 days after receiving your item to request a return.
+          We have a <strong>7-day return policy</strong>, which means you have 7 days after receiving your item to request a return.
         </p>
 
         <p>

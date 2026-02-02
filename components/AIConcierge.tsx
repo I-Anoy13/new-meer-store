@@ -33,7 +33,8 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
     setIsTyping(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      // Fix: Follow @google/genai initialization rules exactly
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const productContext = products.map(p => 
         `Name: ${p.name}, Category: ${p.category}, Price: Rs. ${p.price}, Description: ${p.description}`

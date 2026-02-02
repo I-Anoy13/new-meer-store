@@ -1,4 +1,3 @@
-
 import { Product } from './types';
 
 export const PLACEHOLDER_IMAGE = 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?q=80&w=800&auto=format&fit=crop';
@@ -47,6 +46,6 @@ export const MOCK_PRODUCTS: Product[] = [
 export const TRUST_BADGES = [
   { icon: 'fa-certificate', text: 'Certified Authentic' },
   { icon: 'fa-truck-fast', text: 'Cash On Delivery' },
-  { icon: 'fa-shield-halved', text: '5-Year MEER Warranty' },
+  { icon: 'fa-shield-halved', text: '7-Day Return Warranty' },
   { icon: 'fa-box-open', text: 'Premium Packaging' }
 ];

@@ -1,8 +1,18 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Product, Order, User, UserRole, Variant } from '../types';
 import { supabase } from '../lib/supabase';
 import { PLACEHOLDER_IMAGE } from '../constants';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
 
 interface AdminDashboardProps {
   products: Product[];
@@ -30,23 +40,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   refreshData
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'settings'>('overview');
+  const [dateRange, setDateRange] = useState<'today' | '7d' | '30d' | 'all'>('7d');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [loginError, setLoginError] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [liveVisitors, setLiveVisitors] = useState(1);
+  const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  
+  // Settings
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    return localStorage.getItem('itx_notifications_enabled') === 'true';
+  });
+  const prevOrderCount = useRef(orders.length);
 
+  // Filters
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('All');
   const [productStockFilter, setProductStockFilter] = useState('All');
   const [productSort, setProductSort] = useState<'name-asc' | 'name-desc' | 'price-asc' | 'price-desc' | 'stock-asc' | 'stock-desc'>('name-asc');
-
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
   const [orderSort, setOrderSort] = useState<'date-desc' | 'date-asc' | 'total-desc' | 'total-asc'>('date-desc');
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newPassword, setNewPassword] = useState('');
 
   const [productForm, setProductForm] = useState<{
@@ -69,14 +86,99 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     variants: []
   });
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    e.currentTarget.src = PLACEHOLDER_IMAGE;
+  // Real Visitor Monitoring
+  useEffect(() => {
+    const fetchVisitors = async () => {
+      try {
+        const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { count, error } = await supabase
+          .from('visitors')
+          .select('*', { count: 'exact', head: true })
+          .gt('last_seen', fiveMinsAgo);
+        
+        if (!error && count !== null) {
+          setLiveVisitors(Math.max(1, count));
+        }
+      } catch (e) {
+        setLiveVisitors(1);
+      }
+    };
+
+    fetchVisitors();
+    const interval = setInterval(fetchVisitors, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // New Order Alert Logic
+  useEffect(() => {
+    if (notificationsEnabled && orders.length > prevOrderCount.current) {
+      // Play a subtle notification sound
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(() => {});
+      
+      // Visual Alert
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("ITX SHOP: New Order Received!", {
+          body: `New order from ${orders[0].customer.name} for Rs. ${orders[0].total.toLocaleString()}`,
+          icon: "/favicon.ico"
+        });
+      }
+    }
+    prevOrderCount.current = orders.length;
+  }, [orders, notificationsEnabled]);
+
+  const toggleNotifications = () => {
+    const nextValue = !notificationsEnabled;
+    setNotificationsEnabled(nextValue);
+    localStorage.setItem('itx_notifications_enabled', String(nextValue));
+    
+    if (nextValue && "Notification" in window) {
+      Notification.requestPermission();
+    }
   };
 
-  const totalRevenue = useMemo(() => orders.reduce((sum, o) => sum + o.total, 0), [orders]);
-  const pendingOrdersCount = useMemo(() => orders.filter(o => o.status === 'Pending').length, [orders]);
-  const activeProductsCount = products.length;
-  const lowStockCount = products.filter(p => p.inventory < 10).length;
+  const handleCopy = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopyStatus(field);
+    setTimeout(() => setCopyStatus(null), 2000);
+  };
+
+  const formatCompact = (num: number) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'm';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    return num.toLocaleString();
+  };
+
+  const analyticsData = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    
+    const filteredByDate = orders.filter(o => {
+      const orderTime = new Date(o.date).getTime();
+      if (dateRange === 'today') return orderTime >= today;
+      if (dateRange === '7d') return orderTime >= today - (7 * 24 * 60 * 60 * 1000);
+      if (dateRange === '30d') return orderTime >= today - (30 * 24 * 60 * 60 * 1000);
+      return true;
+    });
+
+    const revenue = filteredByDate.reduce((sum, o) => sum + o.total, 0);
+    const count = filteredByDate.length;
+    
+    const chartMap: Record<string, number> = {};
+    filteredByDate.forEach(o => {
+      const day = new Date(o.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+      chartMap[day] = (chartMap[day] || 0) + o.total;
+    });
+
+    const chartData = Object.entries(chartMap).map(([name, value]) => ({ name, value }));
+    return { revenue, count, chartData, filteredByDate };
+  }, [orders, dateRange]);
+
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (adminPasswordInput === systemPassword) { login(UserRole.ADMIN); setLoginError(false); }
+    else setLoginError(true);
+  };
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
@@ -116,215 +218,60 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return result;
   }, [orders, orderSearch, orderStatusFilter, orderSort]);
 
-  const categories = useMemo(() => ['All', ...Array.from(new Set(products.map(p => p.category)))], [products]);
-
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (adminPasswordInput === systemPassword) { login(UserRole.ADMIN); setLoginError(false); }
-    else setLoginError(true);
+  const handleStatusChange = async (orderId: string, status: Order['status']) => {
+    // Immediate local UI update
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    if (viewingOrder?.id === orderId) {
+      setViewingOrder(prev => prev ? { ...prev, status } : null);
+    }
+    
+    const { error } = await supabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', orderId);
+    if (error) {
+      alert("Failed to update status on server.");
+      refreshData();
+    }
   };
 
   const handlePasswordChange = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 4) return alert("Password must be at least 4 characters.");
-    setSystemPassword(newPassword);
-    alert("Passkey Updated Successfully");
-  };
-
-  const handleDelete = async (e: React.MouseEvent, productId: string) => {
-    e.preventDefault();
-    if (window.confirm('Delete this product from the ITX database?')) deleteProduct(productId);
-  };
-
-  const handleStatusChange = async (orderId: string, status: Order['status']) => {
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: status.toLowerCase() })
-      .eq('order_id', orderId);
-    
-    if (!error) {
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
-    } else {
-      console.error('Update status error:', error.message);
+    if (newPassword.trim()) {
+      setSystemPassword(newPassword);
+      setNewPassword('');
+      alert('Security protocol updated.');
     }
   };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setUploading(true);
-    const BUCKET_NAME = 'product-images';
-    
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from(BUCKET_NAME)
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrlData } = supabase.storage
-        .from(BUCKET_NAME)
-        .getPublicUrl(fileName);
-
-      setProductForm(prev => ({ ...prev, image: publicUrlData.publicUrl }));
-    } catch (error: any) { 
-      alert(`VAULT STORAGE ERROR: ${error.message}`); 
-    }
-    finally { setUploading(false); }
-  };
-
-  const addVariant = () => {
-    const newVariant: Variant = {
-      id: `VAR-${Date.now()}`,
-      name: '',
-      price: productForm.price || 0
-    };
-    setProductForm(prev => ({ ...prev, variants: [...prev.variants, newVariant] }));
-  };
-
-  const removeVariant = (id: string) => {
-    setProductForm(prev => ({ ...prev, variants: prev.variants.filter(v => v.id !== id) }));
-  };
-
-  const updateVariant = (id: string, field: keyof Variant, value: any) => {
-    setProductForm(prev => ({
-      ...prev,
-      variants: prev.variants.map(v => v.id === id ? { ...v, [field]: value } : v)
-    }));
-  };
-
-  const SQL_FIX_SCRIPT = `
--- 1. CHANGE ID COLUMN FROM UUID TO TEXT (IMPORTANT)
--- Your screenshot shows 'uuid' but the app uses 'PROD-...' string IDs
-ALTER TABLE public.products ALTER COLUMN id TYPE text;
-
--- 2. ENSURE COLUMNS MATCH APP EXPECTATIONS
--- If columns like 'image_url' or 'stock' exist, we sync them
-DO $$ 
-BEGIN
-    -- Rename 'image_url' to 'image' if 'image_url' exists but 'image' doesn't
-    IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image_url') 
-    AND NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image') THEN
-        ALTER TABLE public.products RENAME COLUMN image_url TO image;
-    END IF;
-
-    -- Rename 'stock' to 'inventory' if 'stock' exists but 'inventory' doesn't
-    IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'stock') 
-    AND NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'inventory') THEN
-        ALTER TABLE public.products RENAME COLUMN stock TO inventory;
-    END IF;
-END $$;
-
--- 3. ADD MISSING COLUMNS IF THEY STILL DON'T EXIST
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image text;
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS inventory integer DEFAULT 0;
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS variants jsonb DEFAULT '[]'::jsonb;
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS reviews jsonb DEFAULT '[]'::jsonb;
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS video text;
-ALTER TABLE public.products ADD COLUMN IF NOT EXISTS rating numeric DEFAULT 5;
-
--- 4. OPEN PERMISSIONS & DISABLE RLS
-ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
-GRANT ALL ON public.products TO anon, authenticated, service_role;
-
--- 5. FORCE REFRESH SUPABASE SCHEMA CACHE (VITAL)
-NOTIFY pgrst, 'reload schema';
-`;
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSaving) return;
     setIsSaving(true);
-    
-    const productId = editingProduct ? editingProduct.id : `PROD-${Date.now()}`;
-    
-    const productData = {
-      id: productId,
-      name: productForm.name,
-      description: productForm.description,
-      price: productForm.price,
-      category: productForm.category,
-      inventory: productForm.inventory,
-      image: productForm.image,
-      video: productForm.video || '',
-      variants: productForm.variants,
-      rating: editingProduct?.rating || 5,
-      reviews: editingProduct?.reviews || []
-    };
-
     try {
-      const { error } = await supabase
-        .from('products')
-        .upsert([productData], { onConflict: 'id' });
-
+      const dbPayload = {
+        name: productForm.name,
+        description: productForm.description,
+        price_pkr: productForm.price,
+        inventory: productForm.inventory,
+        image: productForm.image,
+        category: productForm.category,
+        video: productForm.video,
+        variants: productForm.variants
+      };
+      const { error } = await supabase.from('products').insert([dbPayload]);
       if (error) throw error;
-
+      setProductForm({ name: '', description: '', price: 0, category: 'Luxury Artisan', inventory: 0, image: '', video: '', variants: [] });
       setIsModalOpen(false);
-      refreshData(); 
-      alert('SUCCESS: Timepiece published to ITX Vault.');
-    } catch (error: any) {
-      console.error('DATABASE ERROR:', error);
-      
-      const errorMsg = error.message.toLowerCase();
-      
-      // If error is about uuid or missing columns
-      if (errorMsg.includes('uuid') || errorMsg.includes('column') || errorMsg.includes('not found')) {
-        if (window.confirm(`CRITICAL DATABASE MISMATCH:\n\n1. ID column is UUID but must be TEXT.\n2. Column names (image/variants) are missing or cached.\n\nWould you like to copy the ONE-CLICK REPAIR SQL?`)) {
-          navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-          alert('SQL COPIED! Go to Supabase > SQL Editor > Paste > Run.');
-        }
-      } else {
-        alert(`PUBLISH FAILED: ${error.message}`);
-      }
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const openModal = (product?: Product) => {
-    if (product) {
-      setEditingProduct(product);
-      setProductForm({ 
-        name: product.name, 
-        description: product.description, 
-        price: product.price, 
-        category: product.category, 
-        inventory: product.inventory, 
-        image: product.image, 
-        video: product.video || '', 
-        variants: product.variants || [] 
-      });
-    } else {
-      setEditingProduct(null);
-      setProductForm({ 
-        name: '', 
-        description: '', 
-        price: 0, 
-        category: 'Luxury Artisan', 
-        inventory: 0, 
-        image: '', 
-        video: '', 
-        variants: [] 
-      });
-    }
-    setIsModalOpen(true);
+      refreshData();
+      alert('Product published.');
+    } catch (error: any) { alert(`Error: ${error.message}`); } finally { setIsSaving(false); }
   };
 
   if (!user) {
     return (
       <div className="container mx-auto px-4 py-40 flex flex-col items-center">
         <div className="w-24 h-24 bg-black rounded-3xl flex items-center justify-center mb-10 text-4xl text-white shadow-2xl"><i className="fas fa-terminal"></i></div>
-        <h2 className="text-4xl font-serif italic font-bold uppercase mb-8 text-black">ITX SHOP MEER CONSOLE</h2>
+        <h2 className="text-4xl font-serif italic font-bold uppercase mb-8 text-black">ITX Console Login</h2>
         <form onSubmit={handleAdminLogin} className="w-full max-w-sm space-y-4">
-          <input type="password" placeholder="System Password" className={`w-full p-6 bg-white border ${loginError ? 'border-red-500' : 'border-gray-100'} rounded-2xl font-black text-center outline-none focus:ring-1 focus:ring-black transition shadow-sm text-black`} value={adminPasswordInput} onChange={(e) => setAdminPasswordInput(e.target.value)} />
-          <button type="submit" className="w-full p-6 bg-black text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl flex items-center justify-center">Log into ITX System <i className="fas fa-key ml-4"></i></button>
+          <input type="password" placeholder="System Password" required className={`w-full p-6 bg-white border ${loginError ? 'border-red-500' : 'border-gray-100'} rounded-2xl font-black text-center outline-none focus:ring-1 focus:ring-black transition shadow-sm text-black`} value={adminPasswordInput} onChange={(e) => setAdminPasswordInput(e.target.value)} />
+          <button type="submit" className="w-full p-6 bg-black text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl">Secure Login <i className="fas fa-key ml-4"></i></button>
         </form>
       </div>
     );
@@ -332,82 +279,130 @@ NOTIFY pgrst, 'reload schema';
 
   return (
     <div className="bg-[#fafafa] min-h-screen pb-32">
-      <div className="container mx-auto px-8 py-16">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end mb-16 space-y-8 lg:space-y-0 border-b border-gray-100 pb-12">
-          <div className="space-y-2">
-            <h1 className="text-5xl font-serif font-bold italic tracking-tight text-black flex items-center">ITX <span className="ml-4 text-blue-600 not-italic font-black text-2xl tracking-[0.2em] uppercase">Control</span></h1>
-            <div className="flex items-center space-x-4">
-              <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.4em] flex items-center"><span className="w-2 h-2 bg-green-500 rounded-full mr-3"></span> {user.name}</p>
-              <button onClick={refreshData} className="text-blue-600 hover:text-blue-800 text-[9px] font-black uppercase tracking-widest flex items-center transition">
-                <i className="fas fa-sync-alt mr-2"></i> Synchronize Vault
-              </button>
-            </div>
+      <div className="container mx-auto px-8 py-12">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 gap-6">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-serif font-bold italic text-black">Store <span className="not-italic text-blue-600">Analytics</span></h1>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Merchant: {user.name}</p>
           </div>
-          <div className="flex bg-white rounded-2xl p-2 border border-gray-200 shadow-sm overflow-x-auto">
+          <div className="flex bg-white rounded-2xl p-1.5 border border-gray-200 shadow-sm overflow-x-auto">
             {['overview', 'products', 'orders', 'settings'].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-10 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black hover:bg-gray-50'}`}>{tab}</button>
+              <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black hover:bg-gray-50'}`}>{tab}</button>
             ))}
           </div>
         </div>
 
         {activeTab === 'overview' && (
-          <div className="space-y-10">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
-              <div className="bg-black text-white p-10 rounded-3xl shadow-xl"><p className="text-[11px] font-black uppercase opacity-60 mb-3">Total Revenue (PKR)</p><p className="text-4xl font-black">Rs. {totalRevenue.toLocaleString()}</p></div>
-              <div className="bg-white p-10 rounded-3xl border border-gray-100 shadow-sm"><p className="text-[11px] font-black uppercase text-gray-400 mb-3">Pending Orders</p><p className="text-4xl font-black text-black">{pendingOrdersCount}</p></div>
-              <div className="bg-white p-10 rounded-3xl border border-gray-100 shadow-sm"><p className="text-[11px] font-black uppercase text-gray-400 mb-3">Vault SKU Items</p><p className="text-4xl font-black text-black">{activeProductsCount}</p></div>
-              <div className="bg-red-500 text-white p-10 rounded-3xl shadow-lg"><p className="text-[11px] font-black uppercase opacity-60 mb-3">Low Stock Alerts</p><p className="text-4xl font-black">{lowStockCount}</p></div>
+          <div className="space-y-10 animate-fadeIn">
+            {/* Real Green Live Monitor Bar */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div className="lg:col-span-4 flex items-center space-x-6">
+                 <div className="relative">
+                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center animate-pulse shadow-sm">
+                       <i className="fas fa-signal text-lg"></i>
+                    </div>
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-4 w-4 bg-green-600"></span>
+                    </span>
+                 </div>
+                 <div>
+                    <p className="text-[11px] font-black uppercase tracking-widest text-black mb-1">Real-Time Traffic</p>
+                    <div className="flex items-center space-x-3">
+                       <span className="text-2xl font-black text-green-600">{liveVisitors}</span>
+                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Active Sessions</span>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="lg:col-span-4 px-4 border-l border-gray-100 hidden lg:block">
+                 <div className="w-full bg-gray-50 h-3 rounded-full overflow-hidden">
+                    <div className="bg-green-600 h-full transition-all duration-700 ease-out" style={{ width: `${Math.min(100, (liveVisitors / 100) * 100)}%` }}></div>
+                 </div>
+                 <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 mt-2 text-center italic">Live System Heartbeat</p>
+              </div>
+
+              <div className="lg:col-span-4 flex justify-end">
+                <div className="flex space-x-2 bg-gray-50 p-1 rounded-xl">
+                  {['today', '7d', '30d', 'all'].map(r => (
+                    <button key={r} onClick={() => setDateRange(r as any)} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${dateRange === r ? 'bg-black text-white shadow-md' : 'text-gray-400 hover:text-black'}`}>
+                      {r === '7d' ? '7 Days' : r === '30d' ? '30 Days' : r.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              <div className="bg-black text-white p-8 rounded-3xl shadow-xl">
+                <p className="text-[10px] font-black uppercase opacity-60 mb-3 tracking-widest">Total Sales</p>
+                <p className="text-4xl font-black">Rs. {formatCompact(analyticsData.revenue)}</p>
+              </div>
+              <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm text-black">
+                <p className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest italic">Total Orders</p>
+                <p className="text-4xl font-black">{formatCompact(analyticsData.count)}</p>
+              </div>
+              <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm text-black">
+                <p className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest italic">Active SKUs</p>
+                <p className="text-4xl font-black">{products.length}</p>
+              </div>
+              <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm text-black border-l-4 border-l-red-500">
+                <p className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest italic">Stock Alerts</p>
+                <p className={`text-4xl font-black ${products.filter(p => p.inventory < 5).length > 0 ? 'text-red-600' : 'text-black'}`}>
+                  {products.filter(p => p.inventory < 5).length}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 bg-white p-10 rounded-3xl border border-gray-100 shadow-sm">
+                <div className="flex justify-between items-center mb-10 text-black">
+                  <h3 className="text-[11px] font-black uppercase tracking-widest italic">Sales Performance Curve</h3>
+                </div>
+                <div className="h-[350px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analyticsData.chartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 900, fill: '#9ca3af'}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 900, fill: '#9ca3af'}} tickFormatter={(v) => formatCompact(v)} />
+                      <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 900}} />
+                      <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                        {analyticsData.chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={index === analyticsData.chartData.length - 1 ? '#2563eb' : '#000'} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col">
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-black mb-6 italic">Recent Store Ledger</h3>
+                <div className="flex-grow space-y-4 overflow-y-auto max-h-[350px] pr-2 custom-scrollbar">
+                  {orders.slice(0, 10).map(o => (
+                    <div key={o.id} onClick={() => setViewingOrder(o)} className="p-4 bg-gray-50 rounded-2xl flex justify-between items-center group cursor-pointer hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-gray-100">
+                      <div>
+                        <p className="text-[10px] font-black text-black uppercase">{o.customer.name}</p>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase mt-1">Order #{o.id}</p>
+                      </div>
+                      <p className="text-xs font-black text-blue-600 italic">Rs. {formatCompact(o.total)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {activeTab === 'products' && (
-          <div className="space-y-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6"><h2 className="text-4xl font-serif italic font-bold uppercase text-black">Inventory Registry</h2><button onClick={() => openModal()} className="bg-black text-white px-10 py-5 rounded-xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl">Add New SKU</button></div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <div className="relative"><input type="text" placeholder="Search..." className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black outline-none" value={productSearch} onChange={(e) => setProductSearch(e.target.value)} /><i className="fas fa-search absolute right-4 top-1/2 -translate-y-1/2 text-gray-300"></i></div>
-              <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={productCategoryFilter} onChange={(e) => setProductCategoryFilter(e.target.value)}>{categories.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}</select>
-              <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={productStockFilter} onChange={(e) => setProductStockFilter(e.target.value)}><option value="All">STOCK LEVELS</option><option value="Low">LOW STOCK</option><option value="Out">OUT OF STOCK</option></select>
-              <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={productSort} onChange={(e) => setProductSort(e.target.value as any)}><option value="name-asc">NAME: A-Z</option><option value="price-asc">PRICE: LOW-HIGH</option><option value="stock-asc">STOCK: LOW-HIGH</option></select>
-            </div>
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden text-black">
+          <div className="space-y-8 animate-fadeIn text-black">
+            <div className="flex justify-between items-center"><h2 className="text-3xl font-serif italic font-bold uppercase">Vault Stock</h2><button onClick={() => setIsModalOpen(true)} className="bg-black text-white px-10 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl">New Timepiece</button></div>
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                <table className="w-full text-left">
-                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">SKU / Model</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Inventory</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Editions / Variants</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Base Price</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Action</th></tr></thead>
+                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Product</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Status</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase text-right">Price</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase text-right">Action</th></tr></thead>
                   <tbody>{filteredProducts.map(p => (
-                    <tr key={p.id} className="border-t border-gray-50 group hover:bg-gray-50/50 transition-colors">
-                      <td className="px-10 py-8 flex items-center space-x-4">
-                        <img src={p.image} onError={handleImageError} className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-gray-100" />
-                        <div className="flex flex-col">
-                          <span className="font-black uppercase italic text-sm">{p.name}</span>
-                          <span className="text-[9px] text-gray-400 font-bold tracking-widest uppercase">{p.category}</span>
-                        </div>
-                      </td>
-                      <td className="px-10 py-8">
-                        <span className={`font-black text-[9px] px-3 py-1 rounded-full ${p.inventory < 10 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
-                          {p.inventory} UNITS
-                        </span>
-                      </td>
-                      <td className="px-10 py-8">
-                        <div className="flex flex-col gap-1">
-                          {p.variants && p.variants.length > 0 ? (
-                            p.variants.map((v, i) => (
-                              <div key={i} className="flex items-center space-x-2">
-                                <span className="w-1 h-1 bg-blue-500 rounded-full"></span>
-                                <span className="text-[9px] font-black text-gray-600 uppercase italic">
-                                  {v.name} <span className="text-blue-600 ml-1">Rs.{v.price.toLocaleString()}</span>
-                                </span>
-                              </div>
-                            ))
-                          ) : (
-                            <span className="text-[9px] font-bold text-gray-300 uppercase italic">Standard Model</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-10 py-8 text-right font-serif font-bold italic text-xl">Rs. {p.price.toLocaleString()}</td>
-                      <td className="px-10 py-8 text-right whitespace-nowrap">
-                        <button onClick={() => openModal(p)} className="text-blue-600 mr-6 font-black uppercase text-[10px] tracking-widest hover:underline">Modify</button>
-                        <button onClick={(e) => handleDelete(e, p.id)} className="text-red-600 font-black uppercase text-[10px] tracking-widest hover:underline">Remove</button>
-                      </td>
+                    <tr key={p.id} className="border-t border-gray-50">
+                      <td className="px-10 py-6 flex items-center space-x-4"><img src={p.image} className="w-12 h-12 rounded-xl object-cover border" /><span className="font-black uppercase italic text-xs">{p.name}</span></td>
+                      <td className="px-10 py-6 font-black text-[10px]">{formatCompact(p.inventory)} IN STOCK</td>
+                      <td className="px-10 py-6 text-right font-black">Rs. {p.price.toLocaleString()}</td>
+                      <td className="px-10 py-6 text-right"><button onClick={() => deleteProduct(p.id)} className="text-red-500 font-black uppercase text-[10px] hover:underline">De-List</button></td>
                     </tr>
                   ))}</tbody>
                </table>
@@ -416,158 +411,166 @@ NOTIFY pgrst, 'reload schema';
         )}
 
         {activeTab === 'orders' && (
-          <div className="space-y-8">
-            <h2 className="text-4xl font-serif italic font-bold uppercase text-black">Live Fulfilment Ledger</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <div className="relative"><input type="text" placeholder="Search..." className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black outline-none" value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} /><i className="fas fa-search absolute right-4 top-1/2 -translate-y-1/2 text-gray-300"></i></div>
-              <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={orderStatusFilter} onChange={(e) => setOrderStatusFilter(e.target.value)}><option value="All">ALL STATUSES</option><option value="Pending">PENDING</option><option value="Confirmed">CONFIRMED</option><option value="Shipped">SHIPPED</option><option value="Delivered">DELIVERED</option></select>
-              <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={orderSort} onChange={(e) => setOrderSort(e.target.value as any)}><option value="date-desc">NEWEST FIRST</option><option value="total-desc">TOTAL: HIGH-LOW</option></select>
-            </div>
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden text-black">
+          <div className="space-y-8 animate-fadeIn text-black">
+            <h2 className="text-3xl font-serif italic font-bold uppercase">Master Sales Ledger</h2>
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                <table className="w-full text-left">
-                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">Order ID</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Customer</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Date</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Total</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Status</th></tr></thead>
-                  <tbody>{filteredOrders.map(o => (<tr key={o.id} className="border-t border-gray-50"><td className="px-10 py-8 font-black text-xs text-blue-600">#{o.id}</td><td className="px-10 py-8 flex flex-col"><span className="font-black uppercase italic">{o.customer.name}</span><span className="text-[9px] text-gray-400 font-bold">{o.customer.city}</span></td><td className="px-10 py-8 text-[10px] font-black text-gray-500">{new Date(o.date).toLocaleDateString()}</td><td className="px-10 py-8 font-serif font-bold italic">Rs. {o.total.toLocaleString()}</td><td className="px-10 py-8"><select value={o.status} onChange={(e) => handleStatusChange(o.id, e.target.value as any)} className="bg-gray-50 border border-gray-200 text-[10px] font-black px-4 py-2 rounded-xl focus:ring-1 focus:ring-black outline-none"><option value="Pending">PENDING</option><option value="Confirmed">CONFIRMED</option><option value="Shipped">SHIPPED</option><option value="Delivered">DELIVERED</option><option value="Cancelled">CANCELLED</option></select></td></tr>))}</tbody>
+                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Order ID</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Customer</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Payable</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Status</th></tr></thead>
+                  <tbody>{filteredOrders.map(o => (
+                    <tr key={o.id} onClick={() => setViewingOrder(o)} className="border-t border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors">
+                      <td className="px-10 py-6 font-black text-xs text-blue-600">#{o.id}</td>
+                      <td className="px-10 py-6 font-black uppercase text-xs">{o.customer.name}</td>
+                      <td className="px-10 py-6 font-black">Rs. {o.total.toLocaleString()}</td>
+                      <td className="px-10 py-6">
+                        <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase ${o.status === 'Pending' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{o.status}</span>
+                      </td>
+                    </tr>
+                  ))}</tbody>
                </table>
             </div>
           </div>
         )}
 
         {activeTab === 'settings' && (
-          <div className="bg-white rounded-[2.5rem] p-12 max-w-2xl border border-gray-100 shadow-sm">
-             <h2 className="text-4xl font-serif italic font-bold uppercase mb-8 text-black">Console Settings</h2>
-             <form onSubmit={handlePasswordChange} className="space-y-12">
-                <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fadeIn text-black">
+            <div className="bg-white rounded-[2.5rem] p-12 border border-gray-100 shadow-sm">
+              <h2 className="text-3xl font-serif italic font-bold mb-8 uppercase">System Alerts</h2>
+              <div className="space-y-6">
+                <div className="flex items-center justify-between p-6 bg-gray-50 rounded-2xl border border-gray-100">
                   <div>
-                    <label className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 italic">New Console Passkey</label>
-                    <input type="password" className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-5 font-bold outline-none text-black" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                    <h3 className="font-black uppercase text-sm mb-1 italic">Order Notification Alerts</h3>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">Trigger sound and visual alert when a new order is received.</p>
                   </div>
-                  <button type="submit" className="bg-black text-white px-10 py-5 rounded-xl text-[11px] font-black uppercase italic hover:bg-blue-600 shadow-xl transition">Update Passkey</button>
+                  <button 
+                    onClick={toggleNotifications}
+                    className={`w-14 h-8 rounded-full transition-colors relative flex items-center px-1 ${notificationsEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                  >
+                    <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-transform transform ${notificationsEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                  </button>
                 </div>
+              </div>
+            </div>
 
-                <div className="pt-12 border-t border-gray-100">
-                  <h3 className="text-lg font-black uppercase tracking-widest text-red-600 mb-4 flex items-center italic">
-                    <i className="fas fa-satellite-dish mr-3"></i> Ultimate DB Sync Tool
-                  </h3>
-                  <p className="text-xs text-gray-500 mb-6 font-medium leading-relaxed">
-                    If you are seeing <strong>"missing columns"</strong> or <strong>"uuid error"</strong>, this script will:
-                    <br/>1. Change ID from UUID to TEXT.
-                    <br/>2. Automatically rename <strong>image_url</strong> to <strong>image</strong>.
-                    <br/>3. Automatically rename <strong>stock</strong> to <strong>inventory</strong>.
-                    <br/>4. Force Supabase to refresh its memory.
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-                        alert('SQL COPIED!\n\n1. Go to Supabase > SQL Editor\n2. New Query > Paste > Run.\n\nThis will fix the column names and ID type instantly.');
-                      }} 
-                      className="bg-black text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-lg"
-                    >
-                      Copy Ultimate Fix SQL
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={async () => {
-                        const { data, error } = await supabase.from('products').select('*').limit(1);
-                        if (error) alert(`DIAGNOSTIC FAILED:\n${error.message}`);
-                        else alert(`DIAGNOSTIC PASSED:\nConnected to 'products' table successfully.`);
-                      }} 
-                      className="bg-gray-100 text-black border border-gray-200 px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition"
-                    >
-                      Check Connection
-                    </button>
-                  </div>
-                </div>
-             </form>
+            <div className="bg-white rounded-[2.5rem] p-12 border border-gray-100 shadow-sm">
+              <h2 className="text-3xl font-serif italic font-bold mb-8 uppercase">Access Guard</h2>
+              <form onSubmit={handlePasswordChange} className="space-y-6">
+                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 italic">New Passkey</label><input type="password" required className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
+                <button type="submit" className="bg-black text-white px-10 py-4 rounded-xl text-[10px] font-black uppercase italic hover:bg-blue-600 shadow-xl transition">Patch System</button>
+              </form>
+            </div>
           </div>
         )}
       </div>
 
+      {/* Product Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl p-10 overflow-y-auto max-h-[90vh] custom-scrollbar">
-            <h2 className="text-2xl font-serif font-bold italic uppercase mb-8 text-black border-b border-gray-100 pb-4">
-              {editingProduct ? `Modify Entry: ${editingProduct.name}` : 'Register New Timepiece'}
-            </h2>
-            <form onSubmit={handleSaveProduct} className="space-y-6">
-               <div className="flex flex-col items-center mb-6">
-                 <div onClick={() => fileInputRef.current?.click()} className="w-40 h-40 bg-gray-50 rounded-[2rem] border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer overflow-hidden relative group">
-                   {productForm.image ? (
-                     <>
-                       <img src={productForm.image} onError={handleImageError} className="w-full h-full object-cover" />
-                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                         <i className="fas fa-camera text-white text-2xl"></i>
-                       </div>
-                     </>
-                   ) : (
-                     <>
-                       <i className={`fas ${uploading ? 'fa-spinner fa-spin' : 'fa-camera'} text-gray-300 text-3xl mb-3`}></i>
-                       <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center px-4">Upload Display Image</span>
-                     </>
-                   )}
-                   <input type="file" ref={fileInputRef} onChange={handleImageUpload} className="hidden" accept="image/*" />
-                 </div>
-                 {productForm.image && <p className="text-[8px] text-green-600 font-black uppercase tracking-[0.2em] mt-3 italic"><i className="fas fa-check-circle mr-1"></i> Image Staged for ITX Vault</p>}
+          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl p-10 overflow-y-auto max-h-[90vh] custom-scrollbar text-black">
+            <h2 className="text-2xl font-serif font-bold italic uppercase mb-8 border-b pb-4">New Vault Item</h2>
+            <form onSubmit={handleSaveProduct} className="space-y-6 text-black">
+               <div className="grid grid-cols-1 gap-6">
+                  <input required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Product Name" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
+                  <textarea required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold h-32 outline-none resize-none" placeholder="Description" value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} />
+                  <div className="grid grid-cols-2 gap-4">
+                    <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Price (PKR)" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} />
+                    <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Initial Stock" value={productForm.inventory || ''} onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})} />
+                  </div>
+                  <input className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Image URL" value={productForm.image} onChange={e => setProductForm({...productForm, image: e.target.value})} />
                </div>
-               
-               <div className="space-y-4 text-black">
-                 <div className="grid grid-cols-1 gap-4">
-                    <label className="block text-[10px] font-black uppercase text-gray-400 px-1 italic">Model Designation</label>
-                    <input required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black placeholder:text-gray-300" placeholder="Model Name (e.g. Royal Oak Skeleton)" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
-                 </div>
-                 
-                 <div className="grid grid-cols-1 gap-4">
-                    <label className="block text-[10px] font-black uppercase text-gray-400 px-1 italic">Artisan Narrative</label>
-                    <textarea required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold h-32 resize-none outline-none text-black placeholder:text-gray-300" placeholder="Describe the craftsmanship and origins..." value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} />
-                 </div>
-                 
-                 <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1 italic">Retail Price (PKR)</label>
-                      <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black" placeholder="Price" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 px-1 italic">Vault Inventory</label>
-                      <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black" placeholder="Stock Level" value={productForm.inventory || ''} onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})} />
-                    </div>
-                 </div>
-
-                 <div className="pt-6 border-t border-gray-100">
-                    <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-[11px] font-black uppercase tracking-widest text-black flex items-center">
-                        <i className="fas fa-layer-group mr-2 text-blue-600"></i> Product Variations
-                      </h3>
-                      <button type="button" onClick={addVariant} className="text-[8px] font-black bg-blue-600 text-white px-3 py-2 rounded-lg uppercase tracking-widest hover:bg-black transition">+ New Variant</button>
-                    </div>
-                    <div className="space-y-3">
-                      {productForm.variants.map((variant) => (
-                        <div key={variant.id} className="grid grid-cols-12 gap-3 items-center bg-gray-50/50 p-3 rounded-2xl border border-gray-100 group">
-                          <div className="col-span-6">
-                            <input className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-black" placeholder="Variant Name (e.g. Gold Plated)" value={variant.name} onChange={e => updateVariant(variant.id, 'name', e.target.value)} />
-                          </div>
-                          <div className="col-span-4">
-                            <input type="number" className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-black" placeholder="Price" value={variant.price || ''} onChange={e => updateVariant(variant.id, 'price', Number(e.target.value))} />
-                          </div>
-                          <div className="col-span-2 text-right">
-                            <button type="button" onClick={() => removeVariant(variant.id)} className="text-gray-300 hover:text-red-600 transition transform hover:scale-110"><i className="fas fa-minus-circle text-lg"></i></button>
-                          </div>
-                        </div>
-                      ))}
-                      {productForm.variants.length === 0 && (
-                        <p className="text-[8px] text-gray-300 text-center py-4 border border-dashed border-gray-200 rounded-2xl font-black uppercase tracking-widest italic">No custom variations added</p>
-                      )}
-                    </div>
-                 </div>
-               </div>
-
-               <div className="flex space-x-4 pt-10 sticky bottom-0 bg-white pb-2">
-                  <button type="submit" disabled={uploading || isSaving} className="flex-grow bg-black text-white py-6 rounded-2xl font-black uppercase italic hover:bg-blue-600 transition disabled:bg-gray-400 shadow-2xl flex items-center justify-center space-x-3">
-                    {isSaving ? <><i className="fas fa-satellite fa-spin"></i> <span>Syncing ITX Vault...</span></> : (editingProduct ? <>Update Record</> : <>Publish to Store</>)}
-                  </button>
-                  <button type="button" onClick={() => setIsModalOpen(false)} className="bg-gray-100 text-black px-10 py-6 rounded-2xl font-black uppercase hover:bg-gray-200 transition">Cancel</button>
-               </div>
+               <div className="flex space-x-4 pt-10"><button type="submit" disabled={isSaving} className="flex-grow bg-black text-white py-5 rounded-xl font-black uppercase italic shadow-2xl">{isSaving ? 'Publishing...' : 'Publish to Storefront'}</button><button type="button" onClick={() => setIsModalOpen(false)} className="bg-gray-100 px-10 py-5 rounded-xl font-black uppercase">Cancel</button></div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Detailed Order Modal */}
+      {viewingOrder && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-3xl p-12 overflow-y-auto max-h-[95vh] custom-scrollbar shadow-2xl border border-gray-100 text-black">
+            <div className="flex justify-between items-start mb-12">
+               <div>
+                  <h2 className="text-3xl font-serif font-bold italic uppercase leading-tight mb-2">Order Manifest</h2>
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Global Order Reference: #{viewingOrder.id}</p>
+               </div>
+               <button onClick={() => setViewingOrder(null)} className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition"><i className="fas fa-times"></i></button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
+               <div className="space-y-6">
+                  <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400 italic border-b border-gray-100 pb-2">Customer Profiling</h3>
+                  <div className="group relative">
+                    <p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">Full Name</p>
+                    <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl hover:bg-gray-50 transition border border-transparent hover:border-gray-100">
+                      <p className="font-black uppercase text-lg">{viewingOrder.customer.name}</p>
+                      <button onClick={() => handleCopy(viewingOrder.customer.name, 'name')} className="text-gray-400 hover:text-blue-600 transition p-2">
+                        <i className={`fas ${copyStatus === 'name' ? 'fa-check text-green-500' : 'fa-copy'}`}></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="group relative">
+                    <p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">Verified Contact</p>
+                    <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl hover:bg-gray-50 transition border border-transparent hover:border-gray-100">
+                      <p className="font-black text-lg">{viewingOrder.customer.phone}</p>
+                      <button onClick={() => handleCopy(viewingOrder.customer.phone, 'phone')} className="text-gray-400 hover:text-blue-600 transition p-2">
+                        <i className={`fas ${copyStatus === 'phone' ? 'fa-check text-green-500' : 'fa-copy'}`}></i>
+                      </button>
+                    </div>
+                  </div>
+               </div>
+               <div className="space-y-6">
+                  <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400 italic border-b border-gray-100 pb-2">Logistics Information</h3>
+                  <div className="group relative">
+                    <p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">Full Shipping Address</p>
+                    <div className="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 relative">
+                      <p className="font-bold italic text-sm leading-relaxed pr-10">{viewingOrder.customer.address}</p>
+                      <button onClick={() => handleCopy(viewingOrder.customer.address, 'address')} className="absolute top-2 right-2 text-gray-400 hover:text-blue-600 transition p-2">
+                        <i className={`fas ${copyStatus === 'address' ? 'fa-check text-green-500' : 'fa-copy'}`}></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div><p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">Payment Protocol</p><p className="font-black uppercase text-blue-600 bg-blue-50 px-3 py-1 rounded-lg inline-block text-xs">Cash On Delivery (COD)</p></div>
+               </div>
+            </div>
+
+            <div className="mb-12">
+               <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400 italic border-b border-gray-100 pb-2 mb-6 uppercase">Acquired Items</h3>
+               <div className="space-y-4">
+                  {viewingOrder.items.map((item, i) => (
+                    <div key={i} className="flex items-center space-x-6 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <img src={item.product.image} className="w-16 h-16 rounded-xl object-cover shadow-sm" />
+                      <div className="flex-grow">
+                         <p className="font-black uppercase text-sm">{item.product.name}</p>
+                         <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 italic">Edition: {item.variantName || 'Standard'}</p>
+                      </div>
+                      <div className="text-right">
+                         <p className="font-black text-sm">Rs. {item.product.price.toLocaleString()}</p>
+                         <p className="text-[10px] font-bold text-gray-400 uppercase italic">Qty: {item.quantity}</p>
+                      </div>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row justify-between items-center p-8 bg-black text-white rounded-3xl mb-12">
+               <div className="mb-4 md:mb-0">
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-60 italic mb-2">Total Amount Payable</p>
+                  <p className="text-4xl font-black italic">Rs. {viewingOrder.total.toLocaleString()}</p>
+               </div>
+               <div className="flex items-center space-x-4">
+                  <select 
+                    value={viewingOrder.status} 
+                    onChange={(e) => handleStatusChange(viewingOrder.id, e.target.value as any)} 
+                    className="bg-white/10 border border-white/20 text-[11px] font-black uppercase px-6 py-4 rounded-xl outline-none hover:bg-white/20 transition cursor-pointer"
+                  >
+                    <option value="Pending" className="text-black">Pending</option>
+                    <option value="Confirmed" className="text-black">Confirmed</option>
+                    <option value="Shipped" className="text-black">Shipped</option>
+                    <option value="Delivered" className="text-black">Delivered</option>
+                    <option value="Cancelled" className="text-black">Cancelled</option>
+                  </select>
+                  <button onClick={() => window.print()} className="w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-700 transition"><i className="fas fa-print"></i></button>
+               </div>
+            </div>
           </div>
         </div>
       )}

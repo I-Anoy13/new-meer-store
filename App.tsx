@@ -33,13 +33,47 @@ const App: React.FC = () => {
 
   const [user, setUser] = useState<User | null>(null);
 
+  // Real Visitor Heartbeat System
+  useEffect(() => {
+    const sessionId = sessionStorage.getItem('itx_session_id') || Math.random().toString(36).substring(2, 15);
+    sessionStorage.setItem('itx_session_id', sessionId);
+
+    const sendHeartbeat = async () => {
+      try {
+        await supabase.from('visitors').upsert({ 
+          id: sessionId, 
+          last_seen: new Date().toISOString() 
+        }, { onConflict: 'id' });
+      } catch (e) {
+        // Fallback or ignore if table doesn't exist yet
+      }
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 30000); // Heartbeat every 30s
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchProducts = useCallback(async () => {
     setIsSyncing(true);
     try {
       const { data, error } = await supabase.from('products').select('*');
       if (error) throw error;
-      if (data && data.length > 0) {
-        setProducts(data);
+      if (data) {
+        const mappedProducts: Product[] = data.map(row => ({
+          id: String(row.id),
+          name: row.name || 'Untitled Timepiece',
+          description: row.description || '',
+          price: Number(row.price_pkr || row.price || 0),
+          image: row.image || row.image_url || 'https://via.placeholder.com/800x1000',
+          video: row.video || '',
+          category: row.category || 'Luxury',
+          inventory: Number(row.inventory || row.stock || 0),
+          rating: Number(row.rating || 5),
+          reviews: Array.isArray(row.reviews) ? row.reviews : [],
+          variants: Array.isArray(row.variants) ? row.variants : []
+        }));
+        setProducts(mappedProducts);
       }
     } catch (error) {
       console.warn('Sync Products Error:', error);
@@ -148,8 +182,6 @@ const App: React.FC = () => {
   const placeOrder = async (order: Order): Promise<boolean> => {
     try {
       const firstItem = order.items[0];
-      
-      // PREPARE PAYLOAD FOR USER'S EXACT SCHEMA
       const dbPayload = {
         order_id: order.id,
         customer_name: order.customer.name,
@@ -161,7 +193,7 @@ const App: React.FC = () => {
         product_price: firstItem?.product.price || 0,
         product_image: firstItem?.product.image || '',
         subtotal_pkr: Math.round(order.total),
-        shipping_pkr: 0, // App currently has free shipping
+        shipping_pkr: 0,
         total_pkr: Math.round(order.total),
         status: order.status.toLowerCase(),
         payment_method: 'cod',
@@ -170,19 +202,14 @@ const App: React.FC = () => {
       };
 
       const { error } = await supabase.from('orders').insert([dbPayload]);
-      
-      if (error) {
-        console.error('Supabase Order Insert Failed:', error.message);
-        alert(`Order sync failed: ${error.message}`);
-        return false;
-      }
+      if (error) throw error;
 
-      // Successful insert -> update local state
       setOrders(prev => [order, ...prev]);
       clearCart();
       return true;
-    } catch (e) {
-      console.error('Critical Order Placement Error:', e);
+    } catch (e: any) {
+      console.error('Order Error:', e.message);
+      alert(`Order sync failed: ${e.message}`);
       return false;
     }
   };
@@ -243,7 +270,6 @@ const App: React.FC = () => {
             <Route path="/shipping-policy" element={<ShippingPolicy />} />
           </Routes>
         </main>
-
         <Footer />
       </div>
     </HashRouter>

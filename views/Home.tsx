@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../types';
@@ -116,7 +115,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
               <div className="w-16 h-16 rounded-3xl bg-white flex items-center justify-center mb-6 shadow-sm border border-gray-100 group-hover:bg-blue-600 transition-colors duration-500">
                 <i className="fas fa-shield-halved text-2xl group-hover:text-white"></i>
               </div>
-              <h4 className="font-black uppercase tracking-widest text-xs mb-2 text-black">Warranty</h4>
+              <h4 className="font-black uppercase tracking-widest text-xs mb-2 text-black">7-Day Return</h4>
               <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Collection Covered</p>
             </div>
             <div className="flex flex-col items-center text-center group">
