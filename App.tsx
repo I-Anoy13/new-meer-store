@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('cart');
@@ -34,6 +35,7 @@ const App: React.FC = () => {
 
   // Sync Products from Supabase
   const fetchProducts = useCallback(async () => {
+    setIsSyncing(true);
     try {
       const { data, error } = await supabase.from('products').select('*');
       if (error) throw error;
@@ -41,12 +43,15 @@ const App: React.FC = () => {
         setProducts(data);
       }
     } catch (error) {
-      console.warn('Using local product vault (Supabase unreachable)');
+      console.warn('Sync Products Error:', error);
+    } finally {
+      setIsSyncing(false);
     }
   }, []);
 
   // Sync Orders from Supabase
   const fetchOrders = useCallback(async () => {
+    setIsSyncing(true);
     try {
       const { data, error } = await supabase
         .from('orders')
@@ -57,31 +62,23 @@ const App: React.FC = () => {
         setOrders(data);
       }
     } catch (error) {
-      console.warn('Could not sync order ledger from Supabase');
+      console.warn('Sync Orders Error:', error);
+    } finally {
+      setIsSyncing(false);
     }
   }, []);
 
   useEffect(() => {
     let mounted = true;
-
     const initData = async () => {
       setLoading(true);
-      
-      // Attempt to fetch, but don't let it block the app for more than 4 seconds
-      const timeoutPromise = new Promise(resolve => setTimeout(resolve, 4000));
-      
       try {
-        await Promise.race([
-          Promise.all([fetchProducts(), fetchOrders()]),
-          timeoutPromise
-        ]);
+        await Promise.all([fetchProducts(), fetchOrders()]);
       } catch (e) {
-        console.error('Data initialization encountered an error:', e);
+        console.error('Data initialization error:', e);
       }
-
       if (mounted) setLoading(false);
     };
-
     initData();
     return () => { mounted = false; };
   }, [fetchProducts, fetchOrders]);
@@ -125,10 +122,6 @@ const App: React.FC = () => {
     ));
   };
 
-  const handleSetProducts = (newProductsAction: React.SetStateAction<Product[]>) => {
-    setProducts(newProductsAction);
-  };
-
   const deleteProduct = useCallback(async (productId: string) => {
     const { error } = await supabase.from('products').delete().eq('id', productId);
     if (!error) {
@@ -139,18 +132,29 @@ const App: React.FC = () => {
   const clearCart = () => setCart([]);
 
   const placeOrder = async (order: Order) => {
-    try {
-      const { error } = await supabase.from('orders').insert([order]);
-      if (error) throw error;
-    } catch (e) {
-      console.error('Failed to save order to database:', e);
-    }
+    // Optimistic local update
     setOrders(prev => [order, ...prev]);
     clearCart();
-  };
 
-  const handleUpdateOrders = (newOrdersAction: React.SetStateAction<Order[]>) => {
-    setOrders(newOrdersAction);
+    try {
+      // Ensure we only send necessary clean data to Supabase
+      const cleanOrder = {
+        id: order.id,
+        items: JSON.parse(JSON.stringify(order.items)), // Deep clone to break any references
+        total: order.total,
+        status: order.status,
+        customer: JSON.parse(JSON.stringify(order.customer)),
+        date: order.date
+      };
+
+      const { error } = await supabase.from('orders').insert([cleanOrder]);
+      if (error) {
+        console.error('Supabase Order Insert Failed:', error.message);
+        // We might want to alert the admin specifically if this fails in a production scenario
+      }
+    } catch (e) {
+      console.error('Critical Order Placement Error:', e);
+    }
   };
 
   const login = (role: UserRole) => {
@@ -164,7 +168,7 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Loading ITX Vault...</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Opening ITX Secure Vault...</p>
         </div>
       </div>
     );
@@ -175,6 +179,14 @@ const App: React.FC = () => {
       <div className="flex flex-col min-h-screen">
         <Header cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} user={user} logout={logout} />
         
+        {isSyncing && (
+          <div className="fixed top-20 right-6 z-[1000] animate-pulse">
+            <div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg flex items-center">
+              <i className="fas fa-sync fa-spin mr-2"></i> Syncing Vault
+            </div>
+          </div>
+        )}
+
         <main className="flex-grow">
           <Routes>
             <Route path="/" element={<Home products={products} />} />
@@ -184,14 +196,15 @@ const App: React.FC = () => {
             <Route path="/admin/*" element={
               <AdminDashboard 
                 products={products} 
-                setProducts={handleSetProducts} 
+                setProducts={setProducts} 
                 deleteProduct={deleteProduct} 
                 orders={orders} 
-                setOrders={handleUpdateOrders} 
+                setOrders={setOrders} 
                 user={user} 
                 login={login}
                 systemPassword={systemPassword}
                 setSystemPassword={setSystemPassword}
+                refreshData={() => { fetchOrders(); fetchProducts(); }}
               />
             } />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
