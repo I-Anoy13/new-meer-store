@@ -42,26 +42,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.currentTarget.src = PLACEHOLDER_IMAGE;
   };
 
-  const salesTrendData = useMemo(() => {
-    const data = [];
-    const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthLabel = d.toLocaleString('default', { month: 'short' });
-      const yearLabel = d.getFullYear();
-      const monthlyOrders = orders.filter(o => {
-        const orderDate = new Date(o.date);
-        return orderDate.getMonth() === d.getMonth() && orderDate.getFullYear() === d.getFullYear();
-      });
-      data.push({
-        name: `${monthLabel} ${yearLabel}`,
-        revenue: monthlyOrders.reduce((sum, o) => sum + o.total, 0),
-        orders: monthlyOrders.length
-      });
-    }
-    return data;
-  }, [orders]);
-
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('All');
   const [productStockFilter, setProductStockFilter] = useState('All');
@@ -222,42 +202,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const SQL_FIX_SCRIPT = `
--- 1. Rename 'product' to 'products' if it exists
+-- FIX FOR 'products' TABLE SCHEMA
+-- Run this in Supabase SQL Editor to add missing columns
+
 DO $$ 
 BEGIN
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'product' AND table_schema = 'public') THEN
-    ALTER TABLE public.product RENAME TO products;
-  END IF;
+    -- Ensure the table 'products' exists
+    CREATE TABLE IF NOT EXISTS public.products (
+        id text primary key,
+        name text not null,
+        description text,
+        price numeric not null,
+        category text,
+        inventory integer default 0
+    );
+
+    -- Add 'image' column if missing
+    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image') THEN
+        ALTER TABLE public.products ADD COLUMN image text;
+    END IF;
+
+    -- Add 'video' column if missing
+    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'video') THEN
+        ALTER TABLE public.products ADD COLUMN video text;
+    END IF;
+
+    -- Add 'variants' column if missing
+    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'variants') THEN
+        ALTER TABLE public.products ADD COLUMN variants jsonb DEFAULT '[]'::jsonb;
+    END IF;
+
+    -- Add 'rating' column if missing
+    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'rating') THEN
+        ALTER TABLE public.products ADD COLUMN rating numeric DEFAULT 5;
+    END IF;
+
+    -- Add 'reviews' column if missing
+    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'reviews') THEN
+        ALTER TABLE public.products ADD COLUMN reviews jsonb DEFAULT '[]'::jsonb;
+    END IF;
+
+    -- Ensure 'created_at' exists
+    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'created_at') THEN
+        ALTER TABLE public.products ADD COLUMN created_at timestamp with time zone DEFAULT now();
+    END IF;
 END $$;
 
--- 2. Create 'products' table if it doesn't exist
-CREATE TABLE IF NOT EXISTS public.products (
-  id text primary key,
-  name text not null,
-  description text,
-  price numeric not null,
-  category text,
-  inventory integer default 0,
-  image text,
-  video text,
-  variants jsonb default '[]'::jsonb,
-  rating numeric default 5,
-  reviews jsonb default '[]'::jsonb,
-  created_at timestamp with time zone default now()
-);
-
--- 3. Add 'image' column if it's missing (in case table was created manually)
-DO $$ 
-BEGIN
-  IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image') THEN
-    ALTER TABLE public.products ADD COLUMN image text;
-  END IF;
-  IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'variants') THEN
-    ALTER TABLE public.products ADD COLUMN variants jsonb DEFAULT '[]'::jsonb;
-  END IF;
-END $$;
-
--- 4. Open up permissions for the app
+-- FIX PERMISSIONS (Unrestricted Access for Development)
 ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
 GRANT ALL ON public.products TO anon, authenticated, service_role;
 `;
@@ -284,7 +275,6 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
     };
 
     try {
-      // Explicitly using 'products' table
       const { error } = await supabase
         .from('products')
         .upsert([productData], { onConflict: 'id' });
@@ -296,15 +286,15 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
       alert('SUCCESS: Timepiece published to ITX Vault.');
     } catch (error: any) {
       console.error('DATABASE ERROR:', error);
-      const isMissingTableOrColumn = error.message.includes('column') || error.message.includes('not found') || error.message.includes('relation');
+      const isMissingColumn = error.message.includes('column') || error.message.includes('not found');
       
-      if (isMissingTableOrColumn) {
-        if (window.confirm(`DATABASE MISMATCH:\n\nYour database table is either named 'product' (singular) or is missing columns like 'image'.\n\nWould you like to copy the SQL FIX SCRIPT? This will rename your table to 'products' and add all missing columns automatically.`)) {
+      if (isMissingColumn) {
+        if (window.confirm(`DATABASE ERROR: Missing Column in 'products' table.\n\nThe app tried to save but couldn't find the 'image' or 'variants' column.\n\nWould you like to copy the REPAIR SCRIPT to fix your database table automatically?`)) {
           navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-          alert('SQL Script copied! Paste it into the Supabase SQL Editor and click RUN.');
+          alert('SQL Fix Copied!\n\n1. Go to Supabase > SQL Editor\n2. Create "New Query"\n3. Paste and click "Run"');
         }
       } else {
-        alert(`PUBLISH ERROR: ${error.message}`);
+        alert(`PUBLISH FAILED: ${error.message}`);
       }
     } finally {
       setIsSaving(false);
@@ -393,16 +383,13 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
               <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={productStockFilter} onChange={(e) => setProductStockFilter(e.target.value)}><option value="All">STOCK LEVELS</option><option value="Low">LOW STOCK</option><option value="Out">OUT OF STOCK</option></select>
               <select className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[10px] font-black uppercase" value={productSort} onChange={(e) => setProductSort(e.target.value as any)}><option value="name-asc">NAME: A-Z</option><option value="price-asc">PRICE: LOW-HIGH</option><option value="stock-asc">STOCK: LOW-HIGH</option></select>
             </div>
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden text-black">
                <table className="w-full text-left">
-                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">SKU / Model</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Inventory</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Product Lineup</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Base Price</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Action</th></tr></thead>
+                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-8 text-[11px] font-black text-gray-400">SKU / Model</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Inventory</th><th className="px-10 py-8 text-[11px] font-black text-gray-400">Editions / Variants</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Base Price</th><th className="px-10 py-8 text-[11px] font-black text-gray-400 text-right">Action</th></tr></thead>
                   <tbody>{filteredProducts.map(p => (
-                    <tr key={p.id} className="border-t border-gray-50 group hover:bg-gray-50/50 transition-colors text-black">
+                    <tr key={p.id} className="border-t border-gray-50 group hover:bg-gray-50/50 transition-colors">
                       <td className="px-10 py-8 flex items-center space-x-4">
-                        <div className="relative">
-                          <img src={p.image} onError={handleImageError} className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-gray-100" />
-                          {p.video && <div className="absolute -bottom-1 -right-1 bg-blue-600 text-white text-[7px] px-1 rounded-sm"><i className="fas fa-video"></i></div>}
-                        </div>
+                        <img src={p.image} onError={handleImageError} className="w-14 h-14 rounded-2xl object-cover shadow-sm border border-gray-100" />
                         <div className="flex flex-col">
                           <span className="font-black uppercase italic text-sm">{p.name}</span>
                           <span className="text-[9px] text-gray-400 font-bold tracking-widest uppercase">{p.category}</span>
@@ -414,18 +401,13 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
                         </span>
                       </td>
                       <td className="px-10 py-8">
-                        <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-wrap gap-1">
                           {p.variants && p.variants.length > 0 ? (
-                            p.variants.map((v, idx) => (
-                              <div key={idx} className="flex items-center space-x-2">
-                                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
-                                <span className="text-[10px] font-black text-gray-700 uppercase italic">
-                                  {v.name} <span className="text-blue-600 ml-1">Rs.{v.price.toLocaleString()}</span>
-                                </span>
-                              </div>
+                            p.variants.map((v, i) => (
+                              <span key={i} className="text-[8px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 uppercase">{v.name}</span>
                             ))
                           ) : (
-                            <span className="text-[10px] font-bold text-gray-300 uppercase italic tracking-widest">Standard Model Only</span>
+                            <span className="text-[9px] font-bold text-gray-300 uppercase italic">Standard</span>
                           )}
                         </div>
                       </td>
@@ -472,32 +454,32 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
 
                 <div className="pt-12 border-t border-gray-100">
                   <h3 className="text-lg font-black uppercase tracking-widest text-red-600 mb-4 flex items-center italic">
-                    <i className="fas fa-hammer mr-3"></i> Database Schema Repair
+                    <i className="fas fa-tools mr-3"></i> Database Repair Utility
                   </h3>
                   <p className="text-xs text-gray-500 mb-6 font-medium leading-relaxed">
-                    Use this tool if you are seeing errors about missing columns like <strong>"image"</strong> or table names like <strong>"product"</strong> vs <strong>"products"</strong>.
+                    If you see errors saying <strong>"could not found image column"</strong>, your database table needs to be updated. Click below to copy the fix script.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <button 
                       type="button"
-                      onClick={async () => {
-                        const { data, error } = await supabase.from('products').select('*').limit(1);
-                        if (error) alert(`STATUS: CRITICAL SCHEMA ERROR\nReason: ${error.message}\n\nTIP: Run the Repair Script below.`);
-                        else alert(`STATUS: HEALTHY\nVault is synchronized with 'products' table.`);
+                      onClick={() => {
+                        navigator.clipboard.writeText(SQL_FIX_SCRIPT);
+                        alert('SQL FIX SCRIPT COPIED!\n\n1. Open Supabase Dashboard\n2. Go to SQL Editor\n3. Paste the script and click RUN.');
                       }} 
-                      className="bg-gray-100 text-black border border-gray-200 px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition"
+                      className="bg-black text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-lg"
                     >
-                      Diagnose Table
+                      Copy Database Fix SQL
                     </button>
                     <button 
                       type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-                        alert('SQL REPAIR SCRIPT COPIED!\n\n1. Go to Supabase > SQL Editor\n2. Click "New Query"\n3. Paste the script\n4. Click "Run"\n\nThis will rename your "product" table and add the "image" column automatically.');
+                      onClick={async () => {
+                        const { data, error } = await supabase.from('products').select('*').limit(1);
+                        if (error) alert(`DIAGNOSTIC FAILED:\n${error.message}`);
+                        else alert(`DIAGNOSTIC PASSED:\nConnected to 'products' table successfully.`);
                       }} 
-                      className="bg-red-50 text-red-600 border border-red-100 px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition"
+                      className="bg-gray-100 text-black border border-gray-200 px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition"
                     >
-                      Copy Schema Repair SQL
+                      Test Connection
                     </button>
                   </div>
                 </div>
@@ -533,7 +515,7 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
                  {productForm.image && <p className="text-[8px] text-green-600 font-black uppercase tracking-[0.2em] mt-3 italic"><i className="fas fa-check-circle mr-1"></i> Image Staged for ITX Vault</p>}
                </div>
                
-               <div className="space-y-4">
+               <div className="space-y-4 text-black">
                  <div className="grid grid-cols-1 gap-4">
                     <label className="block text-[10px] font-black uppercase text-gray-400 px-1 italic">Model Designation</label>
                     <input required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none text-black placeholder:text-gray-300" placeholder="Model Name (e.g. Royal Oak Skeleton)" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
