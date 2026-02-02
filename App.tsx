@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { CartItem, Product, Order, User, UserRole } from './types';
@@ -34,37 +33,59 @@ const App: React.FC = () => {
 
   // Sync Products from Supabase
   const fetchProducts = useCallback(async () => {
-    const { data, error } = await supabase.from('products').select('*');
-    if (error) {
+    try {
+      const { data, error } = await supabase.from('products').select('*');
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setProducts(data);
+      } else {
+        setProducts(MOCK_PRODUCTS);
+      }
+    } catch (error) {
       console.error('Error fetching products:', error);
-      setProducts(MOCK_PRODUCTS);
-    } else if (data && data.length > 0) {
-      setProducts(data);
-    } else {
       setProducts(MOCK_PRODUCTS);
     }
   }, []);
 
   // Sync Orders from Supabase
   const fetchOrders = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .order('date', { ascending: false });
-    if (error) {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('date', { ascending: false });
+      if (error) throw error;
+      if (data) {
+        setOrders(data);
+      }
+    } catch (error) {
       console.error('Error fetching orders:', error);
-    } else if (data) {
-      setOrders(data);
     }
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+
     const initData = async () => {
       setLoading(true);
-      await Promise.all([fetchProducts(), fetchOrders()]);
-      setLoading(false);
+      
+      // Use a race to prevent hanging if Supabase is on a cold start or blocked
+      const failsafeTimeout = new Promise(resolve => setTimeout(resolve, 6000));
+      
+      try {
+        await Promise.race([
+          Promise.all([fetchProducts(), fetchOrders()]),
+          failsafeTimeout
+        ]);
+      } catch (e) {
+        console.warn('Sync taking too long, proceeding with local vault cache.');
+      }
+
+      if (mounted) setLoading(false);
     };
+
     initData();
+    return () => { mounted = false; };
   }, [fetchProducts, fetchOrders]);
 
   useEffect(() => {
