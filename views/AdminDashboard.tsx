@@ -1,7 +1,6 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { Product, Order, User, UserRole, Variant } from '../types';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { supabase } from '../lib/supabase';
 import { PLACEHOLDER_IMAGE } from '../constants';
 
@@ -38,10 +37,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [uploading, setUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    e.currentTarget.src = PLACEHOLDER_IMAGE;
-  };
-
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('All');
   const [productStockFilter, setProductStockFilter] = useState('All');
@@ -73,6 +68,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     video: '',
     variants: []
   });
+
+  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+    e.currentTarget.src = PLACEHOLDER_IMAGE;
+  };
 
   const totalRevenue = useMemo(() => orders.reduce((sum, o) => sum + o.total, 0), [orders]);
   const pendingOrdersCount = useMemo(() => orders.filter(o => o.status === 'Pending').length, [orders]);
@@ -202,55 +201,24 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const SQL_FIX_SCRIPT = `
--- FIX FOR 'products' TABLE SCHEMA
--- Run this in Supabase SQL Editor to add missing columns
+-- 1. FIX THE 'id' COLUMN (Change from UUID to TEXT)
+-- This is critical because the app uses custom string IDs like 'PROD-...'
+ALTER TABLE public.products ALTER COLUMN id TYPE text;
 
-DO $$ 
-BEGIN
-    -- Ensure the table 'products' exists
-    CREATE TABLE IF NOT EXISTS public.products (
-        id text primary key,
-        name text not null,
-        description text,
-        price numeric not null,
-        category text,
-        inventory integer default 0
-    );
+-- 2. ENSURE ALL COLUMNS EXIST
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS image text;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS variants jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS video text;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS rating numeric DEFAULT 5;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS reviews jsonb DEFAULT '[]'::jsonb;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS created_at timestamp with time zone DEFAULT now();
 
-    -- Add 'image' column if missing
-    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'image') THEN
-        ALTER TABLE public.products ADD COLUMN image text;
-    END IF;
-
-    -- Add 'video' column if missing
-    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'video') THEN
-        ALTER TABLE public.products ADD COLUMN video text;
-    END IF;
-
-    -- Add 'variants' column if missing
-    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'variants') THEN
-        ALTER TABLE public.products ADD COLUMN variants jsonb DEFAULT '[]'::jsonb;
-    END IF;
-
-    -- Add 'rating' column if missing
-    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'rating') THEN
-        ALTER TABLE public.products ADD COLUMN rating numeric DEFAULT 5;
-    END IF;
-
-    -- Add 'reviews' column if missing
-    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'reviews') THEN
-        ALTER TABLE public.products ADD COLUMN reviews jsonb DEFAULT '[]'::jsonb;
-    END IF;
-
-    -- Ensure 'created_at' exists
-    IF NOT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'created_at') THEN
-        ALTER TABLE public.products ADD COLUMN created_at timestamp with time zone DEFAULT now();
-    END IF;
-END $$;
-
--- FIX PERMISSIONS (Unrestricted Access for Development)
+-- 3. ENSURE PERMISSIONS ARE OPEN
 ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
 GRANT ALL ON public.products TO anon, authenticated, service_role;
+
+-- 4. REFRESH TABLE CACHE
+NOTIFY pgrst, 'reload schema';
 `;
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -286,15 +254,22 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
       alert('SUCCESS: Timepiece published to ITX Vault.');
     } catch (error: any) {
       console.error('DATABASE ERROR:', error);
-      const isMissingColumn = error.message.includes('column') || error.message.includes('not found');
       
-      if (isMissingColumn) {
-        if (window.confirm(`DATABASE ERROR: Missing Column in 'products' table.\n\nThe app tried to save but couldn't find the 'image' or 'variants' column.\n\nWould you like to copy the REPAIR SCRIPT to fix your database table automatically?`)) {
+      const errorMsg = error.message.toLowerCase();
+      const isMissingColumn = errorMsg.includes('column') || errorMsg.includes('not found');
+      const isUuidError = errorMsg.includes('uuid') || errorMsg.includes('invalid input syntax');
+
+      if (isMissingColumn || isUuidError) {
+        let diagnostic = "DATABASE MISMATCH DETECTED:\n\n";
+        if (isUuidError) diagnostic += "- Your 'id' column is likely 'uuid' type but needs to be 'text'.\n";
+        if (isMissingColumn) diagnostic += "- Your 'products' table is missing columns like 'image' or 'variants'.\n";
+        
+        if (window.confirm(`${diagnostic}\nWould you like to copy the REPAIR SQL script to your clipboard?`)) {
           navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-          alert('SQL Fix Copied!\n\n1. Go to Supabase > SQL Editor\n2. Create "New Query"\n3. Paste and click "Run"');
+          alert('SQL COPIED! Go to Supabase > SQL Editor > Paste > Run.');
         }
       } else {
-        alert(`PUBLISH FAILED: ${error.message}`);
+        alert(`PUBLISH ERROR: ${error.message}`);
       }
     } finally {
       setIsSaving(false);
@@ -401,13 +376,18 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
                         </span>
                       </td>
                       <td className="px-10 py-8">
-                        <div className="flex flex-wrap gap-1">
+                        <div className="flex flex-col gap-1">
                           {p.variants && p.variants.length > 0 ? (
                             p.variants.map((v, i) => (
-                              <span key={i} className="text-[8px] font-black bg-blue-50 text-blue-600 px-2 py-0.5 rounded border border-blue-100 uppercase">{v.name}</span>
+                              <div key={i} className="flex items-center space-x-2">
+                                <span className="w-1 h-1 bg-blue-500 rounded-full"></span>
+                                <span className="text-[9px] font-black text-gray-600 uppercase italic">
+                                  {v.name} <span className="text-blue-600 ml-1">Rs.{v.price.toLocaleString()}</span>
+                                </span>
+                              </div>
                             ))
                           ) : (
-                            <span className="text-[9px] font-bold text-gray-300 uppercase italic">Standard</span>
+                            <span className="text-[9px] font-bold text-gray-300 uppercase italic">Standard Model</span>
                           )}
                         </div>
                       </td>
@@ -454,27 +434,28 @@ GRANT ALL ON public.products TO anon, authenticated, service_role;
 
                 <div className="pt-12 border-t border-gray-100">
                   <h3 className="text-lg font-black uppercase tracking-widest text-red-600 mb-4 flex items-center italic">
-                    <i className="fas fa-tools mr-3"></i> Database Repair Utility
+                    <i className="fas fa-hammer mr-3"></i> Sync Database Schema
                   </h3>
                   <p className="text-xs text-gray-500 mb-6 font-medium leading-relaxed">
-                    If you see errors saying <strong>"could not found image column"</strong>, your database table needs to be updated. Click below to copy the fix script.
+                    If you are seeing <strong>"invalid input syntax for type uuid"</strong> or <strong>"could not find image column"</strong>, your table needs a structural fix. 
+                    This script changes your <strong>id</strong> column to <strong>text</strong> and adds missing columns.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <button 
                       type="button"
                       onClick={() => {
                         navigator.clipboard.writeText(SQL_FIX_SCRIPT);
-                        alert('SQL FIX SCRIPT COPIED!\n\n1. Open Supabase Dashboard\n2. Go to SQL Editor\n3. Paste the script and click RUN.');
+                        alert('FIX SCRIPT COPIED!\n\n1. Go to Supabase > SQL Editor\n2. New Query > Paste > Run.\n\nThis fix allows the app to save custom IDs and images.');
                       }} 
                       className="bg-black text-white px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-lg"
                     >
-                      Copy Database Fix SQL
+                      Copy Fix SQL (UUID to Text)
                     </button>
                     <button 
                       type="button"
                       onClick={async () => {
                         const { data, error } = await supabase.from('products').select('*').limit(1);
-                        if (error) alert(`DIAGNOSTIC FAILED:\n${error.message}`);
+                        if (error) alert(`DIAGNOSTIC FAILED:\n${error.message}\n\nTIP: Run the fix script above.`);
                         else alert(`DIAGNOSTIC PASSED:\nConnected to 'products' table successfully.`);
                       }} 
                       className="bg-gray-100 text-black border border-gray-200 px-8 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition"
