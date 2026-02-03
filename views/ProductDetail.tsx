@@ -31,8 +31,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
   const [viewers, setViewers] = useState(25 + Math.floor(Math.random() * 15));
   const [purchaseNotification, setPurchaseNotification] = useState<{name: string, city: string} | null>(null);
-  
-  // Updated: Initial stock set to 14 as per user request
   const [unitsLeft, setUnitsLeft] = useState(14);
 
   useEffect(() => {
@@ -44,7 +42,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       });
     }, 4000);
 
-    // Stock simulation - slow decrease for realism
+    // Stock simulation
     const stockInterval = setInterval(() => {
       setUnitsLeft(prev => (prev > 2 ? prev - (Math.random() > 0.95 ? 1 : 0) : prev));
     }, 20000);
@@ -54,7 +52,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       const name = NAMES[Math.floor(Math.random() * NAMES.length)];
       const city = CITIES[Math.floor(Math.random() * CITIES.length)];
       setPurchaseNotification({ name, city });
-      // Keep visible for a decent amount of time
       setTimeout(() => setPurchaseNotification(null), 3800);
     }, 5000);
 
@@ -173,7 +170,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
   return (
     <div className="bg-white animate-fadeIn pb-24 lg:pb-0 relative text-black overflow-x-hidden font-sans">
-      {/* Top Banner */}
       <div className="bg-red-600 text-white py-2 text-center sticky top-16 z-50">
         <span className="text-[10px] font-bold uppercase tracking-wider">OFFER EXPIRES IN: {formatTime(timeLeft)}</span>
       </div>
@@ -199,12 +195,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                 ))}
               </div>
 
-              {/* Viewer Count Badge */}
-              <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white shadow-md">
-                <span className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></span>
-                <span className="text-[10px] font-black text-black uppercase tracking-widest">{viewers} Watching Now</span>
-              </div>
-
               {/* Mobile Slide Indicator Dots */}
               <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex space-x-2">
                 {productImages.map((_, i) => (
@@ -213,7 +203,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
             
-            {/* Small Images (Persistent Thumbnails) */}
             <div className="flex gap-3 overflow-x-auto no-scrollbar py-4 px-2">
               {productImages.map((img, idx) => (
                 <button key={idx} onClick={() => scrollToImage(idx)} className={`w-16 h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all shadow-sm ${activeImageIdx === idx ? 'border-black scale-105 shadow-lg' : 'border-gray-100'}`}>
@@ -222,7 +211,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               ))}
             </div>
 
-            {/* In-Place Purchase Popup (Beneath Main Product Pictures - Visible on load) */}
             <div className="mt-2 animate-fadeIn min-h-[80px]">
               {purchaseNotification ? (
                 <div className="bg-white border border-gray-100 p-5 rounded-[1.5rem] flex items-center space-x-4 animate-slideInLeft shadow-2xl shadow-green-500/5 ring-1 ring-gray-50">
@@ -266,7 +254,15 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
 
-            {/* Main Purchase Button - High Style */}
+            {/* Live Visitors Count - Now positioned over the button as requested */}
+            <div className="mb-3 flex items-center space-x-2 pl-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+              </span>
+              <span className="text-[11px] font-black text-black uppercase tracking-widest">{viewers} people are viewing this product right now</span>
+            </div>
+
             <button 
               onClick={() => setIsOrderPortalActive(true)} 
               className="w-full bg-black text-white font-black text-lg md:text-xl uppercase tracking-[0.15em] py-8 px-10 rounded-[2rem] hover:bg-blue-600 transition-all duration-500 shadow-2xl active:scale-[0.98] italic animate-pulse-red relative group overflow-hidden"
@@ -275,7 +271,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
             </button>
 
-            {/* Happy Customers Section with Pakistan-style DPs */}
             <div className="mt-8 flex flex-col items-center p-8 bg-white rounded-3xl border border-gray-100 shadow-sm">
                 <div className="flex -space-x-4 mb-5">
                   <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=150&auto=format&fit=crop" alt="Cust 1" />
@@ -301,7 +296,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 mb-6 flex items-center">
                  <span className="w-8 h-[1px] bg-gray-200 mr-4"></span> CRAFTSMANSHIP NOTES
                </h3>
-               {/* Fixed: Added whitespace-pre-wrap to ensure description doesn't collapse lines */}
                <p className="text-lg text-gray-700 leading-relaxed font-medium italic border-l-4 border-black pl-8 whitespace-pre-wrap">
                  {product.description}
                </p>
