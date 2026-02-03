@@ -60,7 +60,7 @@ const App: React.FC = () => {
         id: orderId,
         dbId: row.id,
         items: Array.isArray(row.items) ? row.items : [],
-        total: row.total_pkr || row.total || 0,
+        total: row.subtotal_pkr || row.total_pkr || row.total || 0,
         status: finalStatus,
         customer: {
           name: row.customer_name || 'Anonymous',
@@ -123,7 +123,6 @@ const App: React.FC = () => {
   useEffect(() => {
     let mounted = true;
     const initData = async () => {
-      // Only set loading true on the very first mount
       try {
         await Promise.all([fetchProducts(), fetchOrders(true)]);
       } finally {
@@ -132,7 +131,7 @@ const App: React.FC = () => {
     };
     initData();
     return () => { mounted = false; };
-  }, []); // Run ONCE on mount
+  }, []);
 
   const updateStatusOverride = (orderId: string, status: Order['status']) => {
     setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
@@ -162,6 +161,8 @@ const App: React.FC = () => {
   const placeOrder = async (order: Order): Promise<boolean> => {
     try {
       const firstItem = order.items[0];
+      const totalAmount = Math.round(Number(order.total) || 0);
+      
       const { error } = await supabase.from('orders').insert([{
         order_id: order.id,
         customer_name: order.customer.name,
@@ -170,18 +171,21 @@ const App: React.FC = () => {
         customer_address: order.customer.address,
         product_id: String(firstItem?.product.id || 'N/A'),
         product_name: firstItem?.product.name || 'N/A',
-        product_price: firstItem?.product.price || 0,
+        product_price: Number(firstItem?.product.price || 0),
         product_image: firstItem?.product.image || '',
-        total_pkr: Math.round(order.total),
+        total_pkr: totalAmount,
+        subtotal_pkr: totalAmount, // Added to fix "null value in Subtotal_pkr"
         status: order.status.toLowerCase(),
         items: JSON.parse(JSON.stringify(order.items)),
         source: 'Web App'
       }]);
+      
       if (error) throw error;
       await fetchOrders(true);
       setCart([]);
       return true;
     } catch (e: any) {
+      console.error("Order Sync Error:", e);
       alert(`Sync failed: ${e.message}`);
       return false;
     }
@@ -212,7 +216,7 @@ const App: React.FC = () => {
             <Route path="/admin/*" element={
               <AdminDashboard 
                 products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
-                orders={orders} setOrders={() => {}} // parent useMemo handles this now
+                orders={orders} setOrders={() => {}} 
                 user={user} login={(role) => { const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; setUser(u); localStorage.setItem('itx_user_session', JSON.stringify(u)); }}
                 systemPassword={systemPassword} setSystemPassword={setSystemPassword}
                 refreshData={() => { fetchOrders(true); fetchProducts(); }}

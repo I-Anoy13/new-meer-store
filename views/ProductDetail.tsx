@@ -288,7 +288,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
             </div>
 
             <div className="mb-4">
-              <button onClick={() => setIsOrderPortalActive(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i></button>
+              <button onClick={() => setIsOrderPortalActive(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">ORDER NOW - CASH ON DELIVERY <i className="fas fa-arrow-right ml-2 text-xs"></i></button>
             </div>
 
             {/* DESCRIPTION - DOWN FROM COD BUTTON */}
