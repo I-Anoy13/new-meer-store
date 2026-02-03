@@ -176,8 +176,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                     </button>
                     
                     <div className="mt-6 bg-blue-50 border border-blue-100 p-4 rounded-2xl text-center">
-                      <p className="text-[9px] font-black uppercase text-blue-800 tracking-[0.2em] italic">
-                        <i className="fas fa-phone-alt mr-2"></i> Verification call will follow order
+                      <p className="text-[10px] font-black uppercase text-blue-800 tracking-[0.2em] italic">
+                        <i className="fas fa-truck-fast mr-2"></i> Free Express Shipping
                       </p>
                       <p className="text-[8px] font-bold text-blue-400 uppercase tracking-widest mt-1">Payment will be collected upon delivery</p>
                     </div>
@@ -298,9 +298,9 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
             <div className="mb-10 bg-blue-50 border border-blue-100 p-4 rounded-2xl text-center sm:text-left">
               <p className="text-[10px] font-black uppercase text-blue-800 tracking-[0.2em] italic">
-                <i className="fas fa-phone-alt mr-2"></i> Verification call will follow order
+                <i className="fas fa-truck-fast mr-2"></i> Free Express Shipping Nationwide
               </p>
-              <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest mt-1">Free Express Shipping Nationwide</p>
+              <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest mt-1">Authentic Premium Quality Guaranteed</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-8">

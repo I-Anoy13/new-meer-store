@@ -10,7 +10,7 @@ const ShippingPolicy: React.FC = () => {
         <section>
           <h2 className="text-2xl font-black uppercase tracking-widest mb-4 italic text-black">1. Delivery Timeframes</h2>
           <p>
-            Orders within major cities are typically delivered within 2-3 business days. Remote areas may take 4-5 business days. Once an order is placed, our verification team will contact you to confirm the dispatch.
+            Orders within major cities are typically delivered within 2-3 business days. Remote areas may take 4-5 business days. Once an order is placed, you will receive confirmation of your shipment's status.
           </p>
         </section>
 
@@ -22,16 +22,9 @@ const ShippingPolicy: React.FC = () => {
         </section>
 
         <section>
-          <h2 className="text-2xl font-black uppercase tracking-widest mb-4 italic text-black">3. Order Verification</h2>
+          <h2 className="text-2xl font-black uppercase tracking-widest mb-4 italic text-black">3. Tracking</h2>
           <p>
-            Due to our Cash on Delivery (COD) nature, every order requires a voice or WhatsApp verification. This ensures accuracy and secure delivery of your luxury timepiece.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-black uppercase tracking-widest mb-4 italic text-black">4. Tracking</h2>
-          <p>
-            Once your order is handed over to our logistical partners, you will receive a tracking ID via SMS to monitor your shipment's journey.
+            Once your order is handed over to our logistical partners, you will receive a tracking ID via SMS or email to monitor your shipment's journey.
           </p>
         </section>
 

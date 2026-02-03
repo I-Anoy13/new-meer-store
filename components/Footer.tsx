@@ -20,7 +20,6 @@ const Footer: React.FC = () => {
           <div>
             <h4 className="font-black text-[11px] uppercase tracking-[0.3em] text-gray-400 mb-6">Client Services</h4>
             <ul className="space-y-3 text-sm text-gray-600 font-medium">
-              <li><Link to="/refund-policy" className="hover:text-blue-600 transition italic">COD Verification</Link></li>
               <li><Link to="/" className="hover:text-blue-600 transition italic">Support Inquiry</Link></li>
               <li><Link to="/" className="hover:text-blue-600 transition italic">Global FAQ</Link></li>
             </ul>
