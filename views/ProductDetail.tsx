@@ -21,12 +21,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderPortalActive, setIsOrderPortalActive] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
 
-  // Reset scroll on state changes
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id, isOrderPortalActive]);
 
-  // Fake Live Viewers Logic
   const [viewers, setViewers] = useState(18 + Math.floor(Math.random() * 6));
   useEffect(() => {
     const interval = setInterval(() => {
@@ -38,7 +36,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     return () => clearInterval(interval);
   }, []);
 
-  // Flash Sale Timer
   const [timeLeft, setTimeLeft] = useState(3600 + Math.floor(Math.random() * 3600));
   useEffect(() => {
     const timer = setInterval(() => setTimeLeft(prev => (prev > 0 ? prev - 1 : 0)), 1000);
@@ -51,12 +48,11 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Fake Purchase Notification
   const [purchaseNotice, setPurchaseNotice] = useState<{ name: string, city: string } | null>(null);
   const [showPurchaseNotice, setShowPurchaseNotice] = useState(false);
 
   useEffect(() => {
-    if (isOrderPortalActive) return; // Don't show notifications during checkout
+    if (isOrderPortalActive) return;
     const triggerNotice = () => {
       const name = MUSLIM_NAMES[Math.floor(Math.random() * MUSLIM_NAMES.length)];
       const city = PAKISTAN_CITIES[Math.floor(Math.random() * PAKISTAN_CITIES.length)];
@@ -83,7 +79,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
   const variantObj = product.variants?.find(v => v.id === selectedVariant);
   const currentPrice = variantObj?.price || product.price;
-  const variantName = variantObj?.name || "Standard Edition";
 
   const handleQuickOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +87,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     const newOrderId = `ORD-${timestamp}`;
     const newOrder: Order = {
       id: newOrderId,
-      items: [{ product, quantity, variantId: selectedVariant, variantName }],
+      items: [{ product, quantity, variantId: selectedVariant, variantName: variantObj?.name || 'Standard' }],
       total: currentPrice * quantity,
       status: 'Pending',
       customer: { name: formData.name, email: '', phone: formData.phone, address: formData.address, city: formData.city },
@@ -103,120 +98,71 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     setIsSubmitting(false);
   };
 
-  // --- RENDER ORDER PORTAL (FULL PAGE INDEPENDENT FLOW) ---
   if (isOrderPortalActive) {
     return (
-      <div className="bg-white min-h-screen animate-fadeIn pb-20">
-        {/* Portal Header - Thinner */}
-        <div className="bg-black text-white py-3 px-6 sticky top-0 z-50 flex justify-between items-center shadow-md">
-          <div className="flex items-center space-x-2">
-             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-             <p className="text-[9px] font-black uppercase tracking-[0.1em] italic">Checkout: Cash On Delivery</p>
+      <div className="bg-white min-h-screen animate-fadeIn pb-2">
+        <div className="bg-black text-white py-0.5 px-3 sticky top-0 z-50 flex justify-between items-center shadow-sm">
+          <div className="flex items-center space-x-1">
+             <div className="w-1 h-1 rounded-full bg-green-500 animate-pulse"></div>
+             <p className="text-[4px] font-black uppercase tracking-[0.1em] italic">Checkout — COD</p>
           </div>
-          <button 
-            onClick={() => setIsOrderPortalActive(false)} 
-            className="text-white/60 hover:text-white transition uppercase text-[9px] font-black tracking-widest"
-          >
-            Close <i className="fas fa-times ml-1"></i>
+          <button onClick={() => setIsOrderPortalActive(false)} className="text-white/60 hover:text-white transition uppercase text-[4px] font-black tracking-widest">
+            Close <i className="fas fa-times ml-0.5"></i>
           </button>
         </div>
 
-        <div className="container mx-auto px-4 max-w-xl py-6">
+        <div className="container mx-auto px-4 max-w-[260px] py-1">
           {!orderSuccess ? (
             <>
-              <div className="mb-6 text-center">
-                <h1 className="text-2xl font-serif font-bold italic uppercase tracking-tighter text-black leading-none mb-2">Order Portal</h1>
-                <p className="text-blue-600 text-[8px] font-black uppercase tracking-[0.2em] italic">Zero Advance Payment Required</p>
+              <div className="mb-0.5 text-center">
+                <h1 className="text-[10px] font-serif font-bold italic uppercase tracking-tighter text-black leading-none mb-0.5">Quick Order</h1>
+                <p className="text-blue-600 text-[3px] font-black uppercase tracking-[0.2em] italic">Official Store • Secure Link</p>
               </div>
 
-              {/* Tighter Order Preview Card */}
-              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-center space-x-4 mb-6">
-                <img src={product.image} className="w-16 h-16 rounded-xl object-cover border shadow-sm" />
+              <div className="bg-gray-50 rounded p-1 border border-gray-100 flex items-center space-x-1 mb-1">
+                <img src={product.image} className="w-5 h-5 rounded-sm object-cover border" />
                 <div className="flex-grow min-w-0">
-                  <h3 className="text-sm font-black uppercase italic text-black truncate mb-0.5">{product.name}</h3>
-                  <p className="text-blue-600 font-black text-xs italic">Rs. {currentPrice.toLocaleString()}</p>
-                  <p className="text-[7px] font-bold text-gray-400 uppercase tracking-widest">Edition: {variantName}</p>
+                  <h3 className="text-[6px] font-black uppercase italic text-black truncate leading-none">{product.name}</h3>
+                  <p className="text-blue-600 font-black text-[5px] italic mt-0.5">Rs. {currentPrice.toLocaleString()}</p>
                 </div>
               </div>
 
-              <form onSubmit={handleQuickOrder} className="space-y-4">
-                <div className="grid grid-cols-1 gap-4">
+              <form onSubmit={handleQuickOrder} className="space-y-0.5">
+                <div>
+                  <label className="block text-[4px] font-black uppercase text-gray-400 mb-0.5 px-0.5 italic">Recipient Name</label>
+                  <input required type="text" className="w-full bg-white border border-gray-200 rounded px-1 py-1 font-bold outline-none text-black focus:border-black transition uppercase text-[7px] italic" placeholder="Full Name" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                </div>
+                <div className="grid grid-cols-2 gap-1">
                   <div>
-                    <label className="block text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1 px-1 italic">Full Name</label>
-                    <input 
-                      required 
-                      type="text" 
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                      placeholder="Your Name" 
-                      value={formData.name} 
-                      onChange={e => setFormData({...formData, name: e.target.value})} 
-                    />
+                    <label className="block text-[4px] font-black uppercase text-gray-400 mb-0.5 px-0.5 italic">WhatsApp/Phone</label>
+                    <input required type="tel" className="w-full bg-white border border-gray-200 rounded px-1 py-1 font-bold outline-none text-black focus:border-black transition uppercase text-[7px] italic" placeholder="03xx..." value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1 px-1 italic">Phone Number</label>
-                      <input 
-                        required 
-                        type="tel" 
-                        className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                        placeholder="03XX-XXXXXXX" 
-                        value={formData.phone} 
-                        onChange={e => setFormData({...formData, phone: e.target.value})} 
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1 px-1 italic">City</label>
-                      <input 
-                        required 
-                        type="text" 
-                        className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                        placeholder="e.g. Lahore" 
-                        value={formData.city} 
-                        onChange={e => setFormData({...formData, city: e.target.value})} 
-                      />
-                    </div>
-                  </div>
-                  
                   <div>
-                    <label className="block text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1 px-1 italic">Delivery Address</label>
-                    <textarea 
-                      required 
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3.5 font-bold outline-none h-24 resize-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                      placeholder="Street, House No, Landmark..." 
-                      value={formData.address} 
-                      onChange={e => setFormData({...formData, address: e.target.value})} 
-                    />
+                    <label className="block text-[4px] font-black uppercase text-gray-400 mb-0.5 px-0.5 italic">City</label>
+                    <input required type="text" className="w-full bg-white border border-gray-200 rounded px-1 py-1 font-bold outline-none text-black focus:border-black transition uppercase text-[7px] italic" placeholder="City" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
                   </div>
                 </div>
+                <div>
+                  <label className="block text-[4px] font-black uppercase text-gray-400 mb-0.5 px-0.5 italic">Full Delivery Address</label>
+                  <textarea required className="w-full bg-white border border-gray-200 rounded px-1 py-1 font-bold outline-none h-8 resize-none text-black focus:border-black transition uppercase text-[7px] italic leading-tight" placeholder="Street, landmark..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                </div>
 
-                <div className="pt-2">
-                  <button 
-                    type="submit" 
-                    disabled={isSubmitting} 
-                    className="w-full bg-black text-white font-black uppercase py-5 rounded-xl hover:bg-blue-600 transition shadow-xl tracking-[0.2em] text-[11px] italic active:scale-95 animate-pulse-red"
-                  >
-                    {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete COD Order — Rs. ${currentPrice.toLocaleString()}`}
+                <div className="pt-0.5">
+                  <button type="submit" disabled={isSubmitting} className="w-full bg-black text-white font-black uppercase py-2 rounded hover:bg-blue-600 transition shadow-md tracking-[0.2em] text-[6px] italic active:scale-95 animate-pulse-red">
+                    {isSubmitting ? <i className="fas fa-circle-notch fa-spin text-[6px]"></i> : `Place COD Order — Rs. ${currentPrice.toLocaleString()}`}
                   </button>
-                  <div className="mt-4 flex flex-col items-center opacity-40">
-                    <p className="text-[7px] font-black uppercase tracking-[0.4em] italic text-center">Premium Watch Merchant • Verified Logistics</p>
-                  </div>
+                  <p className="text-[3px] text-center font-black uppercase text-gray-300 tracking-[0.3em] mt-1 italic">Verification call will follow order</p>
                 </div>
               </form>
             </>
           ) : (
-            <div className="text-center py-16 animate-fadeIn">
-              <div className="w-20 h-20 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 text-3xl shadow-xl animate-bounce">
+            <div className="text-center py-4 animate-fadeIn">
+              <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-1 text-[8px] shadow-sm animate-bounce">
                 <i className="fas fa-check"></i>
               </div>
-              <h2 className="text-3xl font-serif font-bold italic uppercase mb-2 text-black">Order Placed</h2>
-              <p className="text-gray-500 mb-10 font-bold italic text-xs tracking-widest uppercase">Shipping Ref: <span className="text-black font-black">#{orderSuccess.id}</span></p>
-              <button 
-                onClick={() => { setIsOrderPortalActive(false); setOrderSuccess(null); }} 
-                className="w-full bg-black text-white font-black uppercase tracking-[0.3em] py-5 rounded-xl shadow-lg hover:bg-blue-600 transition text-[10px] italic"
-              >
-                Return To Store
-              </button>
+              <h2 className="text-[10px] font-serif font-bold italic uppercase mb-0.5 text-black">Order Dispatched</h2>
+              <p className="text-gray-500 mb-2 font-bold italic text-[5px] tracking-widest uppercase">MANIFEST: <span className="text-black font-black">#{orderSuccess.id}</span></p>
+              <button onClick={() => { setIsOrderPortalActive(false); setOrderSuccess(null); }} className="w-full bg-black text-white font-black uppercase tracking-[0.3em] py-1.5 rounded shadow-sm hover:bg-blue-600 transition text-[5px] italic">Back To Store</button>
             </div>
           )}
         </div>
@@ -224,10 +170,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     );
   }
 
-  // --- RENDER STANDARD PRODUCT DETAIL ---
   return (
     <div className="bg-white animate-fadeIn pb-24 lg:pb-0 relative text-black overflow-x-hidden">
-      {/* Flash Sale Banner */}
       <div className="bg-red-600 text-white py-2 text-center sticky top-16 z-50 shadow-md">
         <div className="container mx-auto px-4 flex items-center justify-center space-x-2 md:space-x-6">
           <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">FLASH SALE — 25% DISCOUNT RESERVED</span>
@@ -237,31 +181,13 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       </div>
 
       <div className="container mx-auto px-4 md:px-6 py-4 lg:py-16 relative">
-        {/* Purchase Notification */}
-        <div className={`fixed bottom-24 left-4 right-4 md:left-auto md:right-8 z-[100] transition-all duration-700 transform ${showPurchaseNotice ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0 pointer-events-none'}`}>
-          <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-3 mx-auto max-w-[320px]">
-            <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shrink-0 animate-bounce shadow-md"><i className="fas fa-check-circle text-sm"></i></div>
-            <div>
-              <p className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-600 mb-0.5 italic">Live Order</p>
-              <p className="text-[10px] font-bold text-black leading-tight italic">
-                {purchaseNotice?.name} from {purchaseNotice?.city}<br/>
-                <span className="text-gray-400 font-normal">just ordered this timepiece</span>
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-16">
           <div className="lg:col-span-5">
             <div className="relative aspect-[4/5] bg-gray-50 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden shadow-inner border border-gray-100 flex items-center justify-center group">
               <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
               <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest italic shadow-lg">-25% OFF</div>
-              
               <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/10">
-                 <span className="flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
-                 </span>
+                 <span className="flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span></span>
                  <span className="text-[9px] font-black uppercase tracking-widest">{viewers} Browsing Now</span>
               </div>
             </div>
@@ -272,66 +198,13 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                <span className="text-blue-600 text-[9px] font-black uppercase tracking-widest italic">{product.category}</span>
                <h1 className="text-2xl md:text-5xl lg:text-7xl font-serif font-bold italic uppercase leading-tight mt-1 italic text-black">{product.name}</h1>
             </div>
-
             <div className="flex items-center space-x-4 mb-6">
-              <div className="flex flex-col">
-                <span className="text-2xl md:text-4xl font-black italic text-black">Rs. {currentPrice.toLocaleString()}</span>
-                <span className="text-[10px] text-gray-400 line-through font-bold italic">Rs. {(currentPrice / 0.75).toLocaleString()}</span>
-              </div>
+              <div className="flex flex-col"><span className="text-2xl md:text-4xl font-black italic text-black">Rs. {currentPrice.toLocaleString()}</span><span className="text-[10px] text-gray-400 line-through font-bold italic">Rs. {(currentPrice / 0.75).toLocaleString()}</span></div>
               <span className="text-[9px] font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full uppercase italic border border-green-100">Free COD Express</span>
             </div>
-
-            <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 border-dashed">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="flex -space-x-2">
-                    {[1, 2, 3].map(i => (
-                      <img key={i} className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src={`https://i.pravatar.cc/150?u=${i + 70}`} alt="client" />
-                    ))}
-                    <div className="h-8 w-8 rounded-full ring-2 ring-white bg-black flex items-center justify-center text-[8px] font-black text-white">+18k</div>
-                  </div>
-                  <div className="hidden sm:block">
-                    <div className="flex text-yellow-500 space-x-0.5">
-                        {[1, 2, 3, 4, 5].map(i => <i key={i} className="fas fa-star text-[7px]"></i>)}
-                    </div>
-                    <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 italic">10,000+ Happy Customers</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                   <p className="text-[9px] font-black uppercase text-blue-600 italic leading-none">Verified Horology</p>
-                   <p className="text-[8px] font-bold text-gray-400 uppercase mt-0.5">Pakistan's Choice</p>
-                </div>
-              </div>
-            </div>
-
             <div className="mb-8">
-              <button 
-                onClick={() => setIsOrderPortalActive(true)} 
-                className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red"
-              >
-                Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i>
-              </button>
-              <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">No advance payment — pay when watch arrives</p>
+              <button onClick={() => setIsOrderPortalActive(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i></button>
             </div>
-
-            <div className="mb-10">
-              <p className="text-gray-600 text-sm md:text-lg leading-relaxed italic">{product.description}</p>
-            </div>
-
-            {product.variants && product.variants.length > 0 && (
-              <div className="mb-10">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-3 italic">Select Edition</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {product.variants.map((v) => (
-                    <button key={v.id} onClick={() => setSelectedVariant(v.id)} className={`px-3 py-3 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${selectedVariant === v.id ? 'bg-black text-white border-black shadow-md scale-[1.02]' : 'bg-white text-gray-400 border-gray-100 hover:border-black'}`}>
-                      {v.name}
-                      <span className="block text-[7px] opacity-60 mt-0.5 italic">Rs. {v.price.toLocaleString()}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-8 mt-4 mb-12">
               {TRUST_BADGES.map((badge, idx) => (
                 <div key={idx} className="flex items-center space-x-2">

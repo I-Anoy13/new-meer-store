@@ -22,6 +22,12 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
 
+  // Source of Truth: Local Status Overrides
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
+    const saved = localStorage.getItem('itx_status_overrides');
+    return saved ? JSON.parse(saved) : {};
+  });
+
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('cart');
     return saved ? JSON.parse(saved) : [];
@@ -35,6 +41,15 @@ const App: React.FC = () => {
     const saved = localStorage.getItem('itx_user_session');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // Save overrides to storage whenever they change
+  useEffect(() => {
+    localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
+  }, [statusOverrides]);
+
+  const updateStatusOverride = (orderId: string, status: Order['status']) => {
+    setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
+  };
 
   const fetchProducts = useCallback(async () => {
     setIsSyncing(true);
@@ -76,12 +91,17 @@ const App: React.FC = () => {
       
       if (data) {
         const mappedOrders: Order[] = data.map(row => {
-          // Robust status mapping
-          let statusStr = String(row.status || 'Pending').toLowerCase();
-          const finalStatus = (statusStr.charAt(0).toUpperCase() + statusStr.slice(1)) as Order['status'];
+          const orderId = row.order_id || `ORD-${row.id}`;
+          
+          // CRITICAL: HARD OVERRIDE Logic
+          // We prioritize statusOverrides from LocalStorage above all else
+          const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
+          const dbStatus = (dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1)) as Order['status'];
+          
+          const finalStatus = statusOverrides[orderId] || dbStatus;
 
           return {
-            id: row.order_id || `ORD-${row.id}`,
+            id: orderId,
             dbId: row.id,
             items: Array.isArray(row.items) ? row.items : [],
             total: row.total_pkr || row.total || 0,
@@ -103,15 +123,16 @@ const App: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [statusOverrides]);
 
   useEffect(() => {
     const channel = supabase
       .channel('realtime-orders')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'orders' },
+        { event: '*', schema: 'public', table: 'orders' },
         () => {
+          // Silent re-fetch, statusOverrides will handle the UI consistency
           fetchOrders();
         }
       )
@@ -273,6 +294,7 @@ const App: React.FC = () => {
                 systemPassword={systemPassword}
                 setSystemPassword={setSystemPassword}
                 refreshData={() => { fetchOrders(); fetchProducts(); }}
+                updateStatusOverride={updateStatusOverride}
               />
             } />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
