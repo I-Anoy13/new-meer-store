@@ -22,7 +22,6 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Status Overrides: Treat LocalStorage as the Absolute Source of Truth
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
     return saved ? JSON.parse(saved) : {};
@@ -46,25 +45,20 @@ const App: React.FC = () => {
     localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
   }, [statusOverrides]);
 
-  // Derived Orders List: Merges Raw DB data with Local status overrides
   const orders = useMemo(() => {
-    return rawOrders.map(row => {
+    return rawOrders.map((row): Order | null => {
       if (!row) return null;
       
       const orderId = row.order_id || (row.id ? `ORD-${row.id}` : 'ORD-UNKNOWN');
       const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
       const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
       const dbStatus = (capitalized || 'Pending') as Order['status'];
-      
-      // Local override always wins!
       const finalStatus = statusOverrides[orderId] || dbStatus;
-
-      // Extract total from various possible columns (fixing potential schema drift)
       const totalAmount = row.subtotal_pkr ?? row.total_pkr ?? row.total ?? 0;
 
       return {
         id: orderId,
-        dbId: row.id,
+        dbId: row.id ? Number(row.id) : undefined,
         items: Array.isArray(row.items) ? row.items : [],
         total: Number(totalAmount),
         status: finalStatus,
@@ -106,18 +100,9 @@ const App: React.FC = () => {
   const fetchOrders = useCallback(async (silent = false) => {
     if (!silent) setIsSyncing(true);
     try {
-      // Fetch all columns to ensure we aren't missing subtotal_pkr
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*');
-      
-      if (error) {
-        console.error("Supabase Order Fetch Error:", error);
-        throw error;
-      }
-
+      const { data, error } = await supabase.from('orders').select('*');
+      if (error) throw error;
       if (data) {
-        // Sort manually to avoid issues if created_at column is missing/different
         const sortedData = [...data].sort((a, b) => {
           const dateA = new Date(a.created_at || a.date || 0).getTime();
           const dateB = new Date(b.created_at || b.date || 0).getTime();
@@ -135,8 +120,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const channel = supabase
       .channel('realtime-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
-        console.debug('Realtime Update Received:', payload);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         fetchOrders(true);
       })
       .subscribe();
@@ -147,7 +131,6 @@ const App: React.FC = () => {
     let mounted = true;
     const initData = async () => {
       try {
-        // Attempt initial sync
         await Promise.allSettled([fetchProducts(), fetchOrders(true)]);
       } finally {
         if (mounted) setLoading(false);
@@ -186,7 +169,6 @@ const App: React.FC = () => {
     try {
       const firstItem = order.items[0];
       const totalAmount = Math.round(Number(order.total) || 0);
-      
       const payload = {
         order_id: order.id,
         customer_name: order.customer.name,
@@ -203,20 +185,13 @@ const App: React.FC = () => {
         items: order.items,
         source: 'Web App'
       };
-
       const { error } = await supabase.from('orders').insert([payload]);
-      
-      if (error) {
-        console.error("Order Insertion Error:", error);
-        throw error;
-      }
-      
+      if (error) throw error;
       await fetchOrders(true);
       setCart([]);
       return true;
     } catch (e: any) {
-      console.error("Critical Order Placement Failure:", e);
-      alert(`Order failed to sync with database: ${e.message}`);
+      console.error("Order Failure:", e);
       return false;
     }
   };
