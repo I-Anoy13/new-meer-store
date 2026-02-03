@@ -21,33 +21,38 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
   
-  const scrollOverlayRef = useRef<HTMLDivElement>(null);
+  const modalContainerRef = useRef<HTMLDivElement>(null);
 
   // Reset page scroll on product change
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
-  // Handle Modal Open: Lock body and reset modal scroll to top
+  // Force scroll to top on modal open to ensure Name field is first thing seen
   useEffect(() => {
     if (isOrderModalOpen) {
       document.body.style.overflow = 'hidden';
-      // Force the scroll overlay to the top
-      if (scrollOverlayRef.current) {
-        scrollOverlayRef.current.scrollTop = 0;
-      }
-      // Tactical delay to handle mobile browser rendering
-      const timeout = setTimeout(() => {
-        if (scrollOverlayRef.current) scrollOverlayRef.current.scrollTop = 0;
-      }, 50);
+      
+      const resetModalScroll = () => {
+        if (modalContainerRef.current) {
+          modalContainerRef.current.scrollTop = 0;
+        }
+      };
+
+      resetModalScroll();
+      // Multi-step reset for mobile browsers
+      const t1 = setTimeout(resetModalScroll, 10);
+      const t2 = setTimeout(resetModalScroll, 150);
+      
       return () => {
         document.body.style.overflow = 'unset';
-        clearTimeout(timeout);
+        clearTimeout(t1);
+        clearTimeout(t2);
       };
     }
   }, [isOrderModalOpen]);
 
-  // Fake Live Viewers Logic
+  // Fake Live Viewers
   const [viewers, setViewers] = useState(18 + Math.floor(Math.random() * 6));
   useEffect(() => {
     const interval = setInterval(() => {
@@ -147,7 +152,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <p className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-600 mb-0.5 italic">Live Order</p>
               <p className="text-[10px] font-bold text-black leading-tight italic">
                 {purchaseNotice?.name} from {purchaseNotice?.city}<br/>
-                <span className="text-gray-400 font-normal">just reserved this timepiece</span>
+                <span className="text-gray-400 font-normal">just ordered this timepiece</span>
               </p>
             </div>
           </div>
@@ -247,14 +252,15 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         </div>
       </div>
 
-      {/* COD ORDER FORM MODAL - RE-ENGINEERED FULL PAGE SCROLL */}
+      {/* COD ORDER FORM MODAL - RE-ENGINEERED AS FULL-PAGE OVERLAY SCROLL CONTAINER */}
       {isOrderModalOpen && (
         <div 
-          ref={scrollOverlayRef}
-          className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl animate-fadeIn overflow-y-auto overscroll-contain flex justify-center items-start sm:p-4 md:p-8"
+          ref={modalContainerRef}
+          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl overflow-y-auto overscroll-contain flex flex-col items-center py-4 sm:py-12 animate-fadeIn"
         >
-          <div className="relative w-full min-h-full sm:min-h-0 sm:max-w-[600px] bg-white sm:rounded-[2.5rem] shadow-2xl flex flex-col">
-            <div className="p-6 sm:p-12 pb-32">
+          {/* Inner Modal Container - Sits at the absolute top of the scrollable parent */}
+          <div className="w-full max-w-[600px] bg-white sm:rounded-[2.5rem] shadow-2xl relative flex flex-col mb-12">
+            <div className="p-6 sm:p-12">
               {!orderSuccess ? (
                 <>
                   <div className="flex justify-between items-start mb-10">
@@ -284,23 +290,49 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                       </div>
                     </div>
                     
-                    {/* Form Fields - 16px (text-base) to prevent auto-zoom */}
+                    {/* Form Fields - text-base (16px) font prevents auto-zoom zoom on iOS */}
                     <div className="space-y-6">
-                      {['name', 'phone', 'city'].map(field => (
-                        <div key={field}>
-                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
-                            {field === 'phone' ? 'Phone Number (Required)' : `${field} (Required)`}
-                          </label>
-                          <input 
-                            required 
-                            type={field === 'phone' ? 'tel' : 'text'} 
-                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                            placeholder={field === 'phone' ? '03XX-XXXXXXX' : `Your ${field}`} 
-                            value={(formData as any)[field]} 
-                            onChange={e => setFormData({...formData, [field]: e.target.value})} 
-                          />
-                        </div>
-                      ))}
+                      <div id="form-top">
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
+                          Full Name (Required)
+                        </label>
+                        <input 
+                          required 
+                          type="text" 
+                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                          placeholder="Your Full Name" 
+                          value={formData.name} 
+                          onChange={e => setFormData({...formData, name: e.target.value})} 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
+                          Phone Number (Required)
+                        </label>
+                        <input 
+                          required 
+                          type="tel" 
+                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                          placeholder="03XX-XXXXXXX" 
+                          value={formData.phone} 
+                          onChange={e => setFormData({...formData, phone: e.target.value})} 
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
+                          City (Required)
+                        </label>
+                        <input 
+                          required 
+                          type="text" 
+                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                          placeholder="e.g. Karachi, Lahore..." 
+                          value={formData.city} 
+                          onChange={e => setFormData({...formData, city: e.target.value})} 
+                        />
+                      </div>
                       
                       <div>
                         <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Complete Delivery Address</label>
@@ -320,7 +352,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                         disabled={isSubmitting} 
                         className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-[12px] italic active:scale-95"
                       >
-                        {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete Reservation — Rs. ${(currentPrice * quantity).toLocaleString()}`}
+                        {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Confirm COD Order — Rs. ${(currentPrice * quantity).toLocaleString()}`}
                       </button>
                     </div>
                     
@@ -333,12 +365,12 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                   </form>
                 </>
               ) : (
-                <div className="text-center py-24 flex flex-col items-center justify-center text-black">
+                <div className="text-center py-24 flex flex-col items-center justify-center text-black animate-fadeIn">
                   <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-xl animate-bounce">
                     <i className="fas fa-check"></i>
                   </div>
                   <h3 className="text-3xl font-serif font-bold italic uppercase mb-4 italic">Order Confirmed</h3>
-                  <p className="text-gray-500 mb-12 font-bold italic text-[12px] tracking-widest italic uppercase">Ledger ID: <span className="text-black font-black">#{orderSuccess.id}</span></p>
+                  <p className="text-gray-500 mb-12 font-bold italic text-[12px] tracking-widest italic uppercase">Tracking ID: <span className="text-black font-black">#{orderSuccess.id}</span></p>
                   <button 
                     onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} 
                     className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-6 rounded-2xl shadow-lg hover:bg-gray-800 transition text-[11px] italic"
