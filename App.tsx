@@ -31,7 +31,10 @@ const App: React.FC = () => {
     return localStorage.getItem('systemPassword') || 'admin123';
   });
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('itx_user_session');
+    return saved ? JSON.parse(saved) : null;
+  });
 
   const fetchProducts = useCallback(async () => {
     setIsSyncing(true);
@@ -72,21 +75,27 @@ const App: React.FC = () => {
       if (error) throw error;
       
       if (data) {
-        const mappedOrders: Order[] = data.map(row => ({
-          id: row.order_id || `ORD-${row.id}`,
-          dbId: row.id,
-          items: Array.isArray(row.items) ? row.items : [],
-          total: row.total_pkr || row.total || 0,
-          status: (row.status ? row.status.charAt(0).toUpperCase() + row.status.slice(1) : 'Pending') as Order['status'],
-          customer: {
-            name: row.customer_name || 'Anonymous',
-            email: '',
-            phone: row.customer_phone || '',
-            address: row.customer_address || '',
-            city: row.customer_city || ''
-          },
-          date: row.created_at || row.date
-        }));
+        const mappedOrders: Order[] = data.map(row => {
+          // Robust status mapping
+          let statusStr = String(row.status || 'Pending').toLowerCase();
+          const finalStatus = (statusStr.charAt(0).toUpperCase() + statusStr.slice(1)) as Order['status'];
+
+          return {
+            id: row.order_id || `ORD-${row.id}`,
+            dbId: row.id,
+            items: Array.isArray(row.items) ? row.items : [],
+            total: row.total_pkr || row.total || 0,
+            status: finalStatus,
+            customer: {
+              name: row.customer_name || 'Anonymous',
+              email: '',
+              phone: row.customer_phone || '',
+              address: row.customer_address || '',
+              city: row.customer_city || ''
+            },
+            date: row.created_at || row.date
+          };
+        });
         setOrders(mappedOrders);
       }
     } catch (error) {
@@ -102,7 +111,7 @@ const App: React.FC = () => {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'orders' },
-        (payload) => {
+        () => {
           fetchOrders();
         }
       )
@@ -201,6 +210,7 @@ const App: React.FC = () => {
       const { error } = await supabase.from('orders').insert([dbPayload]);
       if (error) throw error;
 
+      await fetchOrders();
       clearCart();
       return true;
     } catch (e: any) {
@@ -211,10 +221,15 @@ const App: React.FC = () => {
   };
 
   const login = (role: UserRole) => {
-    setUser({ id: '1', name: 'Store Manager', email: 'manager@itxshop.pk', role });
+    const newUser = { id: '1', name: 'Store Manager', email: 'manager@itxshop.pk', role };
+    setUser(newUser);
+    localStorage.setItem('itx_user_session', JSON.stringify(newUser));
   };
 
-  const logout = () => setUser(null);
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('itx_user_session');
+  };
 
   if (loading) {
     return (
