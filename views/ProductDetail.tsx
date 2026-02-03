@@ -31,6 +31,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
   const [viewers, setViewers] = useState(25 + Math.floor(Math.random() * 15));
   const [purchaseNotification, setPurchaseNotification] = useState<{name: string, city: string} | null>(null);
+  
+  // Requirement: Starting at 14 left
   const [unitsLeft, setUnitsLeft] = useState(14);
 
   useEffect(() => {
@@ -42,17 +44,17 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       });
     }, 4000);
 
-    // Stock simulation - slow decrease for realism
+    // Stock simulation - slow decrease
     const stockInterval = setInterval(() => {
       setUnitsLeft(prev => (prev > 2 ? prev - (Math.random() > 0.95 ? 1 : 0) : prev));
     }, 20000);
 
-    // 5-second purchase notification interval as requested
+    // Requirement: 5-second purchase notification interval
     const notifyInterval = setInterval(() => {
       const name = NAMES[Math.floor(Math.random() * NAMES.length)];
       const city = CITIES[Math.floor(Math.random() * CITIES.length)];
       setPurchaseNotification({ name, city });
-      // Keep visible for a decent amount of time within the 5s window
+      // Clear before next one
       setTimeout(() => setPurchaseNotification(null), 3800);
     }, 5000);
 
@@ -177,7 +179,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
       <div className="container mx-auto px-4 md:px-6 py-6 lg:py-16 relative">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-          {/* Left Column: Image Gallery & Notification Area */}
+          {/* Left Column: Image Gallery */}
           <div className="lg:col-span-6">
             <div className="relative aspect-square bg-gray-50 rounded-[2rem] overflow-hidden border border-gray-100 shadow-xl">
               <div 
@@ -196,7 +198,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                 ))}
               </div>
 
-              {/* Mobile Slide Indicator Dots */}
+              {/* Slide Indicator */}
               <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex space-x-2">
                 {productImages.map((_, i) => (
                   <div key={i} className={`w-2 h-2 rounded-full transition-all duration-300 ${activeImageIdx === i ? 'bg-black w-6' : 'bg-black/20'}`}></div>
@@ -204,7 +206,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
             
-            {/* Small Images (Thumbnails) */}
+            {/* Thumbnails */}
             <div className="flex gap-3 overflow-x-auto no-scrollbar py-4 px-2">
               {productImages.map((img, idx) => (
                 <button key={idx} onClick={() => scrollToImage(idx)} className={`w-16 h-16 rounded-xl overflow-hidden border-2 shrink-0 transition-all shadow-sm ${activeImageIdx === idx ? 'border-black scale-105 shadow-lg' : 'border-gray-100'}`}>
@@ -213,10 +215,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               ))}
             </div>
 
-            {/* In-Place Purchase Popup (Beneath Main Product Pictures) */}
+            {/* Purchase Notifications Area */}
             <div className="mt-2 animate-fadeIn min-h-[80px]">
               {purchaseNotification ? (
-                <div className="bg-white border border-gray-100 p-5 rounded-[1.5rem] flex items-center space-x-4 animate-slideInLeft shadow-2xl shadow-green-500/5 ring-1 ring-gray-50">
+                <div className="bg-white border border-gray-100 p-5 rounded-[1.5rem] flex items-center space-x-4 animate-slideInLeft shadow-2xl ring-1 ring-gray-50">
                   <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white shrink-0 shadow-lg">
                     <i className="fas fa-check-circle text-lg"></i>
                   </div>
@@ -257,7 +259,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
 
-            {/* Live Visitors Count - Prominently over the Order Button */}
+            {/* Live Visitors Count - Placed over button as requested */}
             <div className="mb-3 flex items-center space-x-2 pl-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -274,14 +276,14 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-10 transition-opacity"></div>
             </button>
 
-            {/* Customer Avatars Section */}
+            {/* Happy Customers with Pakistan style DPs */}
             <div className="mt-8 flex flex-col items-center p-8 bg-white rounded-3xl border border-gray-100 shadow-sm">
                 <div className="flex -space-x-4 mb-5">
-                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=150&auto=format&fit=crop" alt="Cust 1" />
-                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?q=80&w=150&auto=format&fit=crop" alt="Cust 2" />
-                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?q=80&w=150&auto=format&fit=crop" alt="Cust 3" />
-                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?q=80&w=150&auto=format&fit=crop" alt="Cust 4" />
-                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop" alt="Cust 5" />
+                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=150&auto=format&fit=crop" alt="Customer 1" />
+                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?q=80&w=150&auto=format&fit=crop" alt="Customer 2" />
+                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?q=80&w=150&auto=format&fit=crop" alt="Customer 3" />
+                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?q=80&w=150&auto=format&fit=crop" alt="Customer 4" />
+                  <img className="inline-block h-12 w-12 rounded-full ring-4 ring-white object-cover shadow-md" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=150&auto=format&fit=crop" alt="Customer 5" />
                   <div className="h-12 w-12 rounded-full ring-4 ring-white bg-black flex items-center justify-center text-[11px] font-black text-white shadow-md uppercase">+12k</div>
                 </div>
                 <div className="text-center">
@@ -296,7 +298,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                 </div>
             </div>
 
-            {/* Description Section - Not shrunken (whitespace-pre-wrap) */}
+            {/* Description - Whitespace-pre-wrap as requested */}
             <div className="my-12">
                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-400 mb-6 flex items-center">
                  <span className="w-8 h-[1px] bg-gray-200 mr-4"></span> CRAFTSMANSHIP NOTES
@@ -306,6 +308,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                </p>
             </div>
 
+            {/* Trust Badges */}
             <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-10">
               {TRUST_BADGES.map((badge, idx) => (
                 <div key={idx} className="flex items-center space-x-3 group">
