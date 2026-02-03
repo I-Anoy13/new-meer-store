@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { CartItem, Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
@@ -15,8 +15,27 @@ import ShippingPolicy from './views/ShippingPolicy';
 import Header from './components/Header';
 import Footer from './components/Footer';
 
-// Admin panel is lazy loaded and hidden from general customer bundles
+// Lazy load the admin panel for complete isolation
 const AdminDashboard = lazy(() => import('./views/AdminDashboard'));
+
+const MainLayout: React.FC<{
+  children: React.ReactNode;
+  cartCount: number;
+  user: User | null;
+  logout: () => void;
+  isSyncing: boolean;
+}> = ({ children, cartCount, user, logout, isSyncing }) => (
+  <div className="flex flex-col min-h-screen">
+    <Header cartCount={cartCount} user={user} logout={logout} />
+    {isSyncing && (
+      <div className="fixed top-20 right-6 z-[1000] animate-pulse">
+        <div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg">Cloud Syncing...</div>
+      </div>
+    )}
+    <main className="flex-grow">{children}</main>
+    <Footer />
+  </div>
+);
 
 const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
@@ -50,7 +69,6 @@ const App: React.FC = () => {
   const orders = useMemo(() => {
     return rawOrders.map((row): Order | null => {
       if (!row) return null;
-      
       const orderId = row.order_id || (row.id ? `ORD-${row.id}` : 'ORD-UNKNOWN');
       const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
       const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
@@ -204,47 +222,51 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Loading Secure Environment...</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Booting ITX Core...</p>
         </div>
       </div>
     );
   }
 
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
     <HashRouter>
-      <div className="flex flex-col min-h-screen">
-        <Header cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }} />
-        {isSyncing && <div className="fixed top-20 right-6 z-[1000] animate-pulse"><div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg">Cloud Syncing...</div></div>}
-        <main className="flex-grow">
-          <Suspense fallback={
-            <div className="min-h-[60vh] flex items-center justify-center">
-              <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          }>
-            <Routes>
-              <Route path="/" element={<Home products={products} />} />
-              <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
-              <Route path="/cart" element={<CartView cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
-              <Route path="/checkout" element={<Checkout cart={cart} placeOrder={placeOrder} />} />
-              <Route path="/admin-portal/*" element={
-                <AdminDashboard 
-                  products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
-                  orders={orders} setOrders={() => {}} 
-                  user={user} login={(role) => { const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; setUser(u); localStorage.setItem('itx_user_session', JSON.stringify(u)); }}
-                  systemPassword={systemPassword} setSystemPassword={setSystemPassword}
-                  refreshData={() => { fetchOrders(); fetchProducts(); }}
-                  updateStatusOverride={updateStatusOverride}
-                />
-              } />
-              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-              <Route path="/terms-of-service" element={<TermsOfService />} />
-              <Route path="/refund-policy" element={<RefundPolicy />} />
-              <Route path="/shipping-policy" element={<ShippingPolicy />} />
-            </Routes>
-          </Suspense>
-        </main>
-        <Footer />
-      </div>
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-white">
+          <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      }>
+        <Routes>
+          {/* Admin Route - No main layout */}
+          <Route path="/admin/*" element={
+            <AdminDashboard 
+              products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
+              orders={orders} setOrders={() => {}} 
+              user={user} login={(role) => { const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; setUser(u); localStorage.setItem('itx_user_session', JSON.stringify(u)); }}
+              systemPassword={systemPassword} setSystemPassword={setSystemPassword}
+              refreshData={() => { fetchOrders(); fetchProducts(); }}
+              updateStatusOverride={updateStatusOverride}
+            />
+          } />
+
+          {/* Customer Routes - With main layout */}
+          <Route path="/*" element={
+            <MainLayout cartCount={cartCount} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }} isSyncing={isSyncing}>
+              <Routes>
+                <Route path="/" element={<Home products={products} />} />
+                <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
+                <Route path="/cart" element={<CartView cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
+                <Route path="/checkout" element={<Checkout cart={cart} placeOrder={placeOrder} />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                <Route path="/terms-of-service" element={<TermsOfService />} />
+                <Route path="/refund-policy" element={<RefundPolicy />} />
+                <Route path="/shipping-policy" element={<ShippingPolicy />} />
+              </Routes>
+            </MainLayout>
+          } />
+        </Routes>
+      </Suspense>
     </HashRouter>
   );
 };
