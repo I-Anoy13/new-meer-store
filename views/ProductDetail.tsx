@@ -21,39 +21,33 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
   
-  const modalScrollRef = useRef<HTMLDivElement>(null);
+  const scrollOverlayRef = useRef<HTMLDivElement>(null);
 
-  // Landing scroll reset
+  // Reset page scroll on product change
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
-  // Robust Modal Scroll Control: Ensuring form starts from the very top (Name field)
-  // and is scrollable regardless of keyboard state.
+  // Handle Modal Open: Lock body and reset modal scroll to top
   useEffect(() => {
     if (isOrderModalOpen) {
       document.body.style.overflow = 'hidden';
-      
-      const resetScroll = () => {
-        if (modalScrollRef.current) {
-          modalScrollRef.current.scrollTop = 0;
-        }
-      };
-
-      // Multi-phase reset to handle layout shifts and browser quirks
-      resetScroll();
-      const rafId = requestAnimationFrame(resetScroll);
-      const timeoutId = setTimeout(resetScroll, 200);
-
+      // Force the scroll overlay to the top
+      if (scrollOverlayRef.current) {
+        scrollOverlayRef.current.scrollTop = 0;
+      }
+      // Tactical delay to handle mobile browser rendering
+      const timeout = setTimeout(() => {
+        if (scrollOverlayRef.current) scrollOverlayRef.current.scrollTop = 0;
+      }, 50);
       return () => {
         document.body.style.overflow = 'unset';
-        cancelAnimationFrame(rafId);
-        clearTimeout(timeoutId);
+        clearTimeout(timeout);
       };
     }
   }, [isOrderModalOpen]);
 
-  // Fake Live Viewers
+  // Fake Live Viewers Logic
   const [viewers, setViewers] = useState(18 + Math.floor(Math.random() * 6));
   useEffect(() => {
     const interval = setInterval(() => {
@@ -213,7 +207,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
 
-            {/* Main CTA Button - HIGHER UP FOR VISIBILITY */}
+            {/* Main CTA Button */}
             <div className="mb-8">
               <button onClick={() => setIsOrderModalOpen(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">
                 Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i>
@@ -221,7 +215,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">No advance payment — pay when watch arrives</p>
             </div>
 
-            {/* Description - PLACED AFTER THE MAIN COD BUTTON */}
+            {/* Description - Positioned After Button */}
             <div className="mb-10">
               <p className="text-gray-600 text-sm md:text-lg leading-relaxed italic">{product.description}</p>
             </div>
@@ -253,14 +247,14 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         </div>
       </div>
 
-      {/* COD ORDER FORM MODAL - RE-ENGINEERED FOR SCROLL INDEPENDENCE */}
+      {/* COD ORDER FORM MODAL - RE-ENGINEERED FULL PAGE SCROLL */}
       {isOrderModalOpen && (
-        <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl animate-fadeIn overflow-hidden flex items-start sm:items-center justify-center">
-          <div 
-            ref={modalScrollRef}
-            className="w-full h-full sm:h-auto sm:max-h-[95vh] sm:w-[600px] bg-white sm:rounded-[2.5rem] shadow-2xl flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar touch-pan-y"
-          >
-            <div className="p-6 sm:p-12 min-h-max pb-32">
+        <div 
+          ref={scrollOverlayRef}
+          className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl animate-fadeIn overflow-y-auto overscroll-contain flex justify-center items-start sm:p-4 md:p-8"
+        >
+          <div className="relative w-full min-h-full sm:min-h-0 sm:max-w-[600px] bg-white sm:rounded-[2.5rem] shadow-2xl flex flex-col">
+            <div className="p-6 sm:p-12 pb-32">
               {!orderSuccess ? (
                 <>
                   <div className="flex justify-between items-start mb-10">
@@ -290,7 +284,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                       </div>
                     </div>
                     
-                    {/* Form Fields - 16px font used to prevent auto-zoom on mobile */}
+                    {/* Form Fields - 16px (text-base) to prevent auto-zoom */}
                     <div className="space-y-6">
                       {['name', 'phone', 'city'].map(field => (
                         <div key={field}>
