@@ -15,6 +15,8 @@ import RefundPolicy from './views/RefundPolicy';
 import ShippingPolicy from './views/ShippingPolicy';
 import Header from './components/Header';
 import Footer from './components/Footer';
+// Added missing import for the AI Concierge component
+import AIConcierge from './components/AIConcierge';
 
 const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
@@ -32,27 +34,6 @@ const App: React.FC = () => {
   });
 
   const [user, setUser] = useState<User | null>(null);
-
-  // Real Visitor Heartbeat System
-  useEffect(() => {
-    const sessionId = sessionStorage.getItem('itx_session_id') || Math.random().toString(36).substring(2, 15);
-    sessionStorage.setItem('itx_session_id', sessionId);
-
-    const sendHeartbeat = async () => {
-      try {
-        await supabase.from('visitors').upsert({ 
-          id: sessionId, 
-          last_seen: new Date().toISOString() 
-        }, { onConflict: 'id' });
-      } catch (e) {
-        // Fallback or ignore
-      }
-    };
-
-    sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 30000); 
-    return () => clearInterval(interval);
-  }, []);
 
   const fetchProducts = useCallback(async () => {
     setIsSyncing(true);
@@ -115,6 +96,25 @@ const App: React.FC = () => {
       setIsSyncing(false);
     }
   }, []);
+
+  // REAL-TIME: Listen for new rows in the "orders" table
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-orders')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders' },
+        (payload) => {
+          console.log('Real-time order detected:', payload.new);
+          fetchOrders(); // Re-fetch immediately to update all lists/charts
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchOrders]);
 
   useEffect(() => {
     let mounted = true;
@@ -204,7 +204,6 @@ const App: React.FC = () => {
       const { error } = await supabase.from('orders').insert([dbPayload]);
       if (error) throw error;
 
-      setOrders(prev => [order, ...prev]);
       clearCart();
       return true;
     } catch (e: any) {
@@ -270,6 +269,8 @@ const App: React.FC = () => {
             <Route path="/shipping-policy" element={<ShippingPolicy />} />
           </Routes>
         </main>
+        {/* Rendered the AI Concierge for shopping assistance */}
+        <AIConcierge products={products} />
         <Footer />
       </div>
     </HashRouter>

@@ -47,9 +47,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [loginError, setLoginError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [liveVisitors, setLiveVisitors] = useState(1);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
   
   // Notification Settings
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
@@ -61,13 +61,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const prevOrderCount = useRef(orders.length);
 
-  // Filters & Sorting
+  // Audio Playback Logic
+  const playAlert = () => {
+    if (!notificationsEnabled || !isAudioUnlocked) return;
+    const toneToPlay = customTone || DEFAULT_ALERT_TONE;
+    const audio = new Audio(toneToPlay);
+    audio.play().catch(e => console.warn('Audio play failed:', e));
+  };
+
+  // Watch for new orders and play sound
+  useEffect(() => {
+    if (orders.length > prevOrderCount.current && prevOrderCount.current > 0) {
+      playAlert();
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("NEW ORDER RECEIVED", {
+          body: `Order from ${orders[0].customer.name} - Rs. ${orders[0].total.toLocaleString()}`,
+          icon: "/favicon.ico"
+        });
+      }
+    }
+    prevOrderCount.current = orders.length;
+  }, [orders.length, notificationsEnabled, isAudioUnlocked, customTone]);
+
+  const unlockAudio = () => {
+    setIsAudioUnlocked(true);
+    const audio = new Audio(customTone || DEFAULT_ALERT_TONE);
+    audio.muted = true;
+    audio.play().then(() => {
+      audio.pause();
+      audio.muted = false;
+    }).catch(() => {});
+  };
+
   const [productSearch, setProductSearch] = useState('');
-  const [productCategoryFilter, setProductCategoryFilter] = useState('All');
-  const [productSort, setProductSort] = useState<'name-asc' | 'name-desc' | 'price-asc' | 'price-desc'>('name-asc');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('All');
-
   const [newPassword, setNewPassword] = useState('');
 
   // Product Form with Variants
@@ -91,46 +119,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [newVariant, setNewVariant] = useState({ name: '', price: 0 });
 
-  // Real Visitor Monitoring
-  useEffect(() => {
-    const fetchVisitors = async () => {
-      try {
-        const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        const { count, error } = await supabase
-          .from('visitors')
-          .select('*', { count: 'exact', head: true })
-          .gt('last_seen', fiveMinsAgo);
-        
-        if (!error && count !== null) {
-          setLiveVisitors(Math.max(1, count));
-        }
-      } catch (e) {
-        setLiveVisitors(1);
-      }
-    };
-
-    fetchVisitors();
-    const interval = setInterval(fetchVisitors, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // New Order Alert Logic
-  useEffect(() => {
-    if (notificationsEnabled && orders.length > prevOrderCount.current) {
-      const toneToPlay = customTone || DEFAULT_ALERT_TONE;
-      const audio = new Audio(toneToPlay);
-      audio.play().catch(() => {});
-      
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("NEW ORDER RECEIVED", {
-          body: `Order from ${orders[0].customer.name} - Rs. ${orders[0].total.toLocaleString()}`,
-          icon: "/favicon.ico"
-        });
-      }
-    }
-    prevOrderCount.current = orders.length;
-  }, [orders, notificationsEnabled, customTone]);
-
   const toggleNotifications = () => {
     const nextValue = !notificationsEnabled;
     setNotificationsEnabled(nextValue);
@@ -146,7 +134,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         const base64 = reader.result as string;
         setCustomTone(base64);
         localStorage.setItem('itx_custom_tone', base64);
-        alert("Custom alert tone has been uploaded and set.");
+        alert("Alert tone updated.");
       };
       reader.readAsDataURL(file);
     }
@@ -159,25 +147,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleStatusChange = async (orderId: string, status: Order['status']) => {
-    // Optimistic UI update
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
     if (viewingOrder?.id === orderId) {
       setViewingOrder(prev => prev ? { ...prev, status } : null);
     }
-    const { error } = await supabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', orderId);
-    if (error) {
-      alert("Status sync failed. Re-syncing...");
-      refreshData();
-    }
+    await supabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', orderId);
   };
 
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setProductForm(prev => ({ ...prev, image: reader.result as string }));
-      };
+      reader.onloadend = () => setProductForm(prev => ({ ...prev, image: reader.result as string }));
       reader.readAsDataURL(file);
     }
   };
@@ -193,23 +174,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const removeVariant = (id: string) => {
-    setProductForm(prev => ({
-      ...prev,
-      variants: prev.variants.filter(v => v.id !== id)
-    }));
+    setProductForm(prev => ({ ...prev, variants: prev.variants.filter(v => v.id !== id) }));
   };
 
-  const formatCompact = (num: number) => {
-    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'm';
-    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
-    return num.toLocaleString();
-  };
-
-  // Analytics Engine
   const analyticsData = useMemo(() => {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    
     const filteredByDate = orders.filter(o => {
       const orderTime = new Date(o.date).getTime();
       if (dateRange === 'today') return orderTime >= today;
@@ -217,55 +187,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (dateRange === '30d') return orderTime >= today - (30 * 24 * 60 * 60 * 1000);
       return true;
     });
-
     const revenue = filteredByDate.reduce((sum, o) => sum + o.total, 0);
     const count = filteredByDate.length;
-    
-    // Group by day for the chart
     const chartMap: Record<string, number> = {};
     const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
+      const d = new Date(); d.setDate(d.getDate() - i);
       return d.toLocaleDateString('en-US', { weekday: 'short' });
     }).reverse();
-
     last7Days.forEach(day => chartMap[day] = 0);
-    
     filteredByDate.forEach(o => {
       const day = new Date(o.date).toLocaleDateString('en-US', { weekday: 'short' });
-      if (chartMap.hasOwnProperty(day)) {
-        chartMap[day] = (chartMap[day] || 0) + o.total;
-      }
+      if (chartMap.hasOwnProperty(day)) chartMap[day] += o.total;
     });
-
-    const chartData = Object.entries(chartMap).map(([name, value]) => ({ name, value }));
-    return { revenue, count, chartData };
+    return { revenue, count, chartData: Object.entries(chartMap).map(([name, value]) => ({ name, value })) };
   }, [orders, dateRange]);
 
   const filteredProducts = useMemo(() => {
-    let result = [...products];
-    if (productSearch) result = result.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()));
-    if (productCategoryFilter !== 'All') result = result.filter(p => p.category === productCategoryFilter);
-    result.sort((a, b) => {
-      if (productSort === 'price-asc') return a.price - b.price;
-      if (productSort === 'price-desc') return b.price - a.price;
-      return a.name.localeCompare(b.name);
-    });
-    return result;
-  }, [products, productSearch, productCategoryFilter, productSort]);
+    return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()));
+  }, [products, productSearch]);
 
   const filteredOrders = useMemo(() => {
     let result = [...orders];
     if (orderSearch) {
-      const search = orderSearch.toLowerCase();
-      result = result.filter(o => 
-        o.customer.name.toLowerCase().includes(search) || 
-        o.id.toLowerCase().includes(search) ||
-        (o.customer.city && o.customer.city.toLowerCase().includes(search))
-      );
+      const s = orderSearch.toLowerCase();
+      result = result.filter(o => o.customer.name.toLowerCase().includes(s) || o.id.toLowerCase().includes(s) || (o.customer.city && o.customer.city.toLowerCase().includes(s)));
     }
     if (orderStatusFilter !== 'All') result = result.filter(o => o.status === orderStatusFilter);
-    result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     return result;
   }, [orders, orderSearch, orderStatusFilter]);
 
@@ -286,92 +233,76 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setProductForm({ name: '', description: '', price: 0, category: 'Luxury Artisan', inventory: 0, image: '', variants: [] });
       setIsModalOpen(false);
       refreshData();
-    } catch (error: any) { alert(error.message); } finally { setIsSaving(false); }
+    } catch (e: any) { alert(e.message); } finally { setIsSaving(false); }
   };
 
   if (!user) {
     return (
-      <div className="container mx-auto px-4 py-40 flex flex-col items-center">
-        <div className="w-24 h-24 bg-black rounded-3xl flex items-center justify-center mb-10 text-4xl text-white shadow-2xl"><i className="fas fa-terminal"></i></div>
-        <h2 className="text-4xl font-serif italic font-bold uppercase mb-8 text-black">ITX Console Login</h2>
-        <form onSubmit={(e) => { e.preventDefault(); if (adminPasswordInput === systemPassword) login(UserRole.ADMIN); else setLoginError(true); }} className="w-full max-w-sm space-y-4">
-          <input type="password" placeholder="System Password" required className={`w-full p-6 bg-white border ${loginError ? 'border-red-500' : 'border-gray-100'} rounded-2xl font-black text-center outline-none focus:ring-1 focus:ring-black transition shadow-sm text-black`} value={adminPasswordInput} onChange={(e) => setAdminPasswordInput(e.target.value)} />
-          <button type="submit" className="w-full p-6 bg-black text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl">Secure Login <i className="fas fa-key ml-4"></i></button>
+      <div className="container mx-auto px-4 py-32 flex flex-col items-center">
+        <h2 className="text-3xl font-serif italic font-bold uppercase mb-8 text-black">Console Secure Login</h2>
+        <form onSubmit={(e) => { e.preventDefault(); if (adminPasswordInput === systemPassword) login(UserRole.ADMIN); else setLoginError(true); }} className="w-full max-w-xs space-y-4">
+          <input type="password" placeholder="Passkey" required className="w-full p-6 bg-white border border-gray-100 rounded-2xl font-black text-center outline-none shadow-sm text-black" value={adminPasswordInput} onChange={(e) => setAdminPasswordInput(e.target.value)} />
+          <button type="submit" className="w-full p-6 bg-black text-white rounded-2xl font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl italic">Authorize</button>
         </form>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#fafafa] min-h-screen pb-32">
-      <div className="container mx-auto px-8 py-12">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-12 gap-6">
-          <div className="space-y-1">
-            <h1 className="text-4xl font-serif font-bold italic text-black">Store <span className="not-italic text-blue-600">Analytics</span></h1>
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Merchant: {user.name}</p>
+    <div className="bg-[#fafafa] min-h-screen pb-32 text-black">
+      <div className="container mx-auto px-4 md:px-8 py-8 md:py-12">
+        {/* Mobile Audio Unlock */}
+        {!isAudioUnlocked && (
+          <div className="bg-blue-600 text-white p-6 rounded-3xl mb-8 flex flex-col md:flex-row items-center justify-between shadow-2xl animate-pulse">
+             <div className="flex items-center space-x-4 mb-4 md:mb-0">
+                <i className="fas fa-volume-up text-xl"></i>
+                <p className="font-bold text-xs uppercase tracking-widest">Enable Real-Time Audio Notifications</p>
+             </div>
+             <button onClick={unlockAudio} className="bg-white text-blue-600 px-8 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg italic">Unlock Audio</button>
           </div>
-          <div className="flex bg-white rounded-2xl p-1.5 border border-gray-200 shadow-sm overflow-x-auto">
+        )}
+
+        {/* Dashboard Header */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 md:mb-12 gap-6">
+          <div className="space-y-1">
+            <h1 className="text-3xl md:text-4xl font-serif font-bold italic">ITX <span className="text-blue-600">Console</span></h1>
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">Merchant: {user.name} • Live Monitor Active</p>
+          </div>
+          <div className="flex bg-white rounded-2xl p-1.5 border border-gray-200 shadow-sm w-full lg:w-auto overflow-x-auto no-scrollbar">
             {['overview', 'products', 'orders', 'settings'].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black hover:bg-gray-50'}`}>{tab}</button>
+              <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex-shrink-0 px-6 md:px-8 py-3 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black hover:bg-gray-50'}`}>
+                {tab === 'products' ? 'Listings' : tab}
+              </button>
             ))}
           </div>
         </div>
 
         {activeTab === 'overview' && (
-          <div className="space-y-10 animate-fadeIn">
-            {/* Real Traffic Pulse */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
-              <div className="lg:col-span-4 flex items-center space-x-6">
-                 <div className="relative">
-                    <div className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center animate-pulse shadow-sm">
-                       <i className="fas fa-signal text-lg"></i>
-                    </div>
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-4 w-4 bg-green-600"></span>
-                    </span>
-                 </div>
-                 <div>
-                    <p className="text-[11px] font-black uppercase tracking-widest text-black mb-1">Real-Time Pulse</p>
-                    <div className="flex items-center space-x-3">
-                       <span className="text-2xl font-black text-green-600">{liveVisitors}</span>
-                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Active Browsers</span>
-                    </div>
-                 </div>
+          <div className="space-y-8 animate-fadeIn">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="bg-black text-white p-6 md:p-8 rounded-3xl shadow-xl">
+                <p className="text-[9px] font-black uppercase opacity-60 mb-2 tracking-widest">Revenue</p>
+                <p className="text-2xl md:text-3xl font-black italic">Rs. {analyticsData.revenue.toLocaleString()}</p>
               </div>
-              <div className="lg:col-span-8 flex justify-end">
-                <div className="flex space-x-2 bg-gray-50 p-1 rounded-xl">
-                  {['today', '7d', '30d', 'all'].map(r => (
-                    <button key={r} onClick={() => setDateRange(r as any)} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${dateRange === r ? 'bg-black text-white shadow-md' : 'text-gray-400 hover:text-black'}`}>{r.toUpperCase()}</button>
-                  ))}
-                </div>
+              <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm">
+                <p className="text-[9px] font-black uppercase text-gray-400 mb-2 tracking-widest italic">Orders</p>
+                <p className="text-2xl md:text-3xl font-black italic">{analyticsData.count}</p>
+              </div>
+              <div className="bg-white p-6 md:p-8 rounded-3xl border border-gray-100 shadow-sm">
+                <p className="text-[9px] font-black uppercase text-gray-400 mb-2 tracking-widest italic">Listings</p>
+                <p className="text-2xl md:text-3xl font-black italic">{products.length}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="bg-black text-white p-8 rounded-3xl shadow-xl">
-                <p className="text-[10px] font-black uppercase opacity-60 mb-3 tracking-widest">Total Sales Volume</p>
-                <p className="text-4xl font-black">Rs. {formatCompact(analyticsData.revenue)}</p>
-              </div>
-              <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm text-black">
-                <p className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest italic">Success Ledger</p>
-                <p className="text-4xl font-black">{analyticsData.count} Orders</p>
-              </div>
-              <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm text-black">
-                <p className="text-[10px] font-black uppercase text-gray-400 mb-3 tracking-widest italic">Inventory Count</p>
-                <p className="text-4xl font-black">{products.length} Listings</p>
-              </div>
-            </div>
-
-            <div className="bg-white p-10 rounded-3xl border border-gray-100 shadow-sm">
-                <h3 className="text-[11px] font-black uppercase tracking-widest text-black mb-10 italic">Revenue Performance Graph</h3>
-                <div className="h-[350px] w-full">
+            <div className="bg-white p-6 md:p-10 rounded-3xl border border-gray-100 shadow-sm">
+                <h3 className="text-[10px] font-black uppercase tracking-widest mb-8 italic">Revenue Pulse</h3>
+                <div className="h-[250px] md:h-[350px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={analyticsData.chartData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 900, fill: '#9ca3af'}} />
-                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 900, fill: '#9ca3af'}} tickFormatter={(v) => formatCompact(v)} />
-                      <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px', fontWeight: 900}} />
+                      <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 900, fill: '#9ca3af'}} />
+                      <Tooltip />
                       <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                         {analyticsData.chartData.map((_, index) => <Cell key={`cell-${index}`} fill={index === analyticsData.chartData.length - 1 ? '#2563eb' : '#000'} />)}
                       </Bar>
@@ -383,17 +314,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {activeTab === 'products' && (
-          <div className="space-y-8 animate-fadeIn text-black">
-            <div className="flex justify-between items-center"><h2 className="text-3xl font-serif italic font-bold uppercase">Store Listings</h2><button onClick={() => setIsModalOpen(true)} className="bg-black text-white px-10 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl">New Listing</button></div>
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-               <table className="w-full text-left">
-                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Product</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Stock</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase text-right">Price</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase text-right">Action</th></tr></thead>
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl md:text-3xl font-serif italic font-bold uppercase">Inventory</h2>
+              <button onClick={() => setIsModalOpen(true)} className="bg-black text-white px-6 md:px-10 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl italic">New Listing</button>
+            </div>
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
+               <table className="w-full text-left min-w-[600px]">
+                  <thead className="bg-gray-50/50"><tr><th className="px-6 md:px-10 py-6 text-[9px] font-black text-gray-400 uppercase">Listing</th><th className="px-6 md:px-10 py-6 text-[9px] font-black text-gray-400 uppercase">Price</th><th className="px-6 md:px-10 py-6 text-[9px] font-black text-gray-400 uppercase text-right">Action</th></tr></thead>
                   <tbody>{filteredProducts.map(p => (
                     <tr key={p.id} className="border-t border-gray-50">
-                      <td className="px-10 py-6 flex items-center space-x-4"><img src={p.image} className="w-12 h-12 rounded-xl object-cover border" /><span className="font-black uppercase italic text-xs">{p.name}</span></td>
-                      <td className="px-10 py-6 font-black text-[10px]">{p.inventory} UNITS</td>
-                      <td className="px-10 py-6 text-right font-black">Rs. {p.price.toLocaleString()}</td>
-                      <td className="px-10 py-6 text-right"><button onClick={() => deleteProduct(p.id)} className="text-red-500 font-black uppercase text-[10px]">Remove</button></td>
+                      <td className="px-6 md:px-10 py-6 flex items-center space-x-4"><img src={p.image} className="w-10 h-10 rounded-lg object-cover" /><span className="font-black uppercase italic text-xs truncate max-w-[150px]">{p.name}</span></td>
+                      <td className="px-6 md:px-10 py-6 font-black text-xs italic">Rs. {p.price.toLocaleString()}</td>
+                      <td className="px-6 md:px-10 py-6 text-right"><button onClick={() => deleteProduct(p.id)} className="text-red-500 font-black uppercase text-[9px] tracking-widest italic">Delete</button></td>
                     </tr>
                   ))}</tbody>
                </table>
@@ -402,205 +335,208 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {activeTab === 'orders' && (
-          <div className="space-y-8 animate-fadeIn text-black">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-              <h2 className="text-3xl font-serif italic font-bold uppercase">Order Ledger</h2>
-              <div className="flex bg-white rounded-xl border border-gray-200 p-1 w-full md:w-auto">
-                 <input type="text" placeholder="Search ID, Name or City..." className="bg-transparent px-4 py-2 text-[10px] font-bold uppercase outline-none w-full" value={orderSearch} onChange={e => setOrderSearch(e.target.value)} />
-                 <select value={orderStatusFilter} onChange={e => setOrderStatusFilter(e.target.value)} className="bg-transparent border-l border-gray-100 px-4 py-2 text-[10px] font-black uppercase outline-none">
-                    {['All', 'Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
-                 </select>
+          <div className="space-y-6 animate-fadeIn">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <h2 className="text-2xl md:text-3xl font-serif italic font-bold uppercase">Order Ledger</h2>
+              <div className="bg-white rounded-xl border border-gray-200 px-4 py-2 w-full sm:w-64">
+                <input type="text" placeholder="Search ID, Name or City..." className="bg-transparent w-full text-[10px] font-bold uppercase outline-none" value={orderSearch} onChange={e => setOrderSearch(e.target.value)} />
               </div>
             </div>
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
+            
+            {/* Desktop View Table */}
+            <div className="hidden md:block bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
                <table className="w-full text-left min-w-[800px]">
-                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Order ID</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Customer</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">City</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Amount</th><th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase">Status</th></tr></thead>
-                  <tbody>{filteredOrders.length > 0 ? filteredOrders.map(o => (
+                  <thead className="bg-gray-50/50"><tr><th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase">Status & ID</th><th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase">Customer</th><th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase">City</th><th className="px-10 py-6 text-[9px] font-black text-gray-400 uppercase">Total</th></tr></thead>
+                  <tbody>{filteredOrders.map(o => (
                     <tr key={o.id} onClick={() => setViewingOrder(o)} className="border-t border-gray-50 cursor-pointer hover:bg-gray-50 transition-colors">
-                      <td className="px-10 py-6 font-black text-xs text-blue-600">#{o.id}</td>
+                      <td className="px-10 py-6">
+                        <div className="flex items-center space-x-3">
+                           <span className={`w-2 h-2 rounded-full ${o.status === 'Pending' ? 'bg-yellow-400' : 'bg-green-500'}`}></span>
+                           <span className="font-black text-xs text-blue-600">#{o.id}</span>
+                        </div>
+                        <p className={`text-[8px] font-black uppercase mt-1 ${o.status === 'Pending' ? 'text-yellow-600' : 'text-green-600'}`}>{o.status}</p>
+                      </td>
                       <td className="px-10 py-6 font-black uppercase text-xs">{o.customer.name}</td>
-                      <td className="px-10 py-6 font-black uppercase text-[10px] text-gray-400">{o.customer.city || 'N/A'}</td>
-                      <td className="px-10 py-6 font-black">Rs. {o.total.toLocaleString()}</td>
-                      <td className="px-10 py-6"><span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase ${o.status === 'Pending' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{o.status}</span></td>
+                      <td className="px-10 py-6 font-black uppercase text-[10px] text-gray-400 italic">{o.customer.city || 'N/A'}</td>
+                      <td className="px-10 py-6 font-black text-xs">Rs. {o.total.toLocaleString()}</td>
                     </tr>
-                  )) : (
-                    <tr><td colSpan={5} className="px-10 py-20 text-center text-[10px] font-black uppercase text-gray-400">No orders found matching the criteria.</td></tr>
-                  )}</tbody>
+                  ))}</tbody>
                </table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="md:hidden space-y-4">
+              {filteredOrders.map(o => (
+                <div key={o.id} onClick={() => setViewingOrder(o)} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm active:scale-95 transition-transform">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest italic mb-1">Order Identifier</p>
+                      <p className="font-black text-blue-600">#{o.id}</p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${o.status === 'Pending' ? 'bg-yellow-50 text-yellow-600' : 'bg-green-50 text-green-600'}`}>{o.status}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest italic mb-1">Customer</p>
+                      <p className="text-[10px] font-black uppercase truncate">{o.customer.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest italic mb-1">City</p>
+                      <p className="text-[10px] font-black uppercase italic text-gray-400">{o.customer.city || 'N/A'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-gray-50 flex justify-between items-center">
+                    <p className="text-[10px] font-black italic">Rs. {o.total.toLocaleString()}</p>
+                    <i className="fas fa-chevron-right text-gray-200 text-xs"></i>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
         {activeTab === 'settings' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fadeIn text-black">
-            <div className="bg-white rounded-[2.5rem] p-12 border border-gray-100 shadow-sm">
-              <h2 className="text-3xl font-serif italic font-bold mb-8 uppercase">Notifications</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fadeIn">
+            <div className="bg-white rounded-[2rem] p-8 md:p-12 border border-gray-100 shadow-sm">
+              <h2 className="text-2xl font-serif italic font-bold mb-8 uppercase italic">Protocol Alerts</h2>
               <div className="space-y-8">
-                <div className="flex items-center justify-between p-6 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="flex items-center justify-between p-6 bg-gray-50 rounded-2xl">
                   <div>
-                    <h3 className="font-black uppercase text-sm mb-1 italic">Order Alerts</h3>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Toggle audible alerts for new orders.</p>
+                    <h3 className="font-black uppercase text-xs mb-1">Audio Notifications</h3>
+                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">Play alert on new orders</p>
                   </div>
-                  <button onClick={toggleNotifications} className={`w-14 h-8 rounded-full transition-all relative flex items-center px-1 ${notificationsEnabled ? 'bg-green-500' : 'bg-gray-300'}`}>
-                    <div className={`w-6 h-6 bg-white rounded-full shadow-md transition-all ${notificationsEnabled ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                  <button onClick={toggleNotifications} className={`w-12 h-7 rounded-full transition-all relative flex items-center px-1 ${notificationsEnabled ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full shadow-md transition-all ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0'}`}></div>
                   </button>
                 </div>
-                
-                <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100">
-                  <h3 className="font-black uppercase text-sm mb-4 italic">Custom Alert Tone</h3>
-                  <div className="flex flex-col space-y-4">
-                    <label className="flex items-center justify-center border-2 border-dashed border-gray-200 rounded-xl p-6 cursor-pointer hover:border-blue-600 transition group">
-                       <div className="text-center group-hover:scale-105 transition-transform">
-                          <i className="fas fa-music text-blue-600 mb-2 text-xl"></i>
-                          <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{customTone ? 'Custom Tone Active' : 'Upload MP3/WAV Alert'}</p>
-                       </div>
-                       <input type="file" className="hidden" accept="audio/*" onChange={handleToneUpload} />
-                    </label>
-                    {customTone && (
-                      <div className="flex items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-gray-100">
-                        <div className="flex items-center space-x-3">
-                          <button onClick={() => new Audio(customTone).play()} className="bg-blue-600 text-white w-10 h-10 rounded-full flex items-center justify-center shadow-md hover:bg-blue-700 transition"><i className="fas fa-play"></i></button>
-                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Active Tone</span>
-                        </div>
-                        <button onClick={() => { setCustomTone(null); localStorage.removeItem('itx_custom_tone'); }} className="text-red-500 hover:text-red-700 transition"><i className="fas fa-trash"></i></button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <label className="flex items-center justify-center border-2 border-dashed border-gray-200 rounded-2xl p-8 cursor-pointer hover:border-blue-600 transition bg-gray-50/50">
+                   <div className="text-center">
+                      <i className="fas fa-music text-blue-600 mb-2"></i>
+                      <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest italic">{customTone ? 'Tone Uploaded' : 'Change Alert Tone'}</p>
+                   </div>
+                   <input type="file" className="hidden" accept="audio/*" onChange={handleToneUpload} />
+                </label>
               </div>
             </div>
-            <div className="bg-white rounded-[2.5rem] p-12 border border-gray-100 shadow-sm">
-              <h2 className="text-3xl font-serif italic font-bold mb-8 uppercase">Console Security</h2>
+            <div className="bg-white rounded-[2rem] p-8 md:p-12 border border-gray-100 shadow-sm">
+              <h2 className="text-2xl font-serif italic font-bold mb-8 uppercase italic">Master Security</h2>
               <form onSubmit={(e) => { e.preventDefault(); if (newPassword) { setSystemPassword(newPassword); alert("Passkey updated."); } }} className="space-y-6">
-                <div><label className="block text-[10px] font-black uppercase text-gray-400 mb-2 italic">New Management Passkey</label><input type="password" required className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
-                <button type="submit" className="bg-black text-white px-10 py-4 rounded-xl text-[10px] font-black uppercase italic hover:bg-blue-600 shadow-xl transition">Apply Protocol Update</button>
+                <div>
+                   <label className="block text-[9px] font-black uppercase text-gray-400 mb-2 italic tracking-widest">New System Passkey</label>
+                   <input type="password" required className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                </div>
+                <button type="submit" className="w-full bg-black text-white py-5 rounded-2xl text-[10px] font-black uppercase italic hover:bg-blue-600 transition shadow-xl italic tracking-widest">Update Security Protocol</button>
               </form>
             </div>
           </div>
         )}
       </div>
 
-      {/* Product Listing Modal with Variant Restore */}
+      {/* Listing Creation Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-2xl p-10 overflow-y-auto max-h-[90vh] custom-scrollbar text-black">
-            <h2 className="text-2xl font-serif font-bold italic uppercase mb-8 border-b pb-4">New Listing</h2>
+          <div className="bg-white rounded-[2rem] w-full max-w-2xl p-8 md:p-10 overflow-y-auto max-h-[90vh] custom-scrollbar shadow-2xl">
+            <div className="flex justify-between items-center mb-8 border-b pb-4">
+              <h2 className="text-xl font-serif font-bold italic uppercase italic">Create New Listing</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-black"><i className="fas fa-times"></i></button>
+            </div>
             <form onSubmit={handleSaveProduct} className="space-y-6">
                <div className="grid grid-cols-1 gap-6">
-                  <input required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Product Name" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
-                  <textarea required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold h-32 outline-none resize-none" placeholder="Description" value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} />
+                  <input required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none italic" placeholder="Product Name" value={productForm.name} onChange={e => setProductForm({...productForm, name: e.target.value})} />
+                  <textarea required className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold h-24 outline-none resize-none italic" placeholder="Full Description" value={productForm.description} onChange={e => setProductForm({...productForm, description: e.target.value})} />
                   <div className="grid grid-cols-2 gap-4">
-                    <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Base Price (PKR)" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} />
-                    <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none" placeholder="Initial Inventory" value={productForm.inventory || ''} onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})} />
+                    <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none italic" placeholder="Base Price" value={productForm.price || ''} onChange={e => setProductForm({...productForm, price: Number(e.target.value)})} />
+                    <input required type="number" className="w-full bg-gray-50 border border-gray-100 rounded-xl px-5 py-4 font-bold outline-none italic" placeholder="Stock Level" value={productForm.inventory || ''} onChange={e => setProductForm({...productForm, inventory: Number(e.target.value)})} />
                   </div>
-
-                  {/* RESTORED: Variant Feature in Listing */}
+                  
                   <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100">
-                    <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-4 italic">Special Editions / Variants</h3>
-                    <div className="space-y-3 mb-4">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-4 italic">Available Editions / Variants</p>
+                    <div className="space-y-2 mb-4">
                       {productForm.variants.map((v) => (
                         <div key={v.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100">
-                          <div><span className="font-black text-xs uppercase">{v.name}</span><span className="ml-3 text-[10px] text-blue-600 font-bold">Rs. {v.price.toLocaleString()}</span></div>
+                          <span className="font-black text-[10px] uppercase italic">{v.name} (Rs. {v.price.toLocaleString()})</span>
                           <button type="button" onClick={() => removeVariant(v.id)} className="text-red-500 text-xs"><i className="fas fa-trash"></i></button>
                         </div>
                       ))}
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <input className="flex-grow bg-white border border-gray-200 rounded-lg px-4 py-3 text-[10px] font-bold uppercase" placeholder="Edition Name" value={newVariant.name} onChange={e => setNewVariant({...newVariant, name: e.target.value})} />
-                      <input type="number" className="sm:w-32 bg-white border border-gray-200 rounded-lg px-4 py-3 text-[10px] font-bold uppercase" placeholder="Price" value={newVariant.price || ''} onChange={e => setNewVariant({...newVariant, price: Number(e.target.value)})} />
-                      <button type="button" onClick={addVariant} className="bg-black text-white px-6 py-3 rounded-lg text-[10px] font-black uppercase italic tracking-widest">Add</button>
+                    <div className="flex gap-3">
+                      <input className="flex-grow bg-white border border-gray-200 rounded-lg px-4 py-2 text-[10px] font-bold uppercase" placeholder="Edition Name" value={newVariant.name} onChange={e => setNewVariant({...newVariant, name: e.target.value})} />
+                      <input type="number" className="w-20 bg-white border border-gray-200 rounded-lg px-4 py-2 text-[10px] font-bold uppercase" placeholder="Price" value={newVariant.price || ''} onChange={e => setNewVariant({...newVariant, price: Number(e.target.value)})} />
+                      <button type="button" onClick={addVariant} className="bg-black text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase">Add</button>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 italic">Listing Image Asset</label>
-                    <label className="flex-grow bg-gray-50 border border-gray-100 border-dashed rounded-xl px-5 py-4 font-bold cursor-pointer hover:bg-gray-100 transition flex items-center justify-center text-xs uppercase italic">
-                       <i className="fas fa-upload mr-2 text-blue-600"></i> {productForm.image ? 'Image Uploaded' : 'Select Listing Image'}
+                  <div>
+                    <label className="block text-[9px] font-black uppercase text-gray-400 mb-2 italic">Listing Asset</label>
+                    <label className="w-full bg-gray-50 border border-gray-200 border-dashed rounded-xl px-5 py-8 cursor-pointer hover:bg-gray-100 transition flex flex-col items-center justify-center">
+                       <i className="fas fa-cloud-upload-alt text-blue-600 mb-2 text-xl"></i>
+                       <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{productForm.image ? 'Image Loaded' : 'Upload Listing Image'}</span>
                        <input type="file" className="hidden" accept="image/*" onChange={handleImageFile} />
                     </label>
-                    {productForm.image && <img src={productForm.image} className="mt-2 w-20 h-20 rounded-xl object-cover border" alt="Preview" />}
                   </div>
                </div>
-               <div className="flex space-x-4 pt-10"><button type="submit" disabled={isSaving} className="flex-grow bg-black text-white py-5 rounded-xl font-black uppercase italic shadow-2xl">{isSaving ? 'Processing...' : 'Publish to Store'}</button><button type="button" onClick={() => setIsModalOpen(false)} className="bg-gray-100 px-10 py-5 rounded-xl font-black uppercase">Cancel</button></div>
+               <button type="submit" disabled={isSaving} className="w-full bg-black text-white py-5 rounded-2xl font-black uppercase italic shadow-2xl tracking-widest">{isSaving ? 'Processing...' : 'Publish Listing'}</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Detailed Order Manifest Modal with RESTORED City & Copy buttons */}
+      {/* Order Detail Manifest Modal */}
       {viewingOrder && (
-        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-3xl p-8 md:p-12 overflow-y-auto max-h-[95vh] custom-scrollbar shadow-2xl border border-gray-100 text-black">
-            <div className="flex justify-between items-start mb-12">
-               <div><h2 className="text-3xl font-serif font-bold italic uppercase leading-tight mb-2">Order Manifest</h2><p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">ID: #{viewingOrder.id}</p></div>
-               <button onClick={() => setViewingOrder(null)} className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition"><i className="fas fa-times"></i></button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
-               <div className="space-y-6">
-                  <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400 italic border-b border-gray-100 pb-2">Customer Profile</h3>
-                  <div className="group relative">
-                    <p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">Name</p>
-                    <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl border border-transparent hover:border-gray-100 transition">
-                      <p className="font-black uppercase text-lg">{viewingOrder.customer.name}</p>
-                      <button onClick={() => handleCopy(viewingOrder.customer.name, 'name')} className="text-gray-400 hover:text-blue-600 p-2"><i className={`fas ${copyStatus === 'name' ? 'fa-check text-green-500' : 'fa-copy'}`}></i></button>
-                    </div>
-                  </div>
-                  <div className="group relative">
-                    <p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">Phone</p>
-                    <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl border border-transparent hover:border-gray-100 transition">
-                      <p className="font-black text-lg">{viewingOrder.customer.phone}</p>
-                      <button onClick={() => handleCopy(viewingOrder.customer.phone, 'phone')} className="text-gray-400 hover:text-blue-600 p-2"><i className={`fas ${copyStatus === 'phone' ? 'fa-check text-green-500' : 'fa-copy'}`}></i></button>
-                    </div>
-                  </div>
-                  <div className="group relative">
-                    <p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">City</p>
-                    <div className="flex items-center justify-between bg-gray-50/50 p-3 rounded-xl border border-transparent hover:border-gray-100 transition">
-                      <p className="font-black uppercase text-lg">{viewingOrder.customer.city || 'N/A'}</p>
-                      <button onClick={() => handleCopy(viewingOrder.customer.city || '', 'city')} className="text-gray-400 hover:text-blue-600 p-2"><i className={`fas ${copyStatus === 'city' ? 'fa-check text-green-500' : 'fa-copy'}`}></i></button>
-                    </div>
-                  </div>
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="bg-white rounded-[2rem] w-full max-w-2xl p-6 md:p-10 overflow-y-auto max-h-[95vh] custom-scrollbar shadow-2xl">
+            <div className="flex justify-between items-start mb-10">
+               <div>
+                  <h2 className="text-2xl font-serif font-bold italic uppercase italic">Order Manifest</h2>
+                  <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic mt-1">ID: #{viewingOrder.id}</p>
                </div>
-               <div className="space-y-6">
-                  <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400 italic border-b border-gray-100 pb-2">Logistics Details</h3>
-                  <div className="group relative">
-                    <p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">Address</p>
-                    <div className="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 relative">
-                      <p className="font-bold italic text-sm leading-relaxed pr-10">{viewingOrder.customer.address}</p>
-                      <button onClick={() => handleCopy(viewingOrder.customer.address, 'address')} className="absolute top-2 right-2 text-gray-400 hover:text-blue-600 p-2"><i className={`fas ${copyStatus === 'address' ? 'fa-check text-green-500' : 'fa-copy'}`}></i></button>
-                    </div>
-                  </div>
-                  <div><p className="text-[9px] font-black uppercase text-gray-400 mb-1 italic">Protocol</p><p className="font-black uppercase text-blue-600 bg-blue-50 px-3 py-1 rounded-lg inline-block text-[10px]">Cash On Delivery (COD)</p></div>
-               </div>
+               <button onClick={() => setViewingOrder(null)} className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition"><i className="fas fa-times"></i></button>
             </div>
-
-            <div className="mb-12">
-               <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400 italic border-b border-gray-100 pb-2 mb-6 uppercase">Inventory Acquired</h3>
-               <div className="space-y-4">
-                  {viewingOrder.items.map((item, i) => (
-                    <div key={i} className="flex items-center space-x-6 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                      <img src={item.product.image} className="w-16 h-16 rounded-xl object-cover shadow-sm" />
-                      <div className="flex-grow">
-                         <p className="font-black uppercase text-sm">{item.product.name}</p>
-                         <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 italic">Edition: {item.variantName || 'Standard'}</p>
-                      </div>
-                      <div className="text-right">
-                         <p className="font-black text-sm">Rs. {item.product.price.toLocaleString()}</p>
-                         <p className="text-[10px] font-bold text-gray-400 uppercase italic">Qty: {item.quantity}</p>
+            <div className="space-y-8 mb-10">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {['name', 'phone', 'city'].map((f) => (
+                    <div key={f} className="relative">
+                      <p className="text-[8px] font-black uppercase text-gray-400 mb-1 italic tracking-widest">{f}</p>
+                      <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl">
+                        <p className="font-black uppercase text-sm truncate">{(viewingOrder.customer as any)[f] || 'N/A'}</p>
+                        <button onClick={() => handleCopy((viewingOrder.customer as any)[f] || '', f)} className="text-gray-400 hover:text-blue-600 ml-2"><i className={`fas ${copyStatus === f ? 'fa-check text-green-500' : 'fa-copy'} text-xs`}></i></button>
                       </div>
                     </div>
                   ))}
+                  <div>
+                    <p className="text-[8px] font-black uppercase text-gray-400 mb-1 italic tracking-widest">Address</p>
+                    <div className="bg-gray-50 p-4 rounded-xl flex items-center justify-between">
+                       <p className="font-bold italic text-xs leading-relaxed truncate"> {viewingOrder.customer.address} </p>
+                       <button onClick={() => handleCopy(viewingOrder.customer.address, 'address')} className="text-gray-400 hover:text-blue-600 ml-2"><i className={`fas ${copyStatus === 'address' ? 'fa-check text-green-500' : 'fa-copy'} text-xs`}></i></button>
+                    </div>
+                  </div>
+               </div>
+               
+               <div>
+                  <h3 className="text-[9px] font-black uppercase text-gray-400 mb-4 italic tracking-widest">Items Reserved</h3>
+                  <div className="space-y-3">
+                    {viewingOrder.items.map((it, i) => (
+                      <div key={i} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                        <img src={it.product.image} className="w-12 h-12 rounded-lg object-cover" />
+                        <div className="flex-grow">
+                          <p className="font-black uppercase text-[10px] italic">{it.product.name}</p>
+                          <p className="text-[8px] font-bold text-gray-400 uppercase italic">Edition: {it.variantName || 'Standard'}</p>
+                        </div>
+                        <p className="font-black text-[10px] italic whitespace-nowrap">Rs. {it.product.price.toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
                </div>
             </div>
-
-            <div className="flex flex-col md:flex-row justify-between items-center p-8 bg-black text-white rounded-3xl mb-12">
-               <div className="mb-4 md:mb-0"><p className="text-[10px] font-black uppercase tracking-widest opacity-60 italic mb-2">Total Amount Payable</p><p className="text-4xl font-black italic">Rs. {viewingOrder.total.toLocaleString()}</p></div>
-               <div className="flex items-center space-x-4">
-                  <select value={viewingOrder.status} onChange={(e) => handleStatusChange(viewingOrder.id, e.target.value as any)} className="bg-white/10 border border-white/20 text-[11px] font-black uppercase px-6 py-4 rounded-xl outline-none hover:bg-white/20 transition cursor-pointer">
-                    {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s} className="text-black">{s}</option>)}
-                  </select>
-                  <button onClick={() => window.print()} className="w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-700 transition"><i className="fas fa-print"></i></button>
+            
+            <div className="bg-black text-white p-8 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-6">
+               <div className="text-center md:text-left">
+                  <p className="text-[9px] font-black uppercase opacity-60 mb-1 italic tracking-widest">Total Payable (COD)</p>
+                  <p className="text-3xl font-black italic">Rs. {viewingOrder.total.toLocaleString()}</p>
                </div>
+               <select value={viewingOrder.status} onChange={(e) => handleStatusChange(viewingOrder.id, e.target.value as any)} className="bg-white/10 border border-white/20 text-[10px] font-black uppercase px-6 py-4 rounded-xl outline-none italic cursor-pointer">
+                 {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s} className="text-black">{s}</option>)}
+               </select>
             </div>
           </div>
         </div>
