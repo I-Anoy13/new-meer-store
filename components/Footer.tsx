@@ -45,7 +45,6 @@ const Footer: React.FC = () => {
           <div className="flex space-x-8 mt-6 md:mt-0 text-gray-300">
             <i className="fab fa-instagram hover:text-black cursor-pointer transition"></i>
             <i className="fab fa-tiktok hover:text-black cursor-pointer transition"></i>
-            <i className="fab fa-whatsapp hover:text-black cursor-pointer transition"></i>
           </div>
         </div>
       </div>

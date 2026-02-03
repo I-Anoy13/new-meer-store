@@ -21,8 +21,28 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
 
+  // Ensure customer starts at the top of the page on landing
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [id]);
+
+  // Fake Live Viewers - small figure 18-23 with green indicator
+  const [viewers, setViewers] = useState(18 + Math.floor(Math.random() * 6));
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setViewers(prev => {
+        const change = Math.random() > 0.5 ? 1 : -1;
+        const next = prev + change;
+        if (next < 18) return 18;
+        if (next > 23) return 23;
+        return next;
+      });
+    }, 4500);
+    return () => clearInterval(interval);
+  }, []);
+
   // Flash Sale Timer
-  const [timeLeft, setTimeLeft] = useState(3600);
+  const [timeLeft, setTimeLeft] = useState(3600 + Math.floor(Math.random() * 3600));
   useEffect(() => {
     const timer = setInterval(() => setTimeLeft(prev => (prev > 0 ? prev - 1 : 0)), 1000);
     return () => clearInterval(timer);
@@ -34,7 +54,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Fake Purchase Notification
+  // Fake Purchase Notification - FIXED POSITION for visibility anywhere on the page
   const [purchaseNotice, setPurchaseNotice] = useState<{ name: string, city: string } | null>(null);
   const [showPurchaseNotice, setShowPurchaseNotice] = useState(false);
 
@@ -46,27 +66,16 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       setShowPurchaseNotice(true);
       setTimeout(() => setShowPurchaseNotice(false), 5000);
     };
-    const initialDelay = setTimeout(triggerNotice, 2000);
-    const interval = setInterval(triggerNotice, 20000);
+    const initialDelay = setTimeout(triggerNotice, 3000);
+    const interval = setInterval(triggerNotice, 25000);
     return () => { clearTimeout(initialDelay); clearInterval(interval); };
   }, []);
 
-  // MOBILE: Professional Body Scroll Lock
+  // Professional Body Scroll Lock when modal is open
   useEffect(() => {
     if (isOrderModalOpen) {
-      const scrollY = window.scrollY;
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.width = '100%';
       document.body.style.overflow = 'hidden';
-      return () => {
-        const scrollY = document.body.style.top;
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.width = '';
-        document.body.style.overflow = '';
-        window.scrollTo(0, parseInt(scrollY || '0') * -1);
-      };
+      return () => { document.body.style.overflow = 'unset'; };
     }
   }, [isOrderModalOpen]);
 
@@ -80,7 +89,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   if (!product) {
     return (
       <div className="container mx-auto px-4 py-32 text-center text-black">
-        <h2 className="text-3xl font-serif font-bold italic uppercase tracking-tighter italic">Timepiece Not Found</h2>
+        <h2 className="text-3xl font-serif font-bold italic uppercase tracking-tighter text-black">Piece Not Found</h2>
         <Link to="/" className="text-blue-600 mt-6 inline-block font-black uppercase text-[10px] tracking-widest hover:underline italic">Return to Collection</Link>
       </div>
     );
@@ -109,89 +118,117 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   };
 
   return (
-    <div className="bg-white animate-fadeIn pb-24 lg:pb-0 relative text-black">
-      {/* Flash Sale Banner */}
-      <div className="bg-red-600 text-white py-3 text-center overflow-hidden">
-        <div className="container mx-auto px-4 flex items-center justify-center space-x-4">
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Exclusive Flash Sale — 25% Reserved Discount</span>
-          <div className="h-4 w-px bg-white/30 hidden md:block"></div>
-          <span className="text-xs md:text-sm font-mono font-bold tracking-widest">ENDS IN: {formatTime(timeLeft)}</span>
+    <div className="bg-white animate-fadeIn pb-24 lg:pb-0 relative text-black overflow-x-hidden">
+      {/* 1st Sight: Flash Sale Sticky Banner */}
+      <div className="bg-red-600 text-white py-2 text-center sticky top-16 z-50 shadow-md">
+        <div className="container mx-auto px-4 flex items-center justify-center space-x-2 md:space-x-6">
+          <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">FLASH SALE — 25% DISCOUNT RESERVED</span>
+          <div className="h-3 w-px bg-white/30"></div>
+          <span className="text-[10px] md:text-xs font-mono font-bold tracking-widest uppercase">ENDS: {formatTime(timeLeft)}</span>
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-12 lg:py-20 relative">
-        {/* Fake Purchase Notice Popup */}
-        <div className={`fixed bottom-24 right-6 md:absolute md:top-0 md:right-0 z-40 transition-all duration-700 transform ${showPurchaseNotice ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0 pointer-events-none'}`}>
-          <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-4 min-w-[280px]">
-            <div className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center shrink-0 animate-bounce"><i className="fas fa-shopping-bag text-xs"></i></div>
+      <div className="container mx-auto px-4 md:px-6 py-4 lg:py-16 relative">
+        {/* Fixed Purchase Popup - Always visible on scroll */}
+        <div className={`fixed bottom-24 left-4 right-4 md:left-auto md:right-8 z-[100] transition-all duration-700 transform ${showPurchaseNotice ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0 pointer-events-none'}`}>
+          <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-3 mx-auto max-w-[320px]">
+            <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shrink-0 animate-bounce shadow-md"><i className="fas fa-check-circle text-sm"></i></div>
             <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-600 mb-0.5 italic">Live Acquisition</p>
-              <p className="text-[11px] font-bold text-black leading-tight italic">{purchaseNotice?.name} from {purchaseNotice?.city}<br/><span className="text-gray-400 italic">just acquired this piece</span></p>
+              <p className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-600 mb-0.5 italic">Live Acquisition</p>
+              <p className="text-[10px] font-bold text-black leading-tight italic">
+                {purchaseNotice?.name} from {purchaseNotice?.city}<br/>
+                <span className="text-gray-400 font-normal">just ordered this masterpiece</span>
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-16">
+          {/* 1st Sight: Prominent Product Image */}
           <div className="lg:col-span-5">
-            <div className="relative aspect-[4/5] min-h-[400px] bg-gray-50 rounded-[2rem] overflow-hidden shadow-sm border border-gray-100 flex items-center justify-center group">
+            <div className="relative aspect-[4/5] bg-gray-50 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden shadow-inner border border-gray-100 flex items-center justify-center group">
               <img src={product.image} alt={product.name} onError={handleImageError} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+              <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest italic shadow-lg">-25% OFF</div>
+              
+              {/* Live Viewers Indicator - Small & Green */}
+              <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/10">
+                 <span className="flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+                 </span>
+                 <span className="text-[9px] font-black uppercase tracking-widest">{viewers} Live Viewers</span>
+              </div>
             </div>
           </div>
 
           <div className="lg:col-span-7 flex flex-col justify-center">
-            <h1 className="text-4xl lg:text-7xl font-serif font-bold italic uppercase leading-tight mb-6 italic">{product.name}</h1>
-            <div className="flex items-center space-x-6 mb-8">
-              <div className="flex flex-col">
-                <span className="text-4xl font-black">Rs. {currentPrice.toLocaleString()}</span>
-                <span className="text-[10px] text-gray-400 line-through font-bold">Rs. {(currentPrice * 1.25).toLocaleString()}</span>
-              </div>
-              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-4 py-1.5 rounded-full uppercase italic border border-blue-100 italic">Cash On Delivery</span>
+            <div className="mb-2">
+               <span className="text-blue-600 text-[9px] font-black uppercase tracking-widest italic">{product.category}</span>
+               <h1 className="text-2xl md:text-5xl lg:text-7xl font-serif font-bold italic uppercase leading-tight mt-1 italic text-black">{product.name}</h1>
             </div>
-            <p className="text-gray-600 text-lg leading-relaxed mb-8 italic">{product.description}</p>
 
-            {/* Variant Selector */}
+            <div className="flex items-center space-x-4 mb-6">
+              <div className="flex flex-col">
+                <span className="text-2xl md:text-4xl font-black italic text-black">Rs. {currentPrice.toLocaleString()}</span>
+                <span className="text-[10px] text-gray-400 line-through font-bold italic">Rs. {(currentPrice / 0.75).toLocaleString()}</span>
+              </div>
+              <span className="text-[9px] font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full uppercase italic border border-green-100">Free COD Express</span>
+            </div>
+
+            {/* Happy Customer Social Proof */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 border-dashed">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="flex -space-x-2">
+                    {[1, 2, 3].map(i => (
+                      <img key={i} className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover" src={`https://i.pravatar.cc/150?u=${i + 70}`} alt="client" />
+                    ))}
+                    <div className="h-8 w-8 rounded-full ring-2 ring-white bg-black flex items-center justify-center text-[8px] font-black text-white">+18k</div>
+                  </div>
+                  <div className="hidden sm:block">
+                    <div className="flex text-yellow-500 space-x-0.5">
+                        {[1, 2, 3, 4, 5].map(i => <i key={i} className="fas fa-star text-[7px]"></i>)}
+                    </div>
+                    <p className="text-[8px] font-black uppercase tracking-widest text-gray-400 italic">10,000+ Happy Customers</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                   <p className="text-[9px] font-black uppercase text-blue-600 italic leading-none">Verified Horology</p>
+                   <p className="text-[8px] font-bold text-gray-400 uppercase mt-0.5">Pakistan's Choice</p>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-gray-600 text-sm md:text-lg leading-relaxed mb-6 italic">{product.description}</p>
+
+            {/* Shaking COD Button */}
+            <div className="mb-8">
+              <button onClick={() => setIsOrderModalOpen(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">
+                Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i>
+              </button>
+              <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">Payment strictly upon receipt of parcel</p>
+            </div>
+
+            {/* Editions Selection */}
             {product.variants && product.variants.length > 0 && (
               <div className="mb-10">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-4 italic">Select Edition</p>
-                <div className="flex flex-wrap gap-4">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-3 italic">Available Editions</p>
+                <div className="grid grid-cols-2 gap-2">
                   {product.variants.map((v) => (
-                    <button key={v.id} onClick={() => setSelectedVariant(v.id)} className={`px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${selectedVariant === v.id ? 'bg-black text-white border-black shadow-xl scale-105' : 'bg-white text-gray-400 border-gray-100 hover:border-black hover:text-black'}`}>
+                    <button key={v.id} onClick={() => setSelectedVariant(v.id)} className={`px-3 py-3 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${selectedVariant === v.id ? 'bg-black text-white border-black shadow-md scale-[1.02]' : 'bg-white text-gray-400 border-gray-100 hover:border-black'}`}>
                       {v.name}
-                      <span className="block text-[8px] opacity-60 mt-1 italic">Rs. {v.price.toLocaleString()}</span>
+                      <span className="block text-[7px] opacity-60 mt-0.5 italic">Rs. {v.price.toLocaleString()}</span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Happy Customer & Ratings Section */}
-            <div className="mb-8 p-6 bg-gray-50 rounded-[2rem] border border-gray-100 border-dashed">
-              <div className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-6">
-                <div className="flex -space-x-3">
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <img key={i} className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src={`https://i.pravatar.cc/150?u=${i + 30}`} alt="customer" />
-                  ))}
-                  <div className="h-10 w-10 rounded-full ring-4 ring-white bg-black flex items-center justify-center text-[10px] font-black text-white">+15k</div>
-                </div>
-                <div className="text-center sm:text-left">
-                   <p className="text-[12px] font-black uppercase tracking-[0.2em] italic">Artisan Approved</p>
-                   <div className="flex justify-center sm:justify-start text-yellow-500 mt-1 space-x-1">
-                      {[1, 2, 3, 4, 5].map(i => <i key={i} className="fas fa-star text-[10px]"></i>)}
-                      <span className="ml-2 text-[9px] font-black text-gray-400 italic">(4.9/5 Rating)</span>
-                   </div>
-                </div>
-              </div>
-            </div>
-
-            <button onClick={() => setIsOrderModalOpen(true)} className="w-full lg:w-max bg-black text-white font-black text-[12px] uppercase tracking-[0.3em] py-6 px-16 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic">
-              Order Cash On Delivery
-            </button>
-
-            <div className="grid grid-cols-2 gap-8 border-t border-gray-100 pt-12 mt-12">
+            <div className="grid grid-cols-2 gap-4 border-t border-gray-100 pt-8 mt-4 mb-12">
               {TRUST_BADGES.map((badge, idx) => (
-                <div key={idx} className="flex items-center space-x-5">
-                  <div className="w-14 h-14 flex items-center justify-center bg-gray-50 rounded-2xl text-blue-600 border border-gray-100"><i className={`fas ${badge.icon} text-xl`}></i></div>
-                  <span className="text-[11px] font-black uppercase tracking-widest text-gray-500 italic">{badge.text}</span>
+                <div key={idx} className="flex items-center space-x-2">
+                  <div className="w-8 h-8 md:w-12 md:h-12 flex items-center justify-center bg-gray-50 rounded-lg text-blue-600 border border-gray-100"><i className={`fas ${badge.icon} text-sm md:text-lg`}></i></div>
+                  <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest text-gray-500 italic leading-tight">{badge.text}</span>
                 </div>
               ))}
             </div>
@@ -199,46 +236,75 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         </div>
       </div>
 
+      {/* COD ORDER FORM MODAL - SCROLLABLE FOR MOBILE */}
       {isOrderModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-md animate-fadeIn p-4 overflow-hidden">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-xl max-h-[95vh] flex flex-col shadow-2xl border border-gray-100 overflow-hidden">
-            <div className="p-6 md:p-10 overflow-y-auto custom-scrollbar flex-grow">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md animate-fadeIn p-2 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-[1.5rem] sm:rounded-[2rem] w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar">
+            <div className="p-5 sm:p-10 flex flex-col">
               {!orderSuccess ? (
                 <>
                   <div className="flex justify-between items-start mb-6">
-                    <h2 className="text-xl md:text-2xl font-serif font-bold uppercase italic tracking-tighter italic text-black">Recipient Manifest</h2>
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-serif font-bold uppercase italic tracking-tighter text-black">Cash on delivery</h2>
+                      <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1 italic">10,000+ Happy Customers In Pakistan</p>
+                    </div>
                     <button onClick={() => setIsOrderModalOpen(false)} className="text-gray-400 hover:text-black transition p-2"><i className="fas fa-times text-2xl"></i></button>
                   </div>
-                  <form onSubmit={handleQuickOrder} className="space-y-5">
-                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center space-x-4 mb-4 text-black">
-                      <img src={product.image} className="w-12 h-12 rounded-xl object-cover" />
+                  
+                  <form onSubmit={handleQuickOrder} className="space-y-4">
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center space-x-4 mb-2">
+                      <img src={product.image} className="w-12 h-12 rounded-xl object-cover border" />
                       <div>
-                        <p className="font-black text-xs uppercase italic">{product.name}</p>
-                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-0.5 italic">PKR {(currentPrice * quantity).toLocaleString()} • {variantName}</p>
+                        <p className="font-black text-[10px] uppercase italic text-black">{product.name}</p>
+                        <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mt-0.5 italic">Pay Rs. {(currentPrice * quantity).toLocaleString()} at door</p>
                       </div>
                     </div>
+                    
                     {['name', 'phone', 'city'].map(field => (
                       <div key={field}>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 px-1 italic">{field === 'phone' ? 'Phone Number' : field}</label>
-                        <input required type={field === 'phone' ? 'tel' : 'text'} className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none text-black focus:ring-1 focus:ring-black transition uppercase text-xs italic" placeholder={`Enter ${field}`} value={(formData as any)[field]} onChange={e => setFormData({...formData, [field]: e.target.value})} />
+                        <label className="block text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1 px-1 italic">
+                          {field === 'phone' ? 'Mobile Number' : field}
+                        </label>
+                        <input 
+                          required 
+                          type={field === 'phone' ? 'tel' : 'text'} 
+                          className="w-full bg-white border border-gray-200 rounded-xl px-5 py-3 font-bold outline-none text-black focus:ring-1 focus:ring-black transition uppercase text-xs italic" 
+                          placeholder={field === 'phone' ? 'Enter Mobile Number' : `Enter ${field}`} 
+                          value={(formData as any)[field]} 
+                          onChange={e => setFormData({...formData, [field]: e.target.value})} 
+                        />
                       </div>
                     ))}
+                    
                     <div>
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 px-1 italic">Delivery Address</label>
-                      <textarea required className="w-full bg-white border border-gray-200 rounded-xl px-5 py-4 font-bold outline-none h-20 resize-none text-black focus:ring-1 focus:ring-black transition uppercase text-xs italic" placeholder="Street, Area, House details..." value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                      <label className="block text-[8px] font-black uppercase tracking-widest text-gray-400 mb-1 px-1 italic">Full Delivery Address</label>
+                      <textarea 
+                        required 
+                        className="w-full bg-white border border-gray-200 rounded-xl px-5 py-3 font-bold outline-none h-24 resize-none text-black focus:ring-1 focus:ring-black transition uppercase text-xs italic" 
+                        placeholder="Area, Street, House details..." 
+                        value={formData.address} 
+                        onChange={e => setFormData({...formData, address: e.target.value})} 
+                      />
                     </div>
-                    <button type="submit" disabled={isSubmitting} className="w-full bg-black text-white font-black uppercase py-5 rounded-xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-xs italic active:scale-95 italic">
-                      {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete Order — COD`}
+                    
+                    <button type="submit" disabled={isSubmitting} className="w-full bg-black text-white font-black uppercase py-5 rounded-xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-[11px] italic active:scale-95 mt-4">
+                      {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete Your Order`}
                     </button>
-                    <p className="text-[9px] text-center font-black uppercase text-green-600 tracking-widest italic pt-2">Free Express Shipping Nationwide</p>
+                    
+                    <div className="flex items-center justify-center space-x-3 pt-2">
+                      <div className="flex text-yellow-500 text-[8px] space-x-0.5">
+                        <i className="fas fa-star"></i><i className="fas fa-star"></i><i className="fas fa-star"></i><i className="fas fa-star"></i><i className="fas fa-star"></i>
+                      </div>
+                      <span className="text-[8px] font-black uppercase text-gray-400 italic">Highly Trusted Service</span>
+                    </div>
                   </form>
                 </>
               ) : (
-                <div className="text-center py-10 flex flex-col items-center justify-center h-full text-black">
-                  <div className="w-20 h-20 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-3xl shadow-2xl"><i className="fas fa-check"></i></div>
-                  <h3 className="text-3xl font-serif font-bold italic uppercase mb-2 italic">Order Confirmed</h3>
-                  <p className="text-gray-500 mb-8 font-bold italic text-sm tracking-widest italic">ORDER ID: <span className="text-black">#{orderSuccess.id}</span></p>
-                  <button onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-5 rounded-xl shadow-lg hover:bg-gray-800 transition text-[10px] italic">Close Ledger</button>
+                <div className="text-center py-10 flex flex-col items-center justify-center text-black">
+                  <div className="w-16 h-16 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 text-2xl shadow-xl"><i className="fas fa-check"></i></div>
+                  <h3 className="text-2xl font-serif font-bold italic uppercase mb-2 italic">Order Success</h3>
+                  <p className="text-gray-500 mb-8 font-bold italic text-[10px] tracking-widest italic uppercase">Tracking ID: <span className="text-black">#{orderSuccess.id}</span></p>
+                  <button onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-4 rounded-xl shadow-lg hover:bg-gray-800 transition text-[9px] italic">Continue Shopping</button>
                 </div>
               )}
             </div>

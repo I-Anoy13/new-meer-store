@@ -15,8 +15,6 @@ import RefundPolicy from './views/RefundPolicy';
 import ShippingPolicy from './views/ShippingPolicy';
 import Header from './components/Header';
 import Footer from './components/Footer';
-// Added missing import for the AI Concierge component
-import AIConcierge from './components/AIConcierge';
 
 const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
@@ -97,7 +95,6 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // REAL-TIME: Listen for new rows in the "orders" table
   useEffect(() => {
     const channel = supabase
       .channel('realtime-orders')
@@ -106,7 +103,7 @@ const App: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'orders' },
         (payload) => {
           console.log('Real-time order detected:', payload.new);
-          fetchOrders(); // Re-fetch immediately to update all lists/charts
+          fetchOrders();
         }
       )
       .subscribe();
@@ -269,8 +266,6 @@ const App: React.FC = () => {
             <Route path="/shipping-policy" element={<ShippingPolicy />} />
           </Routes>
         </main>
-        {/* Rendered the AI Concierge for shopping assistance */}
-        <AIConcierge products={products} />
         <Footer />
       </div>
     </HashRouter>
