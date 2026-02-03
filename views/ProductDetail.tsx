@@ -141,6 +141,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                   <img src={product.image} className="w-20 h-20 rounded-xl object-cover border shadow-sm" />
                   <div className="flex-grow min-w-0">
                     <h3 className="text-sm font-black uppercase italic text-black truncate">{product.name}</h3>
+                    {variantObj && <p className="text-[9px] font-black uppercase text-gray-400 italic">Style: {variantObj.name}</p>}
                     <p className="text-blue-600 font-black text-lg italic mt-1">Rs. {currentPrice.toLocaleString()}</p>
                     <div className="flex items-center space-x-2 mt-1">
                       <span className="text-[8px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-black uppercase tracking-widest">In Stock</span>
@@ -202,7 +203,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
   return (
     <div className="bg-white animate-fadeIn pb-24 lg:pb-0 relative text-black overflow-x-hidden">
-      {/* PURCHASE POPUP - FIXED IN MID VIEWPORT, SLIDES WITH SCROLLING */}
+      {/* PURCHASE POPUP */}
       {purchaseNotification && (
         <div className="fixed inset-y-0 left-0 z-[100] flex items-center pl-6 pointer-events-none">
           <div className="bg-white/95 backdrop-blur-md border border-gray-100 p-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] flex items-center space-x-4 animate-slideInLeft max-w-[280px] pointer-events-auto">
@@ -251,6 +252,24 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <span className="text-[9px] font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full uppercase italic border border-green-100">Free COD Express</span>
             </div>
 
+            {/* STYLE VARIANTS SELECTION */}
+            {product.variants && product.variants.length > 0 && (
+              <div className="mb-8">
+                <label className="block text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest italic">Choose Style</label>
+                <div className="flex flex-wrap gap-3">
+                  {product.variants.map((v) => (
+                    <button 
+                      key={v.id} 
+                      onClick={() => setSelectedVariant(v.id)}
+                      className={`px-6 py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${selectedVariant === v.id ? 'bg-black text-white border-black shadow-lg scale-105' : 'bg-white text-gray-500 border-gray-100 hover:border-black'}`}
+                    >
+                      {v.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mb-4 space-y-2">
               <div className="flex justify-between items-end">
                 <p className="text-[10px] font-black uppercase tracking-widest text-red-600 italic">
@@ -266,13 +285,13 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
 
-            {/* HAPPY CUSTOMERS CLUSTER - UPON COD BUTTON */}
+            {/* HAPPY CUSTOMERS CLUSTER */}
             <div className="mb-6 pt-2 flex flex-col items-center sm:items-start">
                <div className="flex -space-x-3 mb-3">
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=100&auto=format&fit=crop" alt="User 1" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?q=80&w=100&auto=format&fit=crop" alt="User 2" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?q=80&w=100&auto=format&fit=crop" alt="User 3" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=100&auto=format&fit=crop" alt="User 4" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=100&auto=format&fit=crop" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?q=80&w=100&auto=format&fit=crop" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?q=80&w=100&auto=format&fit=crop" />
+                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-white object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=100&auto=format&fit=crop" />
                   <div className="h-10 w-10 rounded-full ring-4 ring-white bg-black flex items-center justify-center text-[10px] font-black text-white">+82</div>
                </div>
                <div className="text-center sm:text-left">
@@ -291,7 +310,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <button onClick={() => setIsOrderPortalActive(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">ORDER NOW - CASH ON DELIVERY <i className="fas fa-arrow-right ml-2 text-xs"></i></button>
             </div>
 
-            {/* DESCRIPTION - DOWN FROM COD BUTTON */}
             <div className="mb-8 max-w-xl">
                <p className="text-sm text-gray-700 leading-relaxed italic font-medium border-l-2 border-black/10 pl-4">{product.description}</p>
             </div>

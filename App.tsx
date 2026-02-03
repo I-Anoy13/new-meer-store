@@ -49,18 +49,24 @@ const App: React.FC = () => {
   // Derived Orders List: Merges Raw DB data with Local status overrides
   const orders = useMemo(() => {
     return rawOrders.map(row => {
-      const orderId = row.order_id || `ORD-${row.id}`;
+      if (!row) return null;
+      
+      const orderId = row.order_id || (row.id ? `ORD-${row.id}` : 'ORD-UNKNOWN');
       const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
-      const dbStatus = (dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1)) as Order['status'];
+      const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
+      const dbStatus = (capitalized || 'Pending') as Order['status'];
       
       // Local override always wins!
       const finalStatus = statusOverrides[orderId] || dbStatus;
+
+      // Extract total from various possible columns (fixing potential schema drift)
+      const totalAmount = row.subtotal_pkr ?? row.total_pkr ?? row.total ?? 0;
 
       return {
         id: orderId,
         dbId: row.id,
         items: Array.isArray(row.items) ? row.items : [],
-        total: row.subtotal_pkr || row.total_pkr || row.total || 0,
+        total: Number(totalAmount),
         status: finalStatus,
         customer: {
           name: row.customer_name || 'Anonymous',
@@ -69,15 +75,16 @@ const App: React.FC = () => {
           address: row.customer_address || '',
           city: row.customer_city || ''
         },
-        date: row.created_at || row.date
+        date: row.created_at || row.date || new Date().toISOString()
       };
-    });
+    }).filter((o): o is Order => o !== null);
   }, [rawOrders, statusOverrides]);
 
   const fetchProducts = useCallback(async () => {
     try {
       const { data, error } = await supabase.from('products').select('*');
-      if (!error && data) {
+      if (error) throw error;
+      if (data) {
         setProducts(data.map(row => ({
           id: String(row.id),
           name: row.name || 'Untitled Item',
@@ -91,29 +98,45 @@ const App: React.FC = () => {
           variants: Array.isArray(row.variants) ? row.variants : []
         })));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Product Sync Failure:", e);
+    }
   }, []);
 
   const fetchOrders = useCallback(async (silent = false) => {
     if (!silent) setIsSyncing(true);
     try {
+      // Fetch all columns to ensure we aren't missing subtotal_pkr
       const { data, error } = await supabase
         .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
       
-      if (!error && data) {
-        setRawOrders(data);
+      if (error) {
+        console.error("Supabase Order Fetch Error:", error);
+        throw error;
       }
-    } catch (e) {} finally {
-      setIsSyncing(false);
+
+      if (data) {
+        // Sort manually to avoid issues if created_at column is missing/different
+        const sortedData = [...data].sort((a, b) => {
+          const dateA = new Date(a.created_at || a.date || 0).getTime();
+          const dateB = new Date(b.created_at || b.date || 0).getTime();
+          return dateB - dateA;
+        });
+        setRawOrders(sortedData);
+      }
+    } catch (e) {
+      console.error("Detailed Order Sync Failure:", e);
+    } finally {
+      if (!silent) setIsSyncing(false);
     }
   }, []);
 
   useEffect(() => {
     const channel = supabase
       .channel('realtime-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+        console.debug('Realtime Update Received:', payload);
         fetchOrders(true);
       })
       .subscribe();
@@ -124,14 +147,15 @@ const App: React.FC = () => {
     let mounted = true;
     const initData = async () => {
       try {
-        await Promise.all([fetchProducts(), fetchOrders(true)]);
+        // Attempt initial sync
+        await Promise.allSettled([fetchProducts(), fetchOrders(true)]);
       } finally {
         if (mounted) setLoading(false);
       }
     };
     initData();
     return () => { mounted = false; };
-  }, []);
+  }, [fetchProducts, fetchOrders]);
 
   const updateStatusOverride = (orderId: string, status: Order['status']) => {
     setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
@@ -163,7 +187,7 @@ const App: React.FC = () => {
       const firstItem = order.items[0];
       const totalAmount = Math.round(Number(order.total) || 0);
       
-      const { error } = await supabase.from('orders').insert([{
+      const payload = {
         order_id: order.id,
         customer_name: order.customer.name,
         customer_phone: order.customer.phone,
@@ -174,19 +198,25 @@ const App: React.FC = () => {
         product_price: Number(firstItem?.product.price || 0),
         product_image: firstItem?.product.image || '',
         total_pkr: totalAmount,
-        subtotal_pkr: totalAmount, // Added to fix "null value in Subtotal_pkr"
+        subtotal_pkr: totalAmount,
         status: order.status.toLowerCase(),
-        items: JSON.parse(JSON.stringify(order.items)),
+        items: order.items,
         source: 'Web App'
-      }]);
+      };
+
+      const { error } = await supabase.from('orders').insert([payload]);
       
-      if (error) throw error;
+      if (error) {
+        console.error("Order Insertion Error:", error);
+        throw error;
+      }
+      
       await fetchOrders(true);
       setCart([]);
       return true;
     } catch (e: any) {
-      console.error("Order Sync Error:", e);
-      alert(`Sync failed: ${e.message}`);
+      console.error("Critical Order Placement Failure:", e);
+      alert(`Order failed to sync with database: ${e.message}`);
       return false;
     }
   };
@@ -196,7 +226,7 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Merchant Protocol Initializing...</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Secure Protocol Initializing...</p>
         </div>
       </div>
     );
@@ -206,7 +236,7 @@ const App: React.FC = () => {
     <HashRouter>
       <div className="flex flex-col min-h-screen">
         <Header cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }} />
-        {isSyncing && <div className="fixed top-20 right-6 z-[1000] animate-pulse"><div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg">Syncing...</div></div>}
+        {isSyncing && <div className="fixed top-20 right-6 z-[1000] animate-pulse"><div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg">Cloud Syncing...</div></div>}
         <main className="flex-grow">
           <Routes>
             <Route path="/" element={<Home products={products} />} />
@@ -219,7 +249,7 @@ const App: React.FC = () => {
                 orders={orders} setOrders={() => {}} 
                 user={user} login={(role) => { const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; setUser(u); localStorage.setItem('itx_user_session', JSON.stringify(u)); }}
                 systemPassword={systemPassword} setSystemPassword={setSystemPassword}
-                refreshData={() => { fetchOrders(true); fetchProducts(); }}
+                refreshData={() => { fetchOrders(); fetchProducts(); }}
                 updateStatusOverride={updateStatusOverride}
               />
             } />
