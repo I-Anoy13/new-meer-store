@@ -74,6 +74,7 @@ const App: React.FC = () => {
       if (data) {
         const mappedOrders: Order[] = data.map(row => ({
           id: row.order_id || `ORD-${row.id}`,
+          dbId: row.id,
           items: Array.isArray(row.items) ? row.items : [],
           total: row.total_pkr || row.total || 0,
           status: (row.status ? row.status.charAt(0).toUpperCase() + row.status.slice(1) : 'Pending') as Order['status'],
@@ -102,7 +103,6 @@ const App: React.FC = () => {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'orders' },
         (payload) => {
-          console.log('Real-time order detected:', payload.new);
           fetchOrders();
         }
       )

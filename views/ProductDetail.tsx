@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Product, Order } from '../types';
 import { TRUST_BADGES, PLACEHOLDER_IMAGE } from '../constants';
@@ -20,11 +20,19 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [quantity, setQuantity] = useState(1);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
 
   // Ensure customer starts at the top of the page on landing
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
+
+  // Reset modal scroll on open
+  useEffect(() => {
+    if (isOrderModalOpen && modalScrollRef.current) {
+      modalScrollRef.current.scrollTop = 0;
+    }
+  }, [isOrderModalOpen]);
 
   // Fake Live Viewers - small figure 18-23 with green indicator
   const [viewers, setViewers] = useState(18 + Math.floor(Math.random() * 6));
@@ -239,7 +247,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       {/* COD ORDER FORM MODAL - SCROLLABLE FOR MOBILE */}
       {isOrderModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md animate-fadeIn p-2 sm:p-4 overflow-hidden">
-          <div className="bg-white rounded-[1.5rem] sm:rounded-[2rem] w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar">
+          <div ref={modalScrollRef} className="bg-white rounded-[1.5rem] sm:rounded-[2rem] w-full max-w-xl max-h-[92vh] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar">
             <div className="p-5 sm:p-10 flex flex-col">
               {!orderSuccess ? (
                 <>
@@ -252,10 +260,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                   </div>
                   
                   <form onSubmit={handleQuickOrder} className="space-y-4">
-                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center space-x-4 mb-2">
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center space-x-4 mb-2 text-black">
                       <img src={product.image} className="w-12 h-12 rounded-xl object-cover border" />
                       <div>
-                        <p className="font-black text-[10px] uppercase italic text-black">{product.name}</p>
+                        <p className="font-black text-[10px] uppercase italic">{product.name}</p>
                         <p className="text-[8px] font-black text-blue-600 uppercase tracking-widest mt-0.5 italic">Pay Rs. {(currentPrice * quantity).toLocaleString()} at door</p>
                       </div>
                     </div>
@@ -291,11 +299,11 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                       {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete Your Order`}
                     </button>
                     
-                    <div className="flex items-center justify-center space-x-3 pt-2">
-                      <div className="flex text-yellow-500 text-[8px] space-x-0.5">
+                    <div className="flex items-center justify-center space-x-3 pt-4 border-t border-gray-100 mt-2">
+                      <div className="flex text-yellow-500 text-[10px] space-x-1">
                         <i className="fas fa-star"></i><i className="fas fa-star"></i><i className="fas fa-star"></i><i className="fas fa-star"></i><i className="fas fa-star"></i>
                       </div>
-                      <span className="text-[8px] font-black uppercase text-gray-400 italic">Highly Trusted Service</span>
+                      <span className="text-[9px] font-black uppercase text-black italic">10,000+ Pakistan Customers</span>
                     </div>
                   </form>
                 </>

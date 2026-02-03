@@ -101,12 +101,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setCopyStatus(null), 2000);
   };
 
-  const handleStatusChange = async (orderId: string, status: Order['status']) => {
+  const handleStatusChange = async (orderId: string, status: Order['status'], dbId?: number) => {
+    // Optimistic UI update
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
     if (viewingOrder?.id === orderId) {
       setViewingOrder(prev => prev ? { ...prev, status } : null);
     }
-    await supabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', orderId);
+
+    // Persist to database
+    // We try to update by primary key (id) first as it's most reliable
+    const query = dbId 
+      ? supabase.from('orders').update({ status: status.toLowerCase() }).eq('id', dbId)
+      : supabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', orderId);
+
+    const { error } = await query;
+
+    if (error) {
+      console.error("Persistence failed:", error);
+      alert("System Alert: Failed to save status to database. Please check your internet connection or administrator permissions.");
+      // In a real app we might want to revert the local state here
+    }
   };
 
   const analyticsData = useMemo(() => {
@@ -158,7 +172,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="bg-[#fafafa] min-h-screen pb-24 text-black overflow-x-hidden">
-      {/* Mobile Top Stats - Clean Professional Design */}
+      {/* Mobile Top Stats */}
       <div className="md:hidden grid grid-cols-2 gap-2 p-2 pt-4 sticky top-16 z-30 bg-[#fafafa]/90 backdrop-blur-md border-b border-gray-100">
          <div className="bg-black text-white p-4 rounded-xl shadow-lg flex flex-col justify-center">
             <p className="text-[7px] font-black uppercase opacity-60 tracking-widest italic mb-0.5">Live Sales</p>
@@ -265,11 +279,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
-            {/* HIGH-VISIBILITY MOBILE CARDS: STATUS & ID FIRST */}
             <div className="space-y-3">
                {filteredOrders.length > 0 ? filteredOrders.map(o => (
                  <div key={o.id} onClick={() => setViewingOrder(o)} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm active:scale-[0.98] transition-all cursor-pointer">
-                    {/* TOP ROW: STATUS AND ID */}
                     <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-50">
                        <span className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest italic shadow-sm ${
                          o.status === 'Pending' ? 'bg-yellow-400 text-white' : 
@@ -381,7 +393,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <p className="text-xl font-black italic">Rs. {viewingOrder.total.toLocaleString()}</p>
                </div>
                <div className="w-full sm:w-auto">
-                  <select value={viewingOrder.status} onChange={(e) => handleStatusChange(viewingOrder.id, e.target.value as any)} className="w-full bg-white/10 border border-white/20 text-[9px] font-black uppercase px-6 py-3 rounded-lg outline-none italic cursor-pointer appearance-none text-center">
+                  <select 
+                    value={viewingOrder.status} 
+                    onChange={(e) => handleStatusChange(viewingOrder.id, e.target.value as any, viewingOrder.dbId)} 
+                    className="w-full bg-white/10 border border-white/20 text-[9px] font-black uppercase px-6 py-3 rounded-lg outline-none italic cursor-pointer appearance-none text-center"
+                  >
                     {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s} className="text-black">{s}</option>)}
                   </select>
                </div>

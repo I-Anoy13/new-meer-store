@@ -36,6 +36,7 @@ export interface CartItem {
 
 export interface Order {
   id: string;
+  dbId?: number;
   items: CartItem[];
   total: number;
   status: 'Pending' | 'Confirmed' | 'Shipped' | 'Delivered' | 'Cancelled';
