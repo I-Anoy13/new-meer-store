@@ -21,33 +21,31 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
   
-  const modalContainerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
-  // Reset page scroll on product change
+  // Landing scroll reset
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
-  // Force scroll to top on modal open to ensure Name field is first thing seen
+  // Critical Fix: Body Lock and Modal Scroll Reset
   useEffect(() => {
     if (isOrderModalOpen) {
       document.body.style.overflow = 'hidden';
       
-      const resetModalScroll = () => {
-        if (modalContainerRef.current) {
-          modalContainerRef.current.scrollTop = 0;
-        }
-      };
-
-      resetModalScroll();
-      // Multi-step reset for mobile browsers
-      const t1 = setTimeout(resetModalScroll, 10);
-      const t2 = setTimeout(resetModalScroll, 150);
+      // Force the overlay to the top immediately
+      if (overlayRef.current) {
+        overlayRef.current.scrollTop = 0;
+      }
+      
+      // Secondary check for mobile browsers
+      const timeout = setTimeout(() => {
+        if (overlayRef.current) overlayRef.current.scrollTop = 0;
+      }, 30);
       
       return () => {
         document.body.style.overflow = 'unset';
-        clearTimeout(t1);
-        clearTimeout(t2);
+        clearTimeout(timeout);
       };
     }
   }, [isOrderModalOpen]);
@@ -77,7 +75,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Fake Purchase Notification
+  // Fake Purchase Notice
   const [purchaseNotice, setPurchaseNotice] = useState<{ name: string, city: string } | null>(null);
   const [showPurchaseNotice, setShowPurchaseNotice] = useState(false);
 
@@ -220,7 +218,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">No advance payment — pay when watch arrives</p>
             </div>
 
-            {/* Description - Positioned After Button */}
+            {/* Description - PLACED AFTER THE CTA BUTTON */}
             <div className="mb-10">
               <p className="text-gray-600 text-sm md:text-lg leading-relaxed italic">{product.description}</p>
             </div>
@@ -252,133 +250,129 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         </div>
       </div>
 
-      {/* COD ORDER FORM MODAL - RE-ENGINEERED AS FULL-PAGE OVERLAY SCROLL CONTAINER */}
+      {/* COD ORDER FORM MODAL - FINAL STABILITY RE-ENGINEERING */}
       {isOrderModalOpen && (
         <div 
-          ref={modalContainerRef}
-          className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl overflow-y-auto overscroll-contain flex flex-col items-center py-4 sm:py-12 animate-fadeIn"
+          ref={overlayRef}
+          className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-md overflow-y-auto overflow-x-hidden animate-fadeIn -webkit-overflow-scrolling-touch"
         >
-          {/* Inner Modal Container - Sits at the absolute top of the scrollable parent */}
-          <div className="w-full max-w-[600px] bg-white sm:rounded-[2.5rem] shadow-2xl relative flex flex-col mb-12">
-            <div className="p-6 sm:p-12">
-              {!orderSuccess ? (
-                <>
-                  <div className="flex justify-between items-start mb-10">
-                    <div>
-                      <h2 className="text-2xl sm:text-3xl font-serif font-bold uppercase italic tracking-tighter text-black">Cash on delivery</h2>
-                      <div className="flex items-center mt-2 space-x-2">
-                        <span className="flex h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">Fast Doorstep Delivery in Pakistan</p>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => setIsOrderModalOpen(false)} 
-                      className="bg-gray-100 hover:bg-black hover:text-white transition w-12 h-12 rounded-full flex items-center justify-center shadow-sm shrink-0"
-                    >
-                      <i className="fas fa-times text-xl"></i>
-                    </button>
-                  </div>
-                  
-                  <form onSubmit={handleQuickOrder} className="space-y-8">
-                    {/* Compact Product Summary */}
-                    <div className="p-5 bg-gray-50 rounded-3xl border border-gray-100 flex items-center space-x-4 mb-4 text-black">
-                      <img src={product.image} className="w-16 h-16 rounded-2xl object-cover border shadow-sm" />
-                      <div className="min-w-0">
-                        <p className="font-black text-[11px] uppercase italic leading-tight truncate">{product.name}</p>
-                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1 italic">Rs. {(currentPrice * quantity).toLocaleString()} COD</p>
-                        <p className="text-[8px] text-gray-400 font-bold uppercase mt-1">Edition: {variantName}</p>
-                      </div>
-                    </div>
-                    
-                    {/* Form Fields - text-base (16px) font prevents auto-zoom zoom on iOS */}
-                    <div className="space-y-6">
-                      <div id="form-top">
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
-                          Full Name (Required)
-                        </label>
-                        <input 
-                          required 
-                          type="text" 
-                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                          placeholder="Your Full Name" 
-                          value={formData.name} 
-                          onChange={e => setFormData({...formData, name: e.target.value})} 
-                        />
-                      </div>
-
+          {/* Inner Wrapper: flex items-start + min-h-screen ensures we start at the VERY TOP */}
+          <div className="min-h-screen w-full flex items-start justify-center py-0 sm:py-8 md:py-16">
+            <div className="w-full max-w-[600px] bg-white sm:rounded-[2.5rem] shadow-2xl relative flex flex-col min-h-screen sm:min-h-0">
+              <div className="p-6 sm:p-12 pb-32">
+                {!orderSuccess ? (
+                  <>
+                    <div className="flex justify-between items-start mb-10">
                       <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
-                          Phone Number (Required)
-                        </label>
-                        <input 
-                          required 
-                          type="tel" 
-                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                          placeholder="03XX-XXXXXXX" 
-                          value={formData.phone} 
-                          onChange={e => setFormData({...formData, phone: e.target.value})} 
-                        />
+                        <h2 className="text-2xl sm:text-3xl font-serif font-bold uppercase italic tracking-tighter text-black">Cash on delivery</h2>
+                        <div className="flex items-center mt-2 space-x-2">
+                          <span className="flex h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">Doorstep Delivery in Pakistan</p>
+                        </div>
                       </div>
-
-                      <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
-                          City (Required)
-                        </label>
-                        <input 
-                          required 
-                          type="text" 
-                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                          placeholder="e.g. Karachi, Lahore..." 
-                          value={formData.city} 
-                          onChange={e => setFormData({...formData, city: e.target.value})} 
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Complete Delivery Address</label>
-                        <textarea 
-                          required 
-                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none h-32 resize-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                          placeholder="House No, Street Name, Famous Landmark..." 
-                          value={formData.address} 
-                          onChange={e => setFormData({...formData, address: e.target.value})} 
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="pt-6">
                       <button 
-                        type="submit" 
-                        disabled={isSubmitting} 
-                        className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-[12px] italic active:scale-95"
+                        onClick={() => setIsOrderModalOpen(false)} 
+                        className="bg-gray-100 hover:bg-black hover:text-white transition w-12 h-12 rounded-full flex items-center justify-center shadow-sm shrink-0"
                       >
-                        {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Confirm COD Order — Rs. ${(currentPrice * quantity).toLocaleString()}`}
+                        <i className="fas fa-times text-xl"></i>
                       </button>
                     </div>
                     
-                    <div className="flex flex-col items-center justify-center space-y-4 py-8 border-t border-gray-100 mt-8">
-                      <div className="flex text-yellow-500 text-sm space-x-1.5">
-                        {[1,2,3,4,5].map(i => <i key={i} className="fas fa-star"></i>)}
+                    <form onSubmit={handleQuickOrder} className="space-y-8">
+                      {/* Compact Item Summary */}
+                      <div className="p-5 bg-gray-50 rounded-3xl border border-gray-100 flex items-center space-x-4 mb-4 text-black">
+                        <img src={product.image} className="w-16 h-16 rounded-2xl object-cover border shadow-sm" />
+                        <div className="min-w-0">
+                          <p className="font-black text-[11px] uppercase italic leading-tight truncate">{product.name}</p>
+                          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1 italic">Rs. {(currentPrice * quantity).toLocaleString()} COD</p>
+                          <p className="text-[8px] text-gray-400 font-bold uppercase mt-1">Edition: {variantName}</p>
+                        </div>
                       </div>
-                      <span className="text-[9px] font-black uppercase text-gray-400 italic text-center">Trusted Pakistani Watch Merchant • Quality Inspected</span>
+                      
+                      {/* Inputs using 16px (text-base) to prevent iOS layout breakage/zoom */}
+                      <div className="space-y-6">
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Full Name (Required)</label>
+                          <input 
+                            required 
+                            type="text" 
+                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                            placeholder="Your Name" 
+                            value={formData.name} 
+                            onChange={e => setFormData({...formData, name: e.target.value})} 
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Phone Number (Required)</label>
+                          <input 
+                            required 
+                            type="tel" 
+                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                            placeholder="03XX-XXXXXXX" 
+                            value={formData.phone} 
+                            onChange={e => setFormData({...formData, phone: e.target.value})} 
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">City (Required)</label>
+                          <input 
+                            required 
+                            type="text" 
+                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                            placeholder="Karachi, Lahore, etc..." 
+                            value={formData.city} 
+                            onChange={e => setFormData({...formData, city: e.target.value})} 
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Full Shipping Address</label>
+                          <textarea 
+                            required 
+                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none h-32 resize-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                            placeholder="House No, Street, Landmark..." 
+                            value={formData.address} 
+                            onChange={e => setFormData({...formData, address: e.target.value})} 
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="pt-6">
+                        <button 
+                          type="submit" 
+                          disabled={isSubmitting} 
+                          className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-[12px] italic active:scale-95"
+                        >
+                          {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Confirm COD Order — Rs. ${(currentPrice * quantity).toLocaleString()}`}
+                        </button>
+                      </div>
+                      
+                      <div className="flex flex-col items-center justify-center space-y-4 py-8 border-t border-gray-100 mt-8">
+                        <div className="flex text-yellow-500 text-sm space-x-1.5">
+                          {[1,2,3,4,5].map(i => <i key={i} className="fas fa-star"></i>)}
+                        </div>
+                        <span className="text-[9px] font-black uppercase text-gray-400 italic text-center">Quality Inspected • Verified Delivery Network</span>
+                      </div>
+                    </form>
+                  </>
+                ) : (
+                  <div className="text-center py-24 flex flex-col items-center justify-center text-black animate-fadeIn">
+                    <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-xl animate-bounce">
+                      <i className="fas fa-check"></i>
                     </div>
-                  </form>
-                </>
-              ) : (
-                <div className="text-center py-24 flex flex-col items-center justify-center text-black animate-fadeIn">
-                  <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-xl animate-bounce">
-                    <i className="fas fa-check"></i>
+                    <h3 className="text-3xl font-serif font-bold italic uppercase mb-4 italic">Order Confirmed</h3>
+                    <p className="text-gray-500 mb-12 font-bold italic text-[12px] tracking-widest italic uppercase">Package ID: <span className="text-black font-black">#{orderSuccess.id}</span></p>
+                    <button 
+                      onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} 
+                      className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-6 rounded-2xl shadow-lg hover:bg-gray-800 transition text-[11px] italic"
+                    >
+                      Close Window
+                    </button>
                   </div>
-                  <h3 className="text-3xl font-serif font-bold italic uppercase mb-4 italic">Order Confirmed</h3>
-                  <p className="text-gray-500 mb-12 font-bold italic text-[12px] tracking-widest italic uppercase">Tracking ID: <span className="text-black font-black">#{orderSuccess.id}</span></p>
-                  <button 
-                    onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} 
-                    className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-6 rounded-2xl shadow-lg hover:bg-gray-800 transition text-[11px] italic"
-                  >
-                    Close Portal
-                  </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
