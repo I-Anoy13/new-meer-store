@@ -28,7 +28,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
-  // Force modal scroll to top (Name field) on open
+  // Force modal scroll to top (Name field) on open without triggering keyboard zoom
   useEffect(() => {
     if (isOrderModalOpen) {
       const resetScroll = () => {
@@ -37,8 +37,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         }
       };
       resetScroll();
-      // Second attempt to catch any browser layout shifts
-      const timeout = setTimeout(resetScroll, 100);
+      const timeout = setTimeout(resetScroll, 150);
       return () => clearTimeout(timeout);
     }
   }, [isOrderModalOpen]);
@@ -211,15 +210,16 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
 
-            <p className="text-gray-600 text-sm md:text-lg leading-relaxed mb-6 italic">{product.description}</p>
-
-            {/* Main CTA Button */}
+            {/* Main CTA Button - HIGHER UP */}
             <div className="mb-8">
               <button onClick={() => setIsOrderModalOpen(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">
                 Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i>
               </button>
               <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">No advance payment — pay when watch arrives</p>
             </div>
+
+            {/* Description - MOVED AFTER BUTTON */}
+            <p className="text-gray-600 text-sm md:text-lg leading-relaxed mb-10 italic">{product.description}</p>
 
             {/* Variants */}
             {product.variants && product.variants.length > 0 && (
@@ -248,16 +248,16 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         </div>
       </div>
 
-      {/* COD ORDER FORM MODAL */}
+      {/* COD ORDER FORM MODAL - SEPARATE PAGE FEEL */}
       {isOrderModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-fadeIn overflow-hidden">
-          {/* Main Modal container with forced scrolling boundary */}
+          {/* Main Modal container - use base text size to prevent iOS zoom */}
           <div 
             ref={modalContainerRef}
-            className="bg-white w-full h-full md:h-auto md:max-h-[95vh] md:w-[600px] md:rounded-[2.5rem] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar relative"
+            className="bg-white w-full h-full md:h-auto md:max-h-[95vh] md:w-[600px] md:rounded-[2.5rem] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar relative text-base"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            <div className="p-6 sm:p-12 flex flex-col min-h-max pb-20">
+            <div className="p-6 sm:p-12 flex flex-col min-h-max pb-24">
               {!orderSuccess ? (
                 <>
                   <div className="flex justify-between items-start mb-8">
@@ -277,8 +277,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                     <div className="p-5 bg-gray-50 rounded-3xl border border-gray-100 flex items-center space-x-4 mb-4 text-black">
                       <img src={product.image} className="w-16 h-16 rounded-2xl object-cover border shadow-sm" />
                       <div>
-                        <p className="font-black text-[11px] uppercase italic">{product.name}</p>
-                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-0.5 italic">Pay Rs. {(currentPrice * quantity).toLocaleString()} at door</p>
+                        <p className="font-black text-[11px] uppercase italic leading-tight">{product.name}</p>
+                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-1 italic">Pay Rs. {(currentPrice * quantity).toLocaleString()} at door</p>
                         <p className="text-[8px] text-gray-400 font-bold uppercase mt-1">Edition: {variantName}</p>
                       </div>
                     </div>
@@ -290,9 +290,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                         </label>
                         <input 
                           required 
-                          autoFocus={field === 'name'}
                           type={field === 'phone' ? 'tel' : 'text'} 
-                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-xs italic shadow-sm" 
+                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
                           placeholder={field === 'phone' ? 'Enter Mobile Number' : `Enter Your ${field}`} 
                           value={(formData as any)[field]} 
                           onChange={e => setFormData({...formData, [field]: e.target.value})} 
@@ -304,7 +303,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                       <label className="block text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Full Delivery Address</label>
                       <textarea 
                         required 
-                        className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none h-28 resize-none text-black focus:border-black transition uppercase text-xs italic shadow-sm" 
+                        className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none h-28 resize-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
                         placeholder="House Number, Street Name, Famous Landmark..." 
                         value={formData.address} 
                         onChange={e => setFormData({...formData, address: e.target.value})} 
