@@ -15,7 +15,7 @@ import ShippingPolicy from './views/ShippingPolicy';
 import Header from './components/Header';
 import Footer from './components/Footer';
 
-// Lazy load the admin panel so it's physically separated from the customer bundle
+// Admin panel is lazy loaded and hidden from general customer bundles
 const AdminDashboard = lazy(() => import('./views/AdminDashboard'));
 
 const App: React.FC = () => {
@@ -114,7 +114,7 @@ const App: React.FC = () => {
         setRawOrders(sortedData);
       }
     } catch (e) {
-      console.error("Detailed Order Sync Failure:", e);
+      console.error("Order Sync Failure:", e);
     } finally {
       if (!silent) setIsSyncing(false);
     }
@@ -204,7 +204,7 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Secure Protocol Initializing...</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Loading Secure Environment...</p>
         </div>
       </div>
     );
@@ -226,7 +226,6 @@ const App: React.FC = () => {
               <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
               <Route path="/cart" element={<CartView cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
               <Route path="/checkout" element={<Checkout cart={cart} placeOrder={placeOrder} />} />
-              {/* HIDDEN ADMIN ROUTE - NO VISIBLE LINKS */}
               <Route path="/admin-portal/*" element={
                 <AdminDashboard 
                   products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
