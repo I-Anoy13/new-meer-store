@@ -4,11 +4,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ITX SHOP MEER - Premium Horology & Artisan Collection</title>
+    <title>ITX SHOP MEER - Premium Horology</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <!-- TikTok Pixel Base Code -->
     <script>
@@ -22,28 +22,19 @@
     </script>
 
     <style>
-      body { font-family: 'Inter', sans-serif; }
-      .font-serif { font-family: 'Playfair Display', serif; }
-      .tracking-tightest { letter-spacing: -0.05em; }
+      body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
       .custom-scrollbar::-webkit-scrollbar { width: 4px; }
       .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
       .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
       
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      .animate-fadeIn { animation: fadeIn 0.6s ease-out forwards; }
+      .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; }
       
       @keyframes slideInLeft { 
         from { opacity: 0; transform: translateX(-20px); } 
         to { opacity: 1; transform: translateX(0); } 
       }
-      .animate-slideInLeft { animation: slideInLeft 0.5s ease-out forwards; }
-
-      @keyframes attentionShake {
-        0%, 100% { transform: translateX(0); }
-        10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
-        20%, 40%, 60%, 80% { transform: translateX(2px); }
-      }
-      .animate-attention { animation: attentionShake 4s ease-in-out infinite; }
+      .animate-slideInLeft { animation: slideInLeft 0.3s ease-out forwards; }
       
       @keyframes pulseRed {
         0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
