@@ -16,10 +16,23 @@ const PAKISTAN_CITIES = ['Karachi', 'Lahore', 'Islamabad', 'Faisalabad', 'Rawalp
 const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, placeOrder }) => {
   const { id } = useParams<{ id: string }>();
   const product = products.find(p => p.id === id);
+  
+  const productImages = product?.images && product.images.length > 0 
+    ? product.images 
+    : [product?.image || PLACEHOLDER_IMAGE];
+
+  const [activeImage, setActiveImage] = useState(productImages[0]);
   const [selectedVariant, setSelectedVariant] = useState(product?.variants?.[0]?.id || '');
   const [quantity, setQuantity] = useState(1);
   const [isOrderPortalActive, setIsOrderPortalActive] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
+
+  // Sync active image if product changes
+  useEffect(() => {
+    if (productImages.length > 0) {
+      setActiveImage(productImages[0]);
+    }
+  }, [id]);
 
   // Urgency State: Fixed at 14 units per request
   const [unitsLeft, setUnitsLeft] = useState(14);
@@ -231,13 +244,30 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       <div className="container mx-auto px-4 md:px-6 py-4 lg:py-16 relative">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-16">
           <div className="lg:col-span-5">
-            <div className="relative aspect-[4/5] bg-gray-50 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden shadow-inner border border-gray-100 flex items-center justify-center group">
-              <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-              <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest italic shadow-lg">-25% OFF</div>
-              <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/10">
-                 <span className="flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span></span>
-                 <span className="text-[9px] font-black uppercase tracking-widest">{viewers} People Watching</span>
+            <div className="flex flex-col space-y-4">
+              <div className="relative aspect-[4/5] bg-gray-50 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden shadow-inner border border-gray-100 flex items-center justify-center group">
+                <img src={activeImage} alt={product.name} className="w-full h-full object-cover transition-transform duration-700" />
+                <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest italic shadow-lg">-25% OFF</div>
+                <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/10">
+                   <span className="flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span></span>
+                   <span className="text-[9px] font-black uppercase tracking-widest">{viewers} People Watching</span>
+                </div>
               </div>
+              
+              {/* Image Gallery Thumbnails */}
+              {productImages.length > 1 && (
+                <div className="flex space-x-3 overflow-x-auto no-scrollbar py-2">
+                  {productImages.map((img, idx) => (
+                    <button 
+                      key={idx} 
+                      onClick={() => setActiveImage(img)}
+                      className={`w-20 h-20 rounded-xl overflow-hidden border-2 shrink-0 transition-all ${activeImage === img ? 'border-black scale-105' : 'border-gray-100 opacity-60 hover:opacity-100'}`}
+                    >
+                      <img src={img} className="w-full h-full object-cover" alt={`${product.name} gallery ${idx}`} />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

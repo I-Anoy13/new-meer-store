@@ -85,6 +85,8 @@ const App: React.FC = () => {
           description: row.description || '',
           price: Number(row.price_pkr || row.price || 0),
           image: row.image || row.image_url || 'https://via.placeholder.com/800x1000',
+          // Note: Features column stores the array of extra images based on user schema
+          images: Array.isArray(row.features) ? row.features : (row.image ? [row.image] : []),
           category: row.category || 'Luxury',
           inventory: Number(row.inventory || 0),
           rating: Number(row.rating || 5),
