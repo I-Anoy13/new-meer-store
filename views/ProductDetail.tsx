@@ -29,15 +29,15 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
-  // Reset modal scroll on open to ensure name field is seen immediately
+  // Reset modal scroll on open to ensure name field is seen immediately at the top
   useEffect(() => {
     if (isOrderModalOpen) {
       // Small timeout to ensure DOM has rendered
       const timeout = setTimeout(() => {
         if (modalContainerRef.current) {
-          modalContainerRef.current.scrollTop = 0;
+          modalContainerRef.current.scrollTo(0, 0);
         }
-      }, 50);
+      }, 30);
       return () => clearTimeout(timeout);
     }
   }, [isOrderModalOpen]);
@@ -253,10 +253,11 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       {/* COD ORDER FORM MODAL - PROFESSIONAL SEPARATE SCROLLING PAGE FEEL */}
       {isOrderModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-fadeIn overflow-hidden">
-          {/* Main Modal container that resets its own scroll */}
+          {/* Main Modal container with explicit scrolling allowed */}
           <div 
             ref={modalContainerRef}
-            className="bg-white w-full h-full md:h-auto md:max-h-[92vh] md:w-[600px] md:rounded-[2.5rem] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar"
+            className="bg-white w-full h-full md:h-auto md:max-h-[95vh] md:w-[600px] md:rounded-[2.5rem] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar"
+            style={{ WebkitOverflowScrolling: 'touch' }}
           >
             <div className="p-6 sm:p-12 flex flex-col min-h-full">
               {!orderSuccess ? (
@@ -321,7 +322,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                       <div className="flex text-yellow-500 text-xs space-x-1">
                         {[1,2,3,4,5].map(i => <i key={i} className="fas fa-star"></i>)}
                       </div>
-                      <span className="text-[9px] font-black uppercase text-gray-400 italic">Trusted Artisan Merchant • Pakistan</span>
+                      <span className="text-[9px] font-black uppercase text-gray-400 italic">Trusted Watch Merchant • Pakistan</span>
                     </div>
                   </form>
                 </>

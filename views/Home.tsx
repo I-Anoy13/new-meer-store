@@ -28,16 +28,16 @@ const Home: React.FC<HomeProps> = ({ products }) => {
         
         <div className="container mx-auto px-6 relative z-10">
           <div className="max-w-3xl">
-            <span className="text-blue-500 font-black uppercase tracking-[0.3em] md:tracking-[0.4em] text-[9px] md:text-xs mb-4 block animate-slideDown italic">Est. 2024 • Horological Boutique</span>
+            <span className="text-blue-500 font-black uppercase tracking-[0.3em] md:tracking-[0.4em] text-[9px] md:text-xs mb-4 block animate-slideDown italic">Est. 2024 • Horological Specialty</span>
             <h1 className="text-5xl md:text-7xl lg:text-8xl font-black mb-6 tracking-tighter uppercase italic leading-[1.0] md:leading-[0.9]">
               Horological <br/><span className="text-white/30">Excellence</span>
             </h1>
             <p className="text-gray-300 text-base md:text-lg mb-10 max-w-xl font-medium leading-relaxed italic border-l-2 border-blue-600 pl-4 md:pl-6">
-              Curating Pakistan's most exclusive artisan timepieces. Premium horology delivered via our verified Cash On Delivery network.
+              Curating Pakistan's most exclusive timepieces. Premium watches delivered via our verified Cash On Delivery network.
             </p>
             <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
               <button onClick={() => document.getElementById('collection')?.scrollIntoView({behavior: 'smooth'})} className="bg-white text-black font-black px-10 py-5 rounded-full text-[11px] uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all transform active:scale-95 italic text-center">
-                Explore Collection
+                Explore The Watches
               </button>
             </div>
           </div>
@@ -49,7 +49,7 @@ const Home: React.FC<HomeProps> = ({ products }) => {
         <div className="flex flex-col md:flex-row items-end justify-between mb-10 md:mb-16 gap-4">
           <div className="max-w-xl">
             <span className="text-blue-600 font-black uppercase tracking-widest text-[9px] md:text-[10px] mb-2 block italic">Verified Masterpieces</span>
-            <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter text-black">The Boutique Collection</h2>
+            <h2 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter text-black">The Watch Collection</h2>
           </div>
           <div className="hidden md:block h-px flex-grow bg-gray-100 mx-12"></div>
         </div>
