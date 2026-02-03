@@ -21,37 +21,35 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
   
-  // Ref to the actual scrollable content container
   const modalContainerRef = useRef<HTMLDivElement>(null);
 
-  // Ensure customer starts at the top of the page on landing
+  // Landing scroll reset
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
-  // Reset modal scroll on open to ensure name field is seen immediately at the top
+  // Force modal scroll to top (Name field) on open
   useEffect(() => {
     if (isOrderModalOpen) {
-      // Small timeout to ensure DOM has rendered
-      const timeout = setTimeout(() => {
+      const resetScroll = () => {
         if (modalContainerRef.current) {
-          modalContainerRef.current.scrollTo(0, 0);
+          modalContainerRef.current.scrollTop = 0;
         }
-      }, 30);
+      };
+      resetScroll();
+      // Second attempt to catch any browser layout shifts
+      const timeout = setTimeout(resetScroll, 100);
       return () => clearTimeout(timeout);
     }
   }, [isOrderModalOpen]);
 
-  // Fake Live Viewers - small figure 18-23 with green indicator
+  // Fake Live Viewers
   const [viewers, setViewers] = useState(18 + Math.floor(Math.random() * 6));
   useEffect(() => {
     const interval = setInterval(() => {
       setViewers(prev => {
-        const change = Math.random() > 0.5 ? 1 : -1;
-        const next = prev + change;
-        if (next < 18) return 18;
-        if (next > 23) return 23;
-        return next;
+        const next = prev + (Math.random() > 0.5 ? 1 : -1);
+        return next < 18 ? 18 : next > 23 ? 23 : next;
       });
     }, 4500);
     return () => clearInterval(interval);
@@ -87,7 +85,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     return () => { clearTimeout(initialDelay); clearInterval(interval); };
   }, []);
 
-  // Professional Body Scroll Lock
+  // Body scroll lock for modal
   useEffect(() => {
     if (isOrderModalOpen) {
       document.body.style.overflow = 'hidden';
@@ -105,7 +103,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   if (!product) {
     return (
       <div className="container mx-auto px-4 py-32 text-center text-black">
-        <h2 className="text-3xl font-serif font-bold italic uppercase tracking-tighter text-black">Piece Not Found</h2>
+        <h2 className="text-3xl font-serif font-bold italic uppercase tracking-tighter text-black">Watch Not Found</h2>
         <Link to="/" className="text-blue-600 mt-6 inline-block font-black uppercase text-[10px] tracking-widest hover:underline italic">Return to Collection</Link>
       </div>
     );
@@ -135,7 +133,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
   return (
     <div className="bg-white animate-fadeIn pb-24 lg:pb-0 relative text-black overflow-x-hidden">
-      {/* 1st Sight: Flash Sale Sticky Banner */}
+      {/* Flash Sale Banner */}
       <div className="bg-red-600 text-white py-2 text-center sticky top-16 z-50 shadow-md">
         <div className="container mx-auto px-4 flex items-center justify-center space-x-2 md:space-x-6">
           <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">FLASH SALE — 25% DISCOUNT RESERVED</span>
@@ -145,15 +143,15 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       </div>
 
       <div className="container mx-auto px-4 md:px-6 py-4 lg:py-16 relative">
-        {/* Fixed Purchase Popup */}
+        {/* Fixed Purchase Notification */}
         <div className={`fixed bottom-24 left-4 right-4 md:left-auto md:right-8 z-[100] transition-all duration-700 transform ${showPurchaseNotice ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0 pointer-events-none'}`}>
           <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-3 mx-auto max-w-[320px]">
             <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shrink-0 animate-bounce shadow-md"><i className="fas fa-check-circle text-sm"></i></div>
             <div>
-              <p className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-600 mb-0.5 italic">Live Acquisition</p>
+              <p className="text-[8px] font-black uppercase tracking-[0.2em] text-blue-600 mb-0.5 italic">Live Order</p>
               <p className="text-[10px] font-bold text-black leading-tight italic">
                 {purchaseNotice?.name} from {purchaseNotice?.city}<br/>
-                <span className="text-gray-400 font-normal">just ordered this masterpiece</span>
+                <span className="text-gray-400 font-normal">just reserved this timepiece</span>
               </p>
             </div>
           </div>
@@ -170,7 +168,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                     <span className="animate-ping absolute inline-flex h-1.5 w-1.5 rounded-full bg-green-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
                  </span>
-                 <span className="text-[9px] font-black uppercase tracking-widest">{viewers} Live Viewers</span>
+                 <span className="text-[9px] font-black uppercase tracking-widest">{viewers} Browsing Now</span>
               </div>
             </div>
           </div>
@@ -189,7 +187,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <span className="text-[9px] font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full uppercase italic border border-green-100">Free COD Express</span>
             </div>
 
-            {/* Happy Customer Social Proof */}
+            {/* Social Proof */}
             <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 border-dashed">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -215,18 +213,18 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
             <p className="text-gray-600 text-sm md:text-lg leading-relaxed mb-6 italic">{product.description}</p>
 
-            {/* Shaking COD Button */}
+            {/* Main CTA Button */}
             <div className="mb-8">
               <button onClick={() => setIsOrderModalOpen(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">
                 Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i>
               </button>
-              <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">Payment strictly upon receipt of parcel</p>
+              <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">No advance payment — pay when watch arrives</p>
             </div>
 
-            {/* Editions Selection */}
+            {/* Variants */}
             {product.variants && product.variants.length > 0 && (
               <div className="mb-10">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-3 italic">Available Editions</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-3 italic">Select Edition</p>
                 <div className="grid grid-cols-2 gap-2">
                   {product.variants.map((v) => (
                     <button key={v.id} onClick={() => setSelectedVariant(v.id)} className={`px-3 py-3 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${selectedVariant === v.id ? 'bg-black text-white border-black shadow-md scale-[1.02]' : 'bg-white text-gray-400 border-gray-100 hover:border-black'}`}>
@@ -250,27 +248,27 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         </div>
       </div>
 
-      {/* COD ORDER FORM MODAL - PROFESSIONAL SEPARATE SCROLLING PAGE FEEL */}
+      {/* COD ORDER FORM MODAL */}
       {isOrderModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-fadeIn overflow-hidden">
-          {/* Main Modal container with explicit scrolling allowed */}
+          {/* Main Modal container with forced scrolling boundary */}
           <div 
             ref={modalContainerRef}
-            className="bg-white w-full h-full md:h-auto md:max-h-[95vh] md:w-[600px] md:rounded-[2.5rem] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar"
+            className="bg-white w-full h-full md:h-auto md:max-h-[95vh] md:w-[600px] md:rounded-[2.5rem] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar relative"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            <div className="p-6 sm:p-12 flex flex-col min-h-full">
+            <div className="p-6 sm:p-12 flex flex-col min-h-max pb-20">
               {!orderSuccess ? (
                 <>
                   <div className="flex justify-between items-start mb-8">
                     <div>
                       <h2 className="text-2xl sm:text-3xl font-serif font-bold uppercase italic tracking-tighter text-black">Cash on delivery</h2>
                       <div className="flex items-center mt-2 space-x-2">
-                        <span className="flex h-1.5 w-1.5 rounded-full bg-green-500"></span>
+                        <span className="flex h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
                         <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">10,000+ Happy Customers In Pakistan</p>
                       </div>
                     </div>
-                    <button onClick={() => setIsOrderModalOpen(false)} className="bg-gray-50 hover:bg-black hover:text-white transition w-10 h-10 rounded-full flex items-center justify-center shadow-sm">
+                    <button onClick={() => setIsOrderModalOpen(false)} className="bg-gray-50 hover:bg-black hover:text-white transition w-10 h-10 rounded-full flex items-center justify-center shadow-sm shrink-0">
                       <i className="fas fa-times text-lg"></i>
                     </button>
                   </div>
@@ -292,6 +290,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                         </label>
                         <input 
                           required 
+                          autoFocus={field === 'name'}
                           type={field === 'phone' ? 'tel' : 'text'} 
                           className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-xs italic shadow-sm" 
                           placeholder={field === 'phone' ? 'Enter Mobile Number' : `Enter Your ${field}`} 
@@ -306,7 +305,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                       <textarea 
                         required 
                         className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none h-28 resize-none text-black focus:border-black transition uppercase text-xs italic shadow-sm" 
-                        placeholder="House Details, Street Name, Famous Landmark nearby..." 
+                        placeholder="House Number, Street Name, Famous Landmark..." 
                         value={formData.address} 
                         onChange={e => setFormData({...formData, address: e.target.value})} 
                       />
