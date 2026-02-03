@@ -14,7 +14,6 @@ const Footer: React.FC = () => {
               <li><Link to="/terms-of-service" className="hover:text-blue-600 transition">Terms of Service</Link></li>
               <li><Link to="/refund-policy" className="hover:text-blue-600 transition">Refund Policy</Link></li>
               <li><Link to="/shipping-policy" className="hover:text-blue-600 transition">Shipping Policy</Link></li>
-              <li><Link to="/admin" className="text-gray-300 hover:text-black transition text-[9px] mt-4 block uppercase font-bold">Admin Console</Link></li>
             </ul>
           </div>
           <div>

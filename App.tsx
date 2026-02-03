@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { CartItem, Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
@@ -8,13 +8,15 @@ import Home from './views/Home';
 import ProductDetail from './views/ProductDetail';
 import CartView from './views/CartView';
 import Checkout from './views/Checkout';
-import AdminDashboard from './views/AdminDashboard';
 import PrivacyPolicy from './views/PrivacyPolicy';
 import TermsOfService from './views/TermsOfService';
 import RefundPolicy from './views/RefundPolicy';
 import ShippingPolicy from './views/ShippingPolicy';
 import Header from './components/Header';
 import Footer from './components/Footer';
+
+// Lazy load the admin panel so it's physically separated from the customer bundle
+const AdminDashboard = lazy(() => import('./views/AdminDashboard'));
 
 const App: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
@@ -85,7 +87,6 @@ const App: React.FC = () => {
           description: row.description || '',
           price: Number(row.price_pkr || row.price || 0),
           image: row.image || row.image_url || 'https://via.placeholder.com/800x1000',
-          // Note: Features column stores the array of extra images based on user schema
           images: Array.isArray(row.features) ? row.features : (row.image ? [row.image] : []),
           category: row.category || 'Luxury',
           inventory: Number(row.inventory || 0),
@@ -215,26 +216,33 @@ const App: React.FC = () => {
         <Header cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }} />
         {isSyncing && <div className="fixed top-20 right-6 z-[1000] animate-pulse"><div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg">Cloud Syncing...</div></div>}
         <main className="flex-grow">
-          <Routes>
-            <Route path="/" element={<Home products={products} />} />
-            <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
-            <Route path="/cart" element={<CartView cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
-            <Route path="/checkout" element={<Checkout cart={cart} placeOrder={placeOrder} />} />
-            <Route path="/admin/*" element={
-              <AdminDashboard 
-                products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
-                orders={orders} setOrders={() => {}} 
-                user={user} login={(role) => { const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; setUser(u); localStorage.setItem('itx_user_session', JSON.stringify(u)); }}
-                systemPassword={systemPassword} setSystemPassword={setSystemPassword}
-                refreshData={() => { fetchOrders(); fetchProducts(); }}
-                updateStatusOverride={updateStatusOverride}
-              />
-            } />
-            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="/terms-of-service" element={<TermsOfService />} />
-            <Route path="/refund-policy" element={<RefundPolicy />} />
-            <Route path="/shipping-policy" element={<ShippingPolicy />} />
-          </Routes>
+          <Suspense fallback={
+            <div className="min-h-[60vh] flex items-center justify-center">
+              <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          }>
+            <Routes>
+              <Route path="/" element={<Home products={products} />} />
+              <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
+              <Route path="/cart" element={<CartView cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
+              <Route path="/checkout" element={<Checkout cart={cart} placeOrder={placeOrder} />} />
+              {/* HIDDEN ADMIN ROUTE - NO VISIBLE LINKS */}
+              <Route path="/admin-portal/*" element={
+                <AdminDashboard 
+                  products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
+                  orders={orders} setOrders={() => {}} 
+                  user={user} login={(role) => { const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; setUser(u); localStorage.setItem('itx_user_session', JSON.stringify(u)); }}
+                  systemPassword={systemPassword} setSystemPassword={setSystemPassword}
+                  refreshData={() => { fetchOrders(); fetchProducts(); }}
+                  updateStatusOverride={updateStatusOverride}
+                />
+              } />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
+              <Route path="/refund-policy" element={<RefundPolicy />} />
+              <Route path="/shipping-policy" element={<ShippingPolicy />} />
+            </Routes>
+          </Suspense>
         </main>
         <Footer />
       </div>
