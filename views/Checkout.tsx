@@ -52,20 +52,20 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
   if (isOrdered) {
     return (
       <div className="container mx-auto px-4 py-32 text-center animate-fadeIn">
-        <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-lg animate-bounce">
+        <div className="w-16 h-16 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-2xl shadow-lg">
           <i className="fas fa-check"></i>
         </div>
-        <h1 className="text-4xl font-black uppercase tracking-tighter mb-4 text-black">Thank You for Your Order!</h1>
-        <p className="text-gray-600 mb-8 max-w-md mx-auto text-lg">
-          Your order has been placed successfully. Your Order ID is <span className="font-black text-black">#{orderId}</span>.
+        <h1 className="text-2xl md:text-3xl font-bold uppercase tracking-tight mb-4 text-black">Order Successful</h1>
+        <p className="text-gray-600 mb-8 max-w-sm mx-auto text-sm font-medium">
+          Thank you. Your order ID is <span className="font-bold text-black">#{orderId}</span>.
         </p>
-        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 mb-10 max-w-sm mx-auto">
-          <p className="text-blue-800 font-bold">
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-10 max-w-xs mx-auto">
+          <p className="text-blue-800 text-xs font-bold leading-relaxed">
             <i className="fas fa-truck mr-2"></i> 
-            Your parcel will be delivered within 3-4 days.
+            Delivery expected within 3-4 days.
           </p>
         </div>
-        <Link to="/" className="bg-black text-white px-10 py-4 rounded-full font-black uppercase tracking-tight hover:scale-105 transition-transform inline-block italic">
+        <Link to="/" className="bg-black text-white px-8 py-4 rounded-full font-bold uppercase tracking-widest text-[10px] hover:scale-105 transition-transform inline-block italic">
           Continue Shopping
         </Link>
       </div>
@@ -75,63 +75,74 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
   if (cart.length === 0) {
     return (
       <div className="container mx-auto px-4 py-32 text-center">
-        <h2 className="text-2xl font-black mb-4 text-black">YOUR BAG IS EMPTY</h2>
-        <Link to="/" className="text-blue-600 font-bold">Return to Shop</Link>
+        <h2 className="text-xl font-bold mb-4 text-black uppercase tracking-widest">Your bag is empty</h2>
+        <Link to="/" className="text-blue-600 font-bold text-sm underline">Return to Shop</Link>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-16 max-w-5xl">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+    <div className="container mx-auto px-4 py-12 max-w-5xl">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-7">
-          <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-xl shadow-gray-100/50">
-            <div className="mb-10 text-center lg:text-left">
-              <h2 className="text-3xl font-black uppercase tracking-tighter italic text-black">Cash On Delivery</h2>
-              <p className="text-gray-400 font-bold text-xs uppercase tracking-widest mt-2">Complete your details to place order</p>
+          <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-gray-100 shadow-xl shadow-gray-100/30">
+            <div className="mb-8 text-center lg:text-left">
+              <h2 className="text-2xl font-bold uppercase tracking-tight italic text-black">Cash On Delivery</h2>
+              <p className="text-gray-400 font-bold text-[10px] uppercase tracking-[0.2em] mt-2">Complete delivery details</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 gap-6 text-black">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="grid grid-cols-1 gap-5 text-black">
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 italic">Full Name</label>
+                  <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2 italic">Full Name</label>
                   <input 
                     required
                     type="text" 
-                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 font-bold focus:outline-none focus:ring-2 focus:ring-black transition" 
-                    placeholder="Enter your full name"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5 font-bold text-sm focus:outline-none focus:border-black transition" 
+                    placeholder="Enter your name"
                     value={formData.name}
                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 italic">Phone Number</label>
+                  <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2 italic">Phone Number</label>
                   <input 
                     required
                     type="tel" 
-                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 font-bold focus:outline-none focus:ring-2 focus:ring-black transition" 
-                    placeholder="e.g. 03xx-xxxxxxx"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5 font-bold text-sm focus:outline-none focus:border-black transition" 
+                    placeholder="e.g. 0300-1234567"
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 italic">City</label>
-                  <input 
-                    required
-                    type="text" 
-                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 font-bold focus:outline-none focus:ring-2 focus:ring-black transition" 
-                    placeholder="e.g. Karachi, Lahore, Islamabad"
-                    value={formData.city}
-                    onChange={(e) => setFormData({...formData, city: e.target.value})}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2 italic">City</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5 font-bold text-sm focus:outline-none focus:border-black transition" 
+                      placeholder="City"
+                      value={formData.city}
+                      onChange={(e) => setFormData({...formData, city: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2 italic">Area</label>
+                    <input 
+                      required
+                      type="text" 
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5 font-bold text-sm focus:outline-none focus:border-black transition" 
+                      placeholder="Area/Postal"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 italic">Full Address</label>
+                  <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2 italic">Full Address</label>
                   <textarea 
                     required
-                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 font-bold focus:outline-none focus:ring-2 focus:ring-black transition h-32 resize-none" 
-                    placeholder="House no, Street, Area..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-3.5 font-bold text-sm focus:outline-none focus:border-black transition h-24 resize-none" 
+                    placeholder="House no, Street, etc."
                     value={formData.address}
                     onChange={(e) => setFormData({...formData, address: e.target.value})}
                   />
@@ -142,14 +153,13 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl shadow-blue-500/20 disabled:bg-gray-400 group relative overflow-hidden italic"
+                  className="w-full bg-black text-white font-bold uppercase py-5 rounded-xl hover:bg-blue-600 transition shadow-xl text-xs tracking-widest italic"
                 >
                   {isSubmitting ? (
                     <i className="fas fa-circle-notch fa-spin"></i>
                   ) : (
-                    <span className="relative z-10">
+                    <span>
                       Place Order — Rs. {subtotal.toLocaleString()} 
-                      <i className="fas fa-arrow-right ml-3 group-hover:translate-x-1 transition-transform"></i>
                     </span>
                   )}
                 </button>
@@ -159,62 +169,51 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
         </div>
 
         <div className="lg:col-span-5">
-          <div className="bg-gray-50 rounded-[2.5rem] p-8 border border-gray-200 sticky top-24">
-            <h4 className="text-xs font-black uppercase tracking-widest mb-8 flex items-center text-black">
+          <div className="bg-gray-50 rounded-[2rem] p-6 md:p-8 border border-gray-200 sticky top-24">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest mb-8 flex items-center text-black">
               <i className="fas fa-shopping-bag mr-3 text-blue-600"></i> Order Review
             </h4>
-            <div className="space-y-5 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar mb-8 text-black">
+            <div className="space-y-4 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar mb-8 text-black">
               {cart.map((item, i) => (
-                <div key={i} className="flex space-x-4 items-center bg-white p-3 rounded-2xl border border-gray-100">
-                  <div className="w-16 h-16 rounded-xl overflow-hidden border border-gray-50 shrink-0">
+                <div key={i} className="flex space-x-3 items-center bg-white p-3 rounded-xl border border-gray-100">
+                  <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-50 shrink-0">
                     <img src={item.product.image} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex-grow min-w-0">
-                    <p className="text-xs font-black truncate uppercase">{item.product.name}</p>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Qty: {item.quantity}</p>
+                    <p className="text-[11px] font-bold truncate uppercase tracking-tight">{item.product.name}</p>
+                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Qty: {item.quantity}</p>
                   </div>
-                  <p className="text-sm font-black whitespace-nowrap">Rs. {(item.product.price * item.quantity).toLocaleString()}</p>
+                  <p className="text-xs font-bold whitespace-nowrap">Rs. {(item.product.price * item.quantity).toLocaleString()}</p>
                 </div>
               ))}
             </div>
             
-            <div className="pt-6 border-t border-gray-200 space-y-4 text-black">
-              <div className="flex justify-between text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
+            <div className="pt-6 border-t border-gray-200 space-y-3 text-black">
+              <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest text-gray-400">
                 <span>Shipping Fee</span>
                 <span className="text-green-600">Free Delivery</span>
               </div>
-              <div className="flex justify-between items-center text-2xl font-black uppercase tracking-tighter">
+              <div className="flex justify-between items-center text-lg font-bold uppercase tracking-tight">
                 <span>Amount Payable</span>
                 <span className="text-blue-600">Rs. {subtotal.toLocaleString()}</span>
               </div>
             </div>
 
-            {/* Social Proof Section - Happy Customers with Pakistani style DPs */}
-            <div className="mt-8 pt-8 border-t border-gray-200">
-              <div className="flex flex-col items-center">
-                <div className="flex -space-x-3 mb-4">
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1614283233556-f35b0c801ef1?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 1" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1589156280159-27698a70f29e?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 2" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1628157588553-5eeea00af15c?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 3" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1594744803329-e58b31de8bf5?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 4" />
-                  <img className="inline-block h-10 w-10 rounded-full ring-4 ring-gray-50 object-cover" src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=100&auto=format&fit=crop" alt="Pakistani DP 5" />
-                  <div className="h-10 w-10 rounded-full ring-4 ring-gray-50 bg-black flex items-center justify-center text-[10px] font-black text-white">+82</div>
+            <div className="mt-8 pt-8 border-t border-gray-200 text-center">
+                <div className="flex justify-center -space-x-2 mb-4">
+                  {[1,2,3,4].map(i => (
+                    <img key={i} className="inline-block h-8 w-8 rounded-full ring-2 ring-gray-50 object-cover" src={`https://images.unsplash.com/photo-${1614283233556 + i}-f35b0c801ef1?q=80&w=100&auto=format&fit=crop`} alt="User" />
+                  ))}
+                  <div className="h-8 w-8 rounded-full ring-2 ring-gray-50 bg-black flex items-center justify-center text-[8px] font-bold text-white uppercase">+82</div>
                 </div>
-                <div className="text-center">
-                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-black italic">10,000+ Happy Customers</p>
-                  <div className="flex justify-center text-yellow-500 mt-1 space-x-0.5">
-                    <i className="fas fa-star text-[10px]"></i>
-                    <i className="fas fa-star text-[10px]"></i>
-                    <i className="fas fa-star text-[10px]"></i>
-                    <i className="fas fa-star text-[10px]"></i>
-                    <i className="fas fa-star text-[10px]"></i>
-                  </div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-black mb-1.5 italic">Trusted by 10,000+ Customers</p>
+                <div className="flex justify-center text-yellow-500 text-[10px] space-x-0.5">
+                  {[1,2,3,4,5].map(i => <i key={i} className="fas fa-star"></i>)}
                 </div>
-              </div>
             </div>
 
-            <div className="mt-8 p-4 bg-white rounded-2xl border border-gray-200 text-center">
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">
+            <div className="mt-8 p-3 bg-white rounded-xl border border-gray-200 text-center">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-400 italic">
                 <i className="fas fa-info-circle mr-1 text-blue-500"></i> No advance payment required
               </p>
             </div>
