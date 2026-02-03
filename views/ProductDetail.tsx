@@ -142,7 +142,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                 <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 flex items-center space-x-4 mb-8">
                   <img src={product.image} className="w-14 h-14 rounded-lg object-cover border shadow-sm" />
                   <div className="flex-grow min-w-0">
-                    <h3 className="text-xs font-bold text-black truncate uppercase">{product.name}</h3>
+                    <h3 className="text-xs font-bold text-black truncate uppercase tracking-tight">{product.name}</h3>
                     <p className="text-black font-bold text-base mt-1">Rs. {currentPrice.toLocaleString()}</p>
                   </div>
                 </div>
@@ -284,9 +284,9 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
             <div className="my-8">
                <h3 className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-3 flex items-center">
-                 <span className="w-6 h-[1px] bg-gray-200 mr-2"></span> Product Notes
+                 <span className="w-6 h-[1px] bg-gray-200 mr-2"></span> Product Details
                </h3>
-               <p className="text-sm text-gray-700 leading-relaxed border-l-2 border-black pl-4 whitespace-pre-wrap font-medium italic">
+               <p className="text-sm text-gray-700 leading-relaxed border-l-2 border-black pl-4 whitespace-pre-wrap font-normal">
                  {product.description}
                </p>
             </div>

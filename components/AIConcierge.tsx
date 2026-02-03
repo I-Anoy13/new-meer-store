@@ -49,7 +49,7 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
         ],
         config: {
           systemInstruction: `You are the ITX AI Concierge, a master horologist and luxury sales expert for "ITX SHOP MEER". 
-          Your tone is sophisticated, professional, and slightly poetic, fitting for high-end artisan items.
+          Your tone is sophisticated, professional, and helpful.
           
           Context of available products:
           ${productContext}
@@ -58,7 +58,7 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
           1. Only recommend products from the provided list.
           2. Focus on craftsmanship, engineering, and style suitability.
           3. Mention prices in PKR (Rs.).
-          4. Always refer to the customer as "Guest" or "Sir/Madam" with high respect.
+          4. Always refer to the customer with high respect.
           5. Keep responses concise but impactful.`
         }
       });
@@ -67,38 +67,38 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
       setMessages(prev => [...prev, { role: 'ai', text: aiResponse }]);
     } catch (error) {
       console.error("AI Error:", error);
-      setMessages(prev => [...prev, { role: 'ai', text: "Our security protocols are currently high. Please browse our collection while I re-establish connection." }]);
+      setMessages(prev => [...prev, { role: 'ai', text: "System is re-establishing connection. Please browse our collection in the meantime." }]);
     } finally {
       setIsTyping(false);
     }
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end">
+    <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end font-sans">
       {/* Chat Window */}
       {isOpen && (
-        <div className="mb-4 w-[350px] md:w-[400px] h-[500px] bg-white rounded-[2rem] shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-fadeIn">
-          <div className="bg-black p-6 flex justify-between items-center">
+        <div className="mb-4 w-[320px] md:w-[380px] h-[450px] bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden animate-fadeIn">
+          <div className="bg-black p-5 flex justify-between items-center">
             <div>
-              <h3 className="text-white font-serif italic text-lg leading-tight uppercase">ITX AI Concierge</h3>
-              <p className="text-blue-400 text-[9px] font-black uppercase tracking-widest mt-1">Master Consultant Active</p>
+              <h3 className="text-white font-bold text-sm uppercase tracking-tight">ITX AI Concierge</h3>
+              <p className="text-blue-400 text-[9px] font-bold uppercase tracking-widest mt-0.5">Master Consultant Active</p>
             </div>
             <button onClick={() => setIsOpen(false)} className="text-white/50 hover:text-white transition">
-              <i className="fas fa-times text-xl"></i>
+              <i className="fas fa-times text-lg"></i>
             </button>
           </div>
 
-          <div className="flex-grow overflow-y-auto p-6 space-y-4 custom-scrollbar bg-gray-50/30">
+          <div className="flex-grow overflow-y-auto p-5 space-y-4 custom-scrollbar bg-gray-50/30">
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] p-4 rounded-2xl text-xs leading-relaxed ${m.role === 'user' ? 'bg-black text-white rounded-tr-none' : 'bg-white border border-gray-100 text-gray-700 shadow-sm rounded-tl-none font-medium italic'}`}>
+                <div className={`max-w-[85%] p-3 rounded-xl text-xs leading-relaxed ${m.role === 'user' ? 'bg-black text-white rounded-tr-none' : 'bg-white border border-gray-100 text-gray-700 shadow-sm rounded-tl-none font-medium'}`}>
                   {m.text}
                 </div>
               </div>
             ))}
             {isTyping && (
               <div className="flex justify-start">
-                <div className="bg-white border border-gray-100 p-4 rounded-2xl rounded-tl-none shadow-sm flex space-x-1">
+                <div className="bg-white border border-gray-100 p-3 rounded-xl rounded-tl-none shadow-sm flex space-x-1">
                   <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce"></div>
                   <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:0.2s]"></div>
                   <div className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:0.4s]"></div>
@@ -109,17 +109,17 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
           </div>
 
           <div className="p-4 bg-white border-t border-gray-100">
-            <div className="flex items-center space-x-2 bg-gray-50 rounded-xl px-4 py-2 border border-gray-100">
+            <div className="flex items-center space-x-2 bg-gray-50 rounded-lg px-4 py-1.5 border border-gray-100">
               <input 
                 type="text" 
                 placeholder="Ask your concierge..." 
-                className="flex-grow bg-transparent border-none outline-none text-xs py-2 font-medium text-black"
+                className="flex-grow bg-transparent border-none outline-none text-xs py-2 font-medium text-black placeholder:text-gray-400"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSend()}
               />
               <button onClick={handleSend} className="text-blue-600 hover:text-black transition">
-                <i className="fas fa-paper-plane"></i>
+                <i className="fas fa-paper-plane text-xs"></i>
               </button>
             </div>
           </div>
@@ -129,25 +129,25 @@ const AIConcierge: React.FC<AIConciergeProps> = ({ products }) => {
       {/* Toggle Button */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-16 h-16 rounded-full flex items-center justify-center text-white shadow-2xl transform transition-all duration-500 hover:scale-110 active:scale-95 ${isOpen ? 'bg-red-500' : 'bg-black'}`}
+        className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-2xl transform transition-all duration-300 hover:scale-105 active:scale-95 ${isOpen ? 'bg-red-500' : 'bg-black'}`}
       >
-        <i className={`fas ${isOpen ? 'fa-times' : 'fa-robot'} text-xl`}></i>
+        <i className={`fas ${isOpen ? 'fa-times' : 'fa-robot'} text-lg`}></i>
         {!isOpen && (
-          <span className="absolute -top-1 -right-1 flex h-4 w-4">
+          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-600"></span>
+            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-600"></span>
           </span>
         )}
       </button>
 
-      {/* WhatsApp Quick Link */}
+      {/* WhatsApp Link */}
       <a 
         href="https://wa.me/923XXXXXXXXX" 
         target="_blank" 
         rel="noopener noreferrer"
-        className="fixed bottom-6 left-6 w-14 h-14 bg-green-500 rounded-full shadow-2xl flex items-center justify-center text-white hover:bg-green-600 transition-all hover:scale-110 active:scale-95"
+        className="fixed bottom-6 left-6 w-12 h-12 bg-green-500 rounded-full shadow-2xl flex items-center justify-center text-white hover:bg-green-600 transition-all hover:scale-105"
       >
-        <i className="fab fa-whatsapp text-2xl"></i>
+        <i className="fab fa-whatsapp text-xl"></i>
       </a>
     </div>
   );
