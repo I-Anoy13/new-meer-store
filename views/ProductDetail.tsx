@@ -21,24 +21,35 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
   
-  const modalContainerRef = useRef<HTMLDivElement>(null);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
 
   // Landing scroll reset
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [id]);
 
-  // Force modal scroll to top (Name field) on open without triggering keyboard zoom
+  // Robust Modal Scroll Control: Ensuring form starts from the very top (Name field)
+  // and is scrollable regardless of keyboard state.
   useEffect(() => {
     if (isOrderModalOpen) {
+      document.body.style.overflow = 'hidden';
+      
       const resetScroll = () => {
-        if (modalContainerRef.current) {
-          modalContainerRef.current.scrollTop = 0;
+        if (modalScrollRef.current) {
+          modalScrollRef.current.scrollTop = 0;
         }
       };
+
+      // Multi-phase reset to handle layout shifts and browser quirks
       resetScroll();
-      const timeout = setTimeout(resetScroll, 150);
-      return () => clearTimeout(timeout);
+      const rafId = requestAnimationFrame(resetScroll);
+      const timeoutId = setTimeout(resetScroll, 200);
+
+      return () => {
+        document.body.style.overflow = 'unset';
+        cancelAnimationFrame(rafId);
+        clearTimeout(timeoutId);
+      };
     }
   }, [isOrderModalOpen]);
 
@@ -83,14 +94,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     const interval = setInterval(triggerNotice, 25000);
     return () => { clearTimeout(initialDelay); clearInterval(interval); };
   }, []);
-
-  // Body scroll lock for modal
-  useEffect(() => {
-    if (isOrderModalOpen) {
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = 'unset'; };
-    }
-  }, [isOrderModalOpen]);
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     e.currentTarget.src = PLACEHOLDER_IMAGE;
@@ -210,7 +213,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
 
-            {/* Main CTA Button - HIGHER UP */}
+            {/* Main CTA Button - HIGHER UP FOR VISIBILITY */}
             <div className="mb-8">
               <button onClick={() => setIsOrderModalOpen(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">
                 Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i>
@@ -218,8 +221,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">No advance payment — pay when watch arrives</p>
             </div>
 
-            {/* Description - MOVED AFTER BUTTON */}
-            <p className="text-gray-600 text-sm md:text-lg leading-relaxed mb-10 italic">{product.description}</p>
+            {/* Description - PLACED AFTER THE MAIN COD BUTTON */}
+            <div className="mb-10">
+              <p className="text-gray-600 text-sm md:text-lg leading-relaxed italic">{product.description}</p>
+            </div>
 
             {/* Variants */}
             {product.variants && product.variants.length > 0 && (
@@ -248,88 +253,104 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         </div>
       </div>
 
-      {/* COD ORDER FORM MODAL - SEPARATE PAGE FEEL */}
+      {/* COD ORDER FORM MODAL - RE-ENGINEERED FOR SCROLL INDEPENDENCE */}
       {isOrderModalOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-fadeIn overflow-hidden">
-          {/* Main Modal container - use base text size to prevent iOS zoom */}
+        <div className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-xl animate-fadeIn overflow-hidden flex items-start sm:items-center justify-center">
           <div 
-            ref={modalContainerRef}
-            className="bg-white w-full h-full md:h-auto md:max-h-[95vh] md:w-[600px] md:rounded-[2.5rem] flex flex-col shadow-2xl border border-gray-100 overflow-y-auto custom-scrollbar relative text-base"
-            style={{ WebkitOverflowScrolling: 'touch' }}
+            ref={modalScrollRef}
+            className="w-full h-full sm:h-auto sm:max-h-[95vh] sm:w-[600px] bg-white sm:rounded-[2.5rem] shadow-2xl flex flex-col overflow-y-auto overflow-x-hidden custom-scrollbar touch-pan-y"
           >
-            <div className="p-6 sm:p-12 flex flex-col min-h-max pb-24">
+            <div className="p-6 sm:p-12 min-h-max pb-32">
               {!orderSuccess ? (
                 <>
-                  <div className="flex justify-between items-start mb-8">
+                  <div className="flex justify-between items-start mb-10">
                     <div>
                       <h2 className="text-2xl sm:text-3xl font-serif font-bold uppercase italic tracking-tighter text-black">Cash on delivery</h2>
                       <div className="flex items-center mt-2 space-x-2">
                         <span className="flex h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">10,000+ Happy Customers In Pakistan</p>
+                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">Fast Doorstep Delivery in Pakistan</p>
                       </div>
                     </div>
-                    <button onClick={() => setIsOrderModalOpen(false)} className="bg-gray-50 hover:bg-black hover:text-white transition w-10 h-10 rounded-full flex items-center justify-center shadow-sm shrink-0">
-                      <i className="fas fa-times text-lg"></i>
+                    <button 
+                      onClick={() => setIsOrderModalOpen(false)} 
+                      className="bg-gray-100 hover:bg-black hover:text-white transition w-12 h-12 rounded-full flex items-center justify-center shadow-sm shrink-0"
+                    >
+                      <i className="fas fa-times text-xl"></i>
                     </button>
                   </div>
                   
-                  <form onSubmit={handleQuickOrder} className="space-y-6 flex-grow">
+                  <form onSubmit={handleQuickOrder} className="space-y-8">
+                    {/* Compact Product Summary */}
                     <div className="p-5 bg-gray-50 rounded-3xl border border-gray-100 flex items-center space-x-4 mb-4 text-black">
                       <img src={product.image} className="w-16 h-16 rounded-2xl object-cover border shadow-sm" />
-                      <div>
-                        <p className="font-black text-[11px] uppercase italic leading-tight">{product.name}</p>
-                        <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-1 italic">Pay Rs. {(currentPrice * quantity).toLocaleString()} at door</p>
+                      <div className="min-w-0">
+                        <p className="font-black text-[11px] uppercase italic leading-tight truncate">{product.name}</p>
+                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1 italic">Rs. {(currentPrice * quantity).toLocaleString()} COD</p>
                         <p className="text-[8px] text-gray-400 font-bold uppercase mt-1">Edition: {variantName}</p>
                       </div>
                     </div>
                     
-                    {['name', 'phone', 'city'].map(field => (
-                      <div key={field}>
-                        <label className="block text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
-                          {field === 'phone' ? 'Mobile Number (Required)' : `${field} (Required)`}
-                        </label>
-                        <input 
+                    {/* Form Fields - 16px font used to prevent auto-zoom on mobile */}
+                    <div className="space-y-6">
+                      {['name', 'phone', 'city'].map(field => (
+                        <div key={field}>
+                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">
+                            {field === 'phone' ? 'Phone Number (Required)' : `${field} (Required)`}
+                          </label>
+                          <input 
+                            required 
+                            type={field === 'phone' ? 'tel' : 'text'} 
+                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                            placeholder={field === 'phone' ? '03XX-XXXXXXX' : `Your ${field}`} 
+                            value={(formData as any)[field]} 
+                            onChange={e => setFormData({...formData, [field]: e.target.value})} 
+                          />
+                        </div>
+                      ))}
+                      
+                      <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Complete Delivery Address</label>
+                        <textarea 
                           required 
-                          type={field === 'phone' ? 'tel' : 'text'} 
-                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                          placeholder={field === 'phone' ? 'Enter Mobile Number' : `Enter Your ${field}`} 
-                          value={(formData as any)[field]} 
-                          onChange={e => setFormData({...formData, [field]: e.target.value})} 
+                          className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none h-32 resize-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                          placeholder="House No, Street Name, Famous Landmark..." 
+                          value={formData.address} 
+                          onChange={e => setFormData({...formData, address: e.target.value})} 
                         />
                       </div>
-                    ))}
-                    
-                    <div>
-                      <label className="block text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Full Delivery Address</label>
-                      <textarea 
-                        required 
-                        className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none h-28 resize-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                        placeholder="House Number, Street Name, Famous Landmark..." 
-                        value={formData.address} 
-                        onChange={e => setFormData({...formData, address: e.target.value})} 
-                      />
                     </div>
                     
-                    <div className="pt-4">
-                      <button type="submit" disabled={isSubmitting} className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-[12px] italic active:scale-95">
+                    <div className="pt-6">
+                      <button 
+                        type="submit" 
+                        disabled={isSubmitting} 
+                        className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-[12px] italic active:scale-95"
+                      >
                         {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete Reservation — Rs. ${(currentPrice * quantity).toLocaleString()}`}
                       </button>
                     </div>
                     
-                    <div className="flex flex-col items-center justify-center space-y-3 py-6 border-t border-gray-100 mt-6">
-                      <div className="flex text-yellow-500 text-xs space-x-1">
+                    <div className="flex flex-col items-center justify-center space-y-4 py-8 border-t border-gray-100 mt-8">
+                      <div className="flex text-yellow-500 text-sm space-x-1.5">
                         {[1,2,3,4,5].map(i => <i key={i} className="fas fa-star"></i>)}
                       </div>
-                      <span className="text-[9px] font-black uppercase text-gray-400 italic">Trusted Watch Merchant • Pakistan</span>
+                      <span className="text-[9px] font-black uppercase text-gray-400 italic text-center">Trusted Pakistani Watch Merchant • Quality Inspected</span>
                     </div>
                   </form>
                 </>
               ) : (
-                <div className="text-center py-16 flex flex-col items-center justify-center flex-grow text-black">
-                  <div className="w-20 h-20 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-3xl shadow-xl animate-bounce"><i className="fas fa-check"></i></div>
-                  <h3 className="text-3xl font-serif font-bold italic uppercase mb-3 italic">Order Confirmed</h3>
-                  <p className="text-gray-500 mb-10 font-bold italic text-[11px] tracking-widest italic uppercase">Ledger ID: <span className="text-black font-black">#{orderSuccess.id}</span></p>
-                  <button onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-5 rounded-2xl shadow-lg hover:bg-gray-800 transition text-[10px] italic">Close Portal</button>
+                <div className="text-center py-24 flex flex-col items-center justify-center text-black">
+                  <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-xl animate-bounce">
+                    <i className="fas fa-check"></i>
+                  </div>
+                  <h3 className="text-3xl font-serif font-bold italic uppercase mb-4 italic">Order Confirmed</h3>
+                  <p className="text-gray-500 mb-12 font-bold italic text-[12px] tracking-widest italic uppercase">Ledger ID: <span className="text-black font-black">#{orderSuccess.id}</span></p>
+                  <button 
+                    onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} 
+                    className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-6 rounded-2xl shadow-lg hover:bg-gray-800 transition text-[11px] italic"
+                  >
+                    Close Portal
+                  </button>
                 </div>
               )}
             </div>
