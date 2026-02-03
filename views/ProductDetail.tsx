@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Product, Order } from '../types';
 import { TRUST_BADGES, PLACEHOLDER_IMAGE } from '../constants';
@@ -18,39 +18,15 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const product = products.find(p => p.id === id);
   const [selectedVariant, setSelectedVariant] = useState(product?.variants?.[0]?.id || '');
   const [quantity, setQuantity] = useState(1);
-  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isOrderPortalActive, setIsOrderPortalActive] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
-  
-  const overlayRef = useRef<HTMLDivElement>(null);
 
-  // Landing scroll reset
+  // Reset scroll on state changes
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, [id]);
+  }, [id, isOrderPortalActive]);
 
-  // Critical Fix: Body Lock and Modal Scroll Reset
-  useEffect(() => {
-    if (isOrderModalOpen) {
-      document.body.style.overflow = 'hidden';
-      
-      // Force the overlay to the top immediately
-      if (overlayRef.current) {
-        overlayRef.current.scrollTop = 0;
-      }
-      
-      // Secondary check for mobile browsers
-      const timeout = setTimeout(() => {
-        if (overlayRef.current) overlayRef.current.scrollTop = 0;
-      }, 30);
-      
-      return () => {
-        document.body.style.overflow = 'unset';
-        clearTimeout(timeout);
-      };
-    }
-  }, [isOrderModalOpen]);
-
-  // Fake Live Viewers
+  // Fake Live Viewers Logic
   const [viewers, setViewers] = useState(18 + Math.floor(Math.random() * 6));
   useEffect(() => {
     const interval = setInterval(() => {
@@ -75,11 +51,12 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Fake Purchase Notice
+  // Fake Purchase Notification
   const [purchaseNotice, setPurchaseNotice] = useState<{ name: string, city: string } | null>(null);
   const [showPurchaseNotice, setShowPurchaseNotice] = useState(false);
 
   useEffect(() => {
+    if (isOrderPortalActive) return; // Don't show notifications during checkout
     const triggerNotice = () => {
       const name = MUSLIM_NAMES[Math.floor(Math.random() * MUSLIM_NAMES.length)];
       const city = PAKISTAN_CITIES[Math.floor(Math.random() * PAKISTAN_CITIES.length)];
@@ -90,11 +67,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     const initialDelay = setTimeout(triggerNotice, 3000);
     const interval = setInterval(triggerNotice, 25000);
     return () => { clearTimeout(initialDelay); clearInterval(interval); };
-  }, []);
-
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    e.currentTarget.src = PLACEHOLDER_IMAGE;
-  };
+  }, [isOrderPortalActive]);
 
   const [formData, setFormData] = useState({ name: '', phone: '', city: '', address: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -130,6 +103,126 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     setIsSubmitting(false);
   };
 
+  // --- RENDER ORDER PORTAL (FULL PAGE INDEPENDENT FLOW) ---
+  if (isOrderPortalActive) {
+    return (
+      <div className="bg-white min-h-screen animate-fadeIn pb-32">
+        {/* Portal Header */}
+        <div className="bg-black text-white py-4 px-6 sticky top-0 z-50 flex justify-between items-center shadow-lg">
+          <div className="flex items-center space-x-3">
+             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+             <p className="text-[10px] font-black uppercase tracking-[0.2em] italic">Secure Checkout — Cash On Delivery</p>
+          </div>
+          <button 
+            onClick={() => setIsOrderPortalActive(false)} 
+            className="text-white/60 hover:text-white transition uppercase text-[10px] font-black tracking-widest flex items-center"
+          >
+            Cancel <i className="fas fa-times ml-2"></i>
+          </button>
+        </div>
+
+        <div className="container mx-auto px-4 max-w-2xl py-12">
+          {!orderSuccess ? (
+            <>
+              <div className="mb-12 text-center">
+                <h1 className="text-4xl font-serif font-bold italic uppercase tracking-tighter text-black leading-none mb-3">Order Details</h1>
+                <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.3em] italic">No Advance Payment Required</p>
+              </div>
+
+              {/* Order Preview Card */}
+              <div className="bg-gray-50 rounded-[2rem] p-6 border border-gray-100 flex items-center space-x-6 mb-12">
+                <img src={product.image} className="w-24 h-24 rounded-3xl object-cover border shadow-sm" />
+                <div className="flex-grow">
+                  <p className="text-xs font-black uppercase italic text-gray-400 mb-1 leading-none">{product.category}</p>
+                  <h3 className="text-lg font-black uppercase italic text-black leading-tight mb-2">{product.name}</h3>
+                  <p className="text-blue-600 font-black text-sm italic">Rs. {currentPrice.toLocaleString()}</p>
+                  <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Edition: {variantName}</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleQuickOrder} className="space-y-8">
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Recipient Name (Required)</label>
+                    <input 
+                      required 
+                      type="text" 
+                      className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-5 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                      placeholder="Your Full Name" 
+                      value={formData.name} 
+                      onChange={e => setFormData({...formData, name: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Phone Number (Required)</label>
+                    <input 
+                      required 
+                      type="tel" 
+                      className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-5 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                      placeholder="03XX-XXXXXXX" 
+                      value={formData.phone} 
+                      onChange={e => setFormData({...formData, phone: e.target.value})} 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">City (Required)</label>
+                    <input 
+                      required 
+                      type="text" 
+                      className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-5 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                      placeholder="e.g. Karachi, Lahore..." 
+                      value={formData.city} 
+                      onChange={e => setFormData({...formData, city: e.target.value})} 
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Complete Delivery Address</label>
+                    <textarea 
+                      required 
+                      className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-5 font-bold outline-none h-40 resize-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
+                      placeholder="House No, Street Name, Landmark..." 
+                      value={formData.address} 
+                      onChange={e => setFormData({...formData, address: e.target.value})} 
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting} 
+                    className="w-full bg-black text-white font-black uppercase py-7 rounded-2xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-[13px] italic active:scale-95 animate-pulse-red"
+                  >
+                    {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Complete COD Order — Rs. ${currentPrice.toLocaleString()}`}
+                  </button>
+                  <p className="text-[9px] text-center font-black uppercase text-gray-400 tracking-[0.4em] mt-5 italic">Quality Guarantee • Verified Delivery</p>
+                </div>
+              </form>
+            </>
+          ) : (
+            <div className="text-center py-24 animate-fadeIn">
+              <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-2xl animate-bounce">
+                <i className="fas fa-check"></i>
+              </div>
+              <h2 className="text-4xl font-serif font-bold italic uppercase mb-4 text-black">Order Received</h2>
+              <p className="text-gray-500 mb-12 font-bold italic text-sm tracking-widest uppercase">Shipping Reference: <span className="text-black font-black">#{orderSuccess.id}</span></p>
+              <button 
+                onClick={() => { setIsOrderPortalActive(false); setOrderSuccess(null); }} 
+                className="w-full bg-black text-white font-black uppercase tracking-[0.4em] py-6 rounded-2xl shadow-xl hover:bg-blue-600 transition text-[11px] italic"
+              >
+                Back To Shop
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDER STANDARD PRODUCT DETAIL ---
   return (
     <div className="bg-white animate-fadeIn pb-24 lg:pb-0 relative text-black overflow-x-hidden">
       {/* Flash Sale Banner */}
@@ -142,7 +235,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       </div>
 
       <div className="container mx-auto px-4 md:px-6 py-4 lg:py-16 relative">
-        {/* Fixed Purchase Notification */}
+        {/* Purchase Notification */}
         <div className={`fixed bottom-24 left-4 right-4 md:left-auto md:right-8 z-[100] transition-all duration-700 transform ${showPurchaseNotice ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0 pointer-events-none'}`}>
           <div className="bg-white/95 backdrop-blur-xl border border-blue-100 p-4 rounded-2xl shadow-2xl flex items-center space-x-3 mx-auto max-w-[320px]">
             <div className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shrink-0 animate-bounce shadow-md"><i className="fas fa-check-circle text-sm"></i></div>
@@ -159,7 +252,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-16">
           <div className="lg:col-span-5">
             <div className="relative aspect-[4/5] bg-gray-50 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden shadow-inner border border-gray-100 flex items-center justify-center group">
-              <img src={product.image} alt={product.name} onError={handleImageError} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+              <img src={product.image} alt={product.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
               <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest italic shadow-lg">-25% OFF</div>
               
               <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center space-x-2 border border-white/10">
@@ -186,7 +279,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <span className="text-[9px] font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full uppercase italic border border-green-100">Free COD Express</span>
             </div>
 
-            {/* Social Proof */}
             <div className="mb-6 p-4 bg-gray-50 rounded-2xl border border-gray-100 border-dashed">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -210,20 +302,20 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
 
-            {/* Main CTA Button */}
             <div className="mb-8">
-              <button onClick={() => setIsOrderModalOpen(true)} className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red">
+              <button 
+                onClick={() => setIsOrderPortalActive(true)} 
+                className="w-full bg-black text-white font-black text-[12px] md:text-[14px] uppercase tracking-[0.2em] py-5 px-10 rounded-xl hover:bg-blue-600 transition shadow-2xl active:scale-95 italic animate-attention animate-pulse-red"
+              >
                 Order Cash On Delivery <i className="fas fa-arrow-right ml-2 text-xs"></i>
               </button>
               <p className="text-[8px] text-center font-black uppercase text-gray-400 tracking-[0.3em] mt-3 italic">No advance payment — pay when watch arrives</p>
             </div>
 
-            {/* Description - PLACED AFTER THE CTA BUTTON */}
             <div className="mb-10">
               <p className="text-gray-600 text-sm md:text-lg leading-relaxed italic">{product.description}</p>
             </div>
 
-            {/* Variants */}
             {product.variants && product.variants.length > 0 && (
               <div className="mb-10">
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-3 italic">Select Edition</p>
@@ -249,134 +341,6 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
           </div>
         </div>
       </div>
-
-      {/* COD ORDER FORM MODAL - FINAL STABILITY RE-ENGINEERING */}
-      {isOrderModalOpen && (
-        <div 
-          ref={overlayRef}
-          className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-md overflow-y-auto overflow-x-hidden animate-fadeIn -webkit-overflow-scrolling-touch"
-        >
-          {/* Inner Wrapper: flex items-start + min-h-screen ensures we start at the VERY TOP */}
-          <div className="min-h-screen w-full flex items-start justify-center py-0 sm:py-8 md:py-16">
-            <div className="w-full max-w-[600px] bg-white sm:rounded-[2.5rem] shadow-2xl relative flex flex-col min-h-screen sm:min-h-0">
-              <div className="p-6 sm:p-12 pb-32">
-                {!orderSuccess ? (
-                  <>
-                    <div className="flex justify-between items-start mb-10">
-                      <div>
-                        <h2 className="text-2xl sm:text-3xl font-serif font-bold uppercase italic tracking-tighter text-black">Cash on delivery</h2>
-                        <div className="flex items-center mt-2 space-x-2">
-                          <span className="flex h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">Doorstep Delivery in Pakistan</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => setIsOrderModalOpen(false)} 
-                        className="bg-gray-100 hover:bg-black hover:text-white transition w-12 h-12 rounded-full flex items-center justify-center shadow-sm shrink-0"
-                      >
-                        <i className="fas fa-times text-xl"></i>
-                      </button>
-                    </div>
-                    
-                    <form onSubmit={handleQuickOrder} className="space-y-8">
-                      {/* Compact Item Summary */}
-                      <div className="p-5 bg-gray-50 rounded-3xl border border-gray-100 flex items-center space-x-4 mb-4 text-black">
-                        <img src={product.image} className="w-16 h-16 rounded-2xl object-cover border shadow-sm" />
-                        <div className="min-w-0">
-                          <p className="font-black text-[11px] uppercase italic leading-tight truncate">{product.name}</p>
-                          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-1 italic">Rs. {(currentPrice * quantity).toLocaleString()} COD</p>
-                          <p className="text-[8px] text-gray-400 font-bold uppercase mt-1">Edition: {variantName}</p>
-                        </div>
-                      </div>
-                      
-                      {/* Inputs using 16px (text-base) to prevent iOS layout breakage/zoom */}
-                      <div className="space-y-6">
-                        <div>
-                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Full Name (Required)</label>
-                          <input 
-                            required 
-                            type="text" 
-                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                            placeholder="Your Name" 
-                            value={formData.name} 
-                            onChange={e => setFormData({...formData, name: e.target.value})} 
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Phone Number (Required)</label>
-                          <input 
-                            required 
-                            type="tel" 
-                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                            placeholder="03XX-XXXXXXX" 
-                            value={formData.phone} 
-                            onChange={e => setFormData({...formData, phone: e.target.value})} 
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">City (Required)</label>
-                          <input 
-                            required 
-                            type="text" 
-                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                            placeholder="Karachi, Lahore, etc..." 
-                            value={formData.city} 
-                            onChange={e => setFormData({...formData, city: e.target.value})} 
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 px-1 italic">Full Shipping Address</label>
-                          <textarea 
-                            required 
-                            className="w-full bg-white border-2 border-gray-100 rounded-2xl px-6 py-4 font-bold outline-none h-32 resize-none text-black focus:border-black transition uppercase text-base italic shadow-sm" 
-                            placeholder="House No, Street, Landmark..." 
-                            value={formData.address} 
-                            onChange={e => setFormData({...formData, address: e.target.value})} 
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="pt-6">
-                        <button 
-                          type="submit" 
-                          disabled={isSubmitting} 
-                          className="w-full bg-black text-white font-black uppercase py-6 rounded-2xl hover:bg-blue-600 transition shadow-2xl tracking-[0.2em] text-[12px] italic active:scale-95"
-                        >
-                          {isSubmitting ? <i className="fas fa-circle-notch fa-spin"></i> : `Confirm COD Order — Rs. ${(currentPrice * quantity).toLocaleString()}`}
-                        </button>
-                      </div>
-                      
-                      <div className="flex flex-col items-center justify-center space-y-4 py-8 border-t border-gray-100 mt-8">
-                        <div className="flex text-yellow-500 text-sm space-x-1.5">
-                          {[1,2,3,4,5].map(i => <i key={i} className="fas fa-star"></i>)}
-                        </div>
-                        <span className="text-[9px] font-black uppercase text-gray-400 italic text-center">Quality Inspected • Verified Delivery Network</span>
-                      </div>
-                    </form>
-                  </>
-                ) : (
-                  <div className="text-center py-24 flex flex-col items-center justify-center text-black animate-fadeIn">
-                    <div className="w-24 h-24 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-4xl shadow-xl animate-bounce">
-                      <i className="fas fa-check"></i>
-                    </div>
-                    <h3 className="text-3xl font-serif font-bold italic uppercase mb-4 italic">Order Confirmed</h3>
-                    <p className="text-gray-500 mb-12 font-bold italic text-[12px] tracking-widest italic uppercase">Package ID: <span className="text-black font-black">#{orderSuccess.id}</span></p>
-                    <button 
-                      onClick={() => { setIsOrderModalOpen(false); setOrderSuccess(null); }} 
-                      className="w-full max-w-xs bg-black text-white font-black uppercase tracking-[0.4em] py-6 rounded-2xl shadow-lg hover:bg-gray-800 transition text-[11px] italic"
-                    >
-                      Close Window
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
