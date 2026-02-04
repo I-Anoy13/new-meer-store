@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { CartItem, Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
@@ -15,6 +15,34 @@ import ShippingPolicy from './views/ShippingPolicy';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import AdminDashboard from './views/AdminDashboard';
+
+// Helper component to track and restore last route for PWA users
+const SessionRestorer: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [hasRestored, setHasRestored] = useState(false);
+
+  useEffect(() => {
+    // On mount, if we are at root and have a saved route, restore it
+    const isPWA = window.matchMedia('(display-mode: standalone)').matches;
+    if (!hasRestored && isPWA && location.pathname === '/') {
+      const savedRoute = localStorage.getItem('itx_last_route');
+      if (savedRoute && savedRoute !== '/') {
+        navigate(savedRoute);
+      }
+    }
+    setHasRestored(true);
+  }, [hasRestored, location, navigate]);
+
+  useEffect(() => {
+    // Save current route whenever it changes (if it's an admin route or home)
+    if (location.pathname.startsWith('/admin') || location.pathname === '/') {
+      localStorage.setItem('itx_last_route', location.pathname + location.search + location.hash);
+    }
+  }, [location]);
+
+  return null;
+};
 
 const MainLayout: React.FC<{
   children: React.ReactNode;
@@ -230,6 +258,7 @@ const App: React.FC = () => {
 
   return (
     <HashRouter>
+      <SessionRestorer />
       <Suspense fallback={
         <div className="min-h-screen flex items-center justify-center bg-white">
           <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
