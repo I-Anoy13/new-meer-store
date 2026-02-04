@@ -7,6 +7,11 @@
     <title>ITX SHOP MEER - Admin & Store</title>
     <meta name="theme-color" content="#1a1c1d" />
     
+    <!-- iOS PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ITX SHOP MEER">
+
     <!-- PRE-BOOTSTRAP REDIRECT GUARD -->
     <script>
       (function() {
@@ -14,9 +19,10 @@
         const params = url.searchParams;
         const hash = window.location.hash;
 
-        // CRITICAL: If pwa=admin is in URL, force-jump to #/admin instantly
+        // If launched via Admin PWA flag, ensure we go straight to admin dashboard
         if (params.get('pwa') === 'admin' && !hash.includes('/admin')) {
-          window.location.replace(window.location.pathname + window.location.search + '#/admin');
+          window.location.hash = '#/admin';
+          console.log('PWA Admin Launch: Redirection forced.');
         }
       })();
     </script>
@@ -30,49 +36,52 @@
 
     <script>
       /**
-       * Forces the browser to recognize the Admin context.
-       * 1. Swaps manifest to manifest-admin.json
-       * 2. Appends ?pwa=admin to the URL without refreshing (via history.replaceState)
-       *    This ensures that when a user clicks 'Add to Home Screen', Safari 
-       *    captures the URL with the pwa=admin flag.
+       * FOOLPROOF PWA CAPTURE LOGIC
+       * 1. Detects if user is in the /admin hash.
+       * 2. If so, and the URL doesn't have ?pwa=admin, it FORCES a page reload.
+       *    This is necessary because iOS Safari captures the Share URL *at the time of sharing*
+       *    and pushState/replaceState is sometimes ignored in favor of the 'real' navigation URL.
+       * 3. Aggressively replaces the manifest link to clear browser cache.
        */
-      function syncPWAContext() {
-        const manifestLink = document.getElementById('pwa-manifest');
+      function forceSyncPWAContext() {
+        const url = new URL(window.location.href);
         const hash = window.location.hash;
         const isAdmin = hash.includes('/admin');
-        
-        // 1. Swap Manifest
-        const targetManifest = isAdmin ? '/manifest-admin.json' : '/manifest.json';
-        if (manifestLink && manifestLink.getAttribute('href').split('?')[0] !== targetManifest) {
-          manifestLink.setAttribute('href', targetManifest + '?v=' + Date.now());
+        const hasAdminFlag = url.searchParams.get('pwa') === 'admin';
+
+        // 1. Force reload with param if in Admin but no flag present
+        // This ensures the Share Sheet sees the flag.
+        if (isAdmin && !hasAdminFlag) {
+          url.searchParams.set('pwa', 'admin');
+          window.location.href = url.toString();
+          return;
         }
 
-        // 2. Sync URL Search Params for PWA capture
-        const url = new URL(window.location.href);
-        if (isAdmin && url.searchParams.get('pwa') !== 'admin') {
-          url.searchParams.set('pwa', 'admin');
-          window.history.replaceState(null, '', url.toString());
-        } else if (!isAdmin && url.searchParams.has('pwa')) {
+        // 2. Remove flag if NOT in admin to prevent store users from accidentally saving admin icons
+        if (!isAdmin && hasAdminFlag) {
           url.searchParams.delete('pwa');
           window.history.replaceState(null, '', url.toString());
         }
+
+        // 3. Aggressive Manifest Swapping
+        const targetManifest = isAdmin ? '/manifest-admin.json' : '/manifest.json';
+        const currentLink = document.getElementById('pwa-manifest');
+        
+        if (currentLink && currentLink.getAttribute('href').split('?')[0] !== targetManifest) {
+          // Create a brand new element to force the browser to re-read it
+          const newLink = document.createElement('link');
+          newLink.id = 'pwa-manifest';
+          newLink.rel = 'manifest';
+          newLink.href = targetManifest + '?v=' + Date.now();
+          currentLink.parentNode.replaceChild(newLink, currentLink);
+          console.log('Manifest rebuilt for context:', targetManifest);
+        }
       }
 
-      window.addEventListener('hashchange', syncPWAContext);
-      // Run once on load
-      document.addEventListener('DOMContentLoaded', syncPWAContext);
-      // Periodically check in case of internal transitions
-      setInterval(syncPWAContext, 2000);
-    </script>
-
-    <!-- TikTok Pixel Base Code -->
-    <script>
-      !function (w, d, t) {
-        w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){
-          if(e.includes('PIXEL_ID') || e === 'YOUR_PIXEL_ID') return;
-          var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
-        ttq.load('YOUR_PIXEL_ID');
-      }(window, document, 'ttq');
+      window.addEventListener('hashchange', forceSyncPWAContext);
+      document.addEventListener('DOMContentLoaded', forceSyncPWAContext);
+      // Extra check for late renders
+      setTimeout(forceSyncPWAContext, 1000);
     </script>
 
     <style>
@@ -80,19 +89,10 @@
       .custom-scrollbar::-webkit-scrollbar { width: 4px; }
       .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
       .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-      
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; }
-      
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-      @keyframes pulseRed {
-        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
-        70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
-        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
-      }
-      .animate-pulse-red { animation: pulseRed 2s infinite; }
     </style>
   <script type="importmap">
 {

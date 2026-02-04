@@ -1,8 +1,8 @@
 
 {
-  "name": "ITX Admin Console",
-  "short_name": "ITX Admin",
-  "description": "Store Management for ITX MEER",
+  "name": "ITX ADMIN",
+  "short_name": "ITX ADMIN",
+  "description": "Store Management Dashboard for ITX MEER",
   "start_url": "/?pwa=admin",
   "display": "standalone",
   "background_color": "#1a1c1d",
