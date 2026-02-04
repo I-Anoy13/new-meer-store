@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v3-realtime'; // Incremented version
+const CACHE_NAME = 'itx-meer-v4-performance'; // Busting cache for speed
 const ASSETS = [
   '/',
   '/index.html',

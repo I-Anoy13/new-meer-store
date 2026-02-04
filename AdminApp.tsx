@@ -11,7 +11,6 @@ const AdminApp: React.FC = () => {
   const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Local overrides for UI state
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
     return saved ? JSON.parse(saved) : {};
@@ -79,9 +78,10 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('orders').select('*');
+      // Limit to 50 latest for fast dashboard boot
+      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
       if (!error && data) {
-        setRawOrders(data.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+        setRawOrders(data);
       }
     } catch (e) { console.error(e); }
   }, []);
@@ -97,20 +97,10 @@ const AdminApp: React.FC = () => {
   }, [fetchProducts, fetchOrders]);
 
   const updateStatusOverride = async (orderId: string, status: Order['status']) => {
-    // 1. Update UI immediately
     setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
-    
-    // 2. Persist to DB if we have a dbId (assuming ORD-ID corresponds to row id or order_id)
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: status.toLowerCase() })
-        .eq('order_id', orderId);
-      
-      if (error) console.error("Sync error:", error);
-    } catch (e) {
-      console.error(e);
-    }
+      await supabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', orderId);
+    } catch (e) { console.error(e); }
   };
 
   const deleteProduct = async (productId: string) => {
@@ -134,10 +124,19 @@ const AdminApp: React.FC = () => {
       <Routes>
         <Route path="/*" element={
           <AdminDashboard 
-            products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
-            orders={orders} setOrders={() => {}} 
-            user={user} login={(role) => { const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; setUser(u); localStorage.setItem('itx_user_session', JSON.stringify(u)); }}
-            systemPassword={systemPassword} setSystemPassword={setSystemPassword}
+            products={products} 
+            setProducts={setProducts} 
+            deleteProduct={deleteProduct} 
+            orders={orders} 
+            setOrders={(newRaw: any) => setRawOrders(prev => [newRaw, ...prev])} 
+            user={user} 
+            login={(role) => { 
+              const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; 
+              setUser(u); 
+              localStorage.setItem('itx_user_session', JSON.stringify(u)); 
+            }}
+            systemPassword={systemPassword} 
+            setSystemPassword={setSystemPassword}
             refreshData={() => { fetchOrders(); fetchProducts(); }}
             updateStatusOverride={updateStatusOverride}
           />
