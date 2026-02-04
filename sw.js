@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v12-persistent';
+const CACHE_NAME = 'itx-meer-v13-guardian';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,24 +28,23 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// The standard "showNotification" can be throttled if called from main thread.
-// We handle it here in the SW thread which has higher background priority.
+// Primary Background Notification Listener
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options } = event.data;
     
-    event.waitUntil(
-      self.registration.showNotification(title, {
-        ...options,
-        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-        badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-        vibrate: [500, 100, 500, 100, 500],
-        requireInteraction: true,
-        tag: 'itx-new-order',
-        renotify: true,
-        data: { url: '/admin.html' }
-      })
-    );
+    const notificationPromise = self.registration.showNotification(title, {
+      ...options,
+      icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
+      badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
+      vibrate: [500, 110, 500, 110, 450, 110, 200, 110],
+      requireInteraction: true,
+      tag: 'itx-new-order',
+      renotify: true,
+      silent: false // Explicitly allow sound
+    });
+
+    event.waitUntil(notificationPromise);
   }
 });
 
@@ -53,16 +52,19 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Focus existing admin window if open
       for (const client of clientList) {
         if (client.url.includes('admin.html') && 'focus' in client) {
           return client.focus();
         }
       }
+      // Otherwise open new
       if (clients.openWindow) return clients.openWindow('/admin.html');
     })
   );
 });
 
+// Ensure the fetch doesn't block realtime
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.hostname.includes('supabase.co')) return;
