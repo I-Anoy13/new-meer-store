@@ -23,31 +23,31 @@ const SessionRestorer: React.FC = () => {
   const [hasRestored, setHasRestored] = useState(false);
 
   useEffect(() => {
-    // If we're at the root, check if we should be in admin based on PWA URL flag
+    // Immediate Restoration Guard
     if (!hasRestored && (location.pathname === '/' || location.pathname === '')) {
       const urlParams = new URLSearchParams(window.location.search);
-      // Priority 1: URL Parameter (for PWA home screen launch)
+      
+      // PRIORITY 1: PWA Launcher Flag
       if (urlParams.get('pwa') === 'admin') {
-        navigate('/admin');
+        navigate('/admin', { replace: true });
         setHasRestored(true);
         return;
       }
       
-      // Priority 2: Local Storage (for standard session persistence)
+      // PRIORITY 2: Local Storage persistence
       const savedRoute = localStorage.getItem('itx_last_route');
       if (savedRoute && savedRoute.includes('/admin')) {
-        navigate('/admin');
+        navigate('/admin', { replace: true });
       }
     }
     setHasRestored(true);
   }, [hasRestored, location, navigate]);
 
   useEffect(() => {
-    // Save current hash whenever it changes to ensure user returns to where they left off
+    // Continuous state tracking for PWA re-launches
     if (window.location.hash) {
       localStorage.setItem('itx_last_route', window.location.hash);
       
-      // Save specific mode flag
       if (window.location.hash.includes('/admin')) {
         localStorage.setItem('itx_last_mode', 'admin');
       } else {
