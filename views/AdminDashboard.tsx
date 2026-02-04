@@ -19,7 +19,6 @@ interface AdminDashboardProps {
 
 const DEFAULT_CHIME = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
-// Fix: Added setSystemPassword to the props destructuring list
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   products, setProducts, deleteProduct, orders, user, login, systemPassword, setSystemPassword, refreshData, updateStatusOverride
 }) => {
@@ -47,27 +46,49 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newProduct, setNewProduct] = useState({ name: '', price: '', category: 'Watches', description: '' });
   const [mainImageFile, setMainImageFile] = useState<File | null>(null);
 
-  // Initialize Audio
+  // Initialize Audio Object once
   useEffect(() => {
-    audioRef.current = new Audio(customSound || DEFAULT_CHIME);
+    if (!audioRef.current) {
+      audioRef.current = new Audio(customSound || DEFAULT_CHIME);
+    } else {
+      audioRef.current.src = customSound || DEFAULT_CHIME;
+    }
+    audioRef.current.load();
   }, [customSound]);
 
   const playNotificationSound = () => {
     if (audioRef.current) {
+      // Browsers require a fresh user interaction to play audio. 
+      // If isAudioEnabled is true, it means they clicked the unlock button.
       audioRef.current.currentTime = 0;
-      audioRef.current.play().catch(e => console.warn("Audio play blocked. User must interact first.", e));
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.warn("Playback failed. Interaction needed:", error);
+          setIsAudioEnabled(false); // Reset to show the unlock button again if blocked
+        });
+      }
     }
   };
 
   const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert("File is too large. Please use a sound under 2MB.");
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = event.target?.result as string;
         setCustomSound(base64);
         localStorage.setItem('itx_admin_sound', base64);
-        alert("Custom notification sound updated!");
+        // Test immediately
+        if (audioRef.current) {
+          audioRef.current.src = base64;
+          audioRef.current.play();
+        }
+        alert("Custom alert sound saved!");
       };
       reader.readAsDataURL(file);
     }
@@ -75,44 +96,45 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const enableAudio = () => {
     setIsAudioEnabled(true);
-    playNotificationSound(); // Plays once to "unlock" browser audio
+    if (audioRef.current) {
+      audioRef.current.play().then(() => {
+        // Stop immediately, we just needed to trigger the interaction
+        audioRef.current?.pause();
+        audioRef.current!.currentTime = 0;
+      }).catch(e => console.log("Audio unlock attempted", e));
+    }
   };
 
-  // Notification Engine - Real-time updates with Sound
+  // Notification Engine - Listen for new orders
   useEffect(() => {
-    if (user) {
+    if (user && isAudioEnabled) {
       const channel = supabase
-        .channel('admin-realtime-v3')
+        .channel('admin-realtime-v4')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
           const newOrder = payload.new;
           
-          // 1. Play Sound
+          // 1. Play Sound (Only works if user interacted/unlocked)
           playNotificationSound();
 
-          // 2. Browser Notification
-          if (notificationStatus === 'granted') {
-             try {
-               new Notification("🔔 New Order Alert!", {
-                 body: `${newOrder.customer_name} placed an order for Rs. ${newOrder.total_pkr}`,
-                 icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
-               });
-             } catch (e) {
-               console.warn("Notification error", e);
-             }
+          // 2. Browser Notification (Visible)
+          if (Notification.permission === 'granted') {
+             new Notification("New Order: " + newOrder.customer_name, {
+               body: `Total: Rs. ${newOrder.total_pkr}`,
+               icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
+             });
           }
+          
           refreshData();
         })
         .subscribe();
       return () => { supabase.removeChannel(channel); };
     }
-  }, [user, notificationStatus, refreshData, customSound]);
+  }, [user, isAudioEnabled, refreshData]);
 
   const requestNotificationPermission = async () => {
     if ('Notification' in window) {
       const permission = await Notification.requestPermission();
       setNotificationStatus(permission);
-    } else {
-      alert("Please Add to Home Screen to enable notifications on this device.");
     }
   };
 
@@ -263,14 +285,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                className="w-full flex items-center justify-center space-x-2 p-3 rounded-xl bg-blue-600 text-white animate-pulse"
              >
                 <i className="fas fa-volume-high text-xs"></i>
-                <span className="text-[9px] font-black uppercase tracking-widest">Unlock Audio Alerts</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-center">Tap to Enable Sound</span>
              </button>
            ) : (
              <div className="w-full flex items-center space-x-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                <i className="fas fa-bell text-green-500 text-xs"></i>
+                <i className="fas fa-volume-up text-green-500 text-xs"></i>
                 <div className="text-left overflow-hidden">
-                   <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">Live Alerts</p>
-                   <p className="text-[8px] text-gray-400 uppercase font-bold truncate">Audio Engine Active</p>
+                   <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">Sound Ready</p>
+                   <p className="text-[8px] text-gray-400 uppercase font-bold truncate">Monitoring Live</p>
                 </div>
              </div>
            )}
@@ -391,7 +413,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                
                <div className="bg-white p-8 rounded-[2rem] border border-gray-200 shadow-sm space-y-8">
                   <div>
-                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest">Audio Notifications</h3>
+                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest">Audio Alerts</h3>
                      <div className="space-y-4">
                         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
                            <div className="flex items-center space-x-4">
@@ -399,20 +421,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                  <i className="fas fa-music text-xs"></i>
                               </div>
                               <div>
-                                 <p className="text-xs font-black uppercase tracking-tight">Notification Sound</p>
-                                 <p className="text-[10px] text-gray-400 font-bold uppercase">{customSound ? 'Custom File Active' : 'Default Chime Active'}</p>
+                                 <p className="text-xs font-black uppercase tracking-tight">Active Sound</p>
+                                 <p className="text-[10px] text-gray-400 font-bold uppercase">{customSound ? 'Custom File' : 'System Default'}</p>
                               </div>
                            </div>
-                           <button onClick={playNotificationSound} className="bg-white text-black border border-gray-200 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition">Test Sound</button>
+                           <button onClick={playNotificationSound} className="bg-white text-black border border-gray-200 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition shadow-sm">Test Play</button>
                         </div>
 
-                        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50 relative group hover:border-black transition">
+                        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50 relative group hover:border-black transition-all cursor-pointer">
                            <input type="file" accept="audio/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleSoundUpload} />
                            <i className="fas fa-cloud-arrow-up text-2xl text-gray-300 mb-2 group-hover:text-black transition-colors"></i>
-                           <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Upload Custom Alert (.mp3/.wav)</p>
+                           <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Click to upload custom sound (.mp3)</p>
                         </div>
+                        
                         {customSound && (
-                          <button onClick={() => { setCustomSound(null); localStorage.removeItem('itx_admin_sound'); }} className="w-full text-center text-red-500 text-[10px] font-black uppercase tracking-widest hover:underline">Reset to Default Sound</button>
+                          <button onClick={() => { setCustomSound(null); localStorage.removeItem('itx_admin_sound'); }} className="w-full text-center text-red-500 text-[10px] font-black uppercase tracking-widest hover:underline">Reset to Default Chime</button>
                         )}
                      </div>
                   </div>
@@ -425,7 +448,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                            type="text" 
                            value={systemPassword} 
                            onChange={(e) => { setSystemPassword(e.target.value); localStorage.setItem('systemPassword', e.target.value); }}
-                           className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-black outline-none"
+                           className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-black outline-none focus:border-black"
                         />
                      </div>
                   </div>
