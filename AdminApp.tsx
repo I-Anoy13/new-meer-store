@@ -3,8 +3,13 @@ import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
-// Import the clean, fixed version of the dashboard
+// Import the clean dashboard
 import AdminDashboard from './views/AdminDashboard';
+
+/* 
+ * ADMIN CORE APPLICATION 
+ * Managing order streams and inventory sync with Supabase.
+ */
 
 const AdminApp: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => {
@@ -88,7 +93,8 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(60);
+      const { data, error } = await supabase.from('orders').select('*')
+        .order('created_at', { ascending: false }).limit(60);
       if (!error && data) {
         setRawOrders(data);
       }
@@ -108,7 +114,9 @@ const AdminApp: React.FC = () => {
   const updateStatusOverride = async (orderId: string, status: Order['status']) => {
     setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
     try {
-      await supabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', orderId);
+      await supabase.from('orders').update({ 
+        status: status.toLowerCase() 
+      }).eq('order_id', orderId);
     } catch (e) { console.error(e); }
   };
 
@@ -135,7 +143,7 @@ const AdminApp: React.FC = () => {
               });
             }} 
             user={user} 
-            login={(role) => { 
+            login={(role: UserRole) => { 
               const u = { id: '1', name: 'Master', email: 'itx@me.pk', role }; 
               setUser(u); 
               localStorage.setItem('itx_user_session', JSON.stringify(u)); 
