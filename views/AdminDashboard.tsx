@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Product, Order, User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
@@ -17,7 +16,6 @@ export interface AdminDashboardProps {
   updateStatusOverride?: (orderId: string, status: Order['status']) => void;
 }
 
-// Added the component implementation and default export to fix the import error in AdminApp.tsx
 const AdminDashboard: React.FC<AdminDashboardProps> = ({
   products,
   setProducts,
@@ -34,6 +32,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'settings'>('orders');
   const [loginInput, setLoginInput] = useState('');
   const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [toasts, setToasts] = useState<{id: string, message: string}[]>([]);
   const [newProduct, setNewProduct] = useState<Partial<Product>>({
     name: '',
     price: 0,
@@ -42,6 +41,54 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     category: 'Luxury',
     inventory: 10
   });
+
+  // Procedural notification sound (No Base64 strings to avoid truncation)
+  const playChime = useCallback(() => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const playTone = (freq: number, start: number, duration: number) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.2, start + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, start + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(start);
+        osc.stop(start + duration);
+      };
+      playTone(880, audioCtx.currentTime, 0.5); // A5
+      playTone(1108.73, audioCtx.currentTime + 0.1, 0.6); // C#6
+    } catch (e) {
+      console.warn("Audio Context blocked by browser policy. Interaction required.");
+    }
+  }, []);
+
+  const addToast = useCallback((msg: string) => {
+    const id = Date.now().toString();
+    setToasts(prev => [...prev, { id, message: msg }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+  }, []);
+
+  // Real-time Order Listener
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('admin_order_updates')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        setOrders(payload.new);
+        addToast(`New Order from ${payload.new.customer_name || 'Customer'}`);
+        playChime();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user, setOrders, playChime, addToast]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,6 +120,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         refreshData();
         setIsAddingProduct(false);
         setNewProduct({ name: '', price: 0, description: '', image: '', category: 'Luxury', inventory: 10 });
+        addToast("Product added successfully");
       }
     } catch (err) {
       console.error(err);
@@ -113,6 +161,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   return (
     <div className="min-h-screen bg-white text-black font-sans pb-20">
+      {/* Toast Notifications */}
+      <div className="fixed top-6 right-6 z-[999] space-y-3">
+        {toasts.map(toast => (
+          <div key={toast.id} className="bg-black text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-4 animate-slideInTop border border-white/10">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+            <span className="text-xs font-bold uppercase tracking-widest">{toast.message}</span>
+          </div>
+        ))}
+      </div>
+
       <div className="border-b border-gray-100 sticky top-0 bg-white/80 backdrop-blur-md z-40">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-8">
@@ -139,7 +197,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </nav>
           </div>
           <div className="flex items-center space-x-4">
-             <button onClick={refreshData} className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
+             <button onClick={() => { refreshData(); playChime(); }} className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all">
                 <i className="fas fa-sync-alt text-xs"></i>
              </button>
           </div>
@@ -157,8 +215,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              {orders.map((order) => (
-                <div key={order.id} className="bg-white border border-gray-100 rounded-2xl p-6 hover:shadow-xl hover:shadow-gray-100/50 transition-all">
+              {orders.length === 0 ? (
+                <div className="py-20 text-center border-2 border-dashed border-gray-100 rounded-3xl">
+                   <p className="text-[10px] font-bold uppercase text-gray-400 tracking-widest">No orders found in database</p>
+                </div>
+              ) : orders.map((order) => (
+                <div key={order.id} className="bg-white border border-gray-100 rounded-2xl p-6 hover:shadow-xl hover:shadow-gray-100/50 transition-all group">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="flex items-center space-x-4">
                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg ${
@@ -192,7 +254,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <select 
                         value={order.status}
                         onChange={(e) => updateStatusOverride?.(order.id, e.target.value as Order['status'])}
-                        className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-[10px] font-bold uppercase outline-none focus:ring-2 focus:ring-blue-500"
+                        className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-[10px] font-bold uppercase outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                       >
                         <option value="Pending">Pending</option>
                         <option value="Confirmed">Confirmed</option>
@@ -207,10 +269,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div>
                       <h5 className="text-[9px] font-bold uppercase text-gray-400 mb-3 tracking-widest">Items</h5>
                       <div className="space-y-3">
-                        {order.items.map((item, idx) => (
+                        {order.items && order.items.map((item, idx) => (
                           <div key={idx} className="flex items-center space-x-3 bg-gray-50/50 p-2 rounded-lg">
-                            <img src={item.product.image} className="w-8 h-8 rounded object-cover border" />
-                            <span className="text-[10px] font-bold uppercase text-gray-700">{item.quantity}x {item.product.name} ({item.variantName})</span>
+                            <img src={item.product?.image || 'https://via.placeholder.com/100'} className="w-8 h-8 rounded object-cover border" />
+                            <span className="text-[10px] font-bold uppercase text-gray-700">{item.quantity}x {item.product?.name || 'Product'} ({item.variantName || 'Standard'})</span>
                           </div>
                         ))}
                       </div>
@@ -218,7 +280,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div>
                       <h5 className="text-[9px] font-bold uppercase text-gray-400 mb-3 tracking-widest">Shipping Address</h5>
                       <p className="text-xs font-bold text-gray-600 leading-relaxed uppercase tracking-tight">{order.customer.address}, {order.customer.city}</p>
-                      <p className="text-xs font-bold text-blue-600 mt-2"><i className="fas fa-phone mr-1"></i> {order.customer.phone}</p>
+                      <p className="text-xs font-bold text-blue-600 mt-2 flex items-center">
+                        <i className="fas fa-phone mr-2"></i> 
+                        <a href={`tel:${order.customer.phone}`} className="hover:underline">{order.customer.phone}</a>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -287,7 +352,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <button 
                     onClick={() => {
                       localStorage.setItem('systemPassword', systemPassword);
-                      alert('Access Key Updated');
+                      addToast('Access Key Updated');
                     }}
                     className="bg-black text-white px-6 py-3 rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-blue-600 transition"
                   >
@@ -310,7 +375,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {isAddingProduct && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-md animate-slideInUp shadow-2xl">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-md animate-fadeIn shadow-2xl">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold uppercase italic tracking-tight">New Product</h2>
               <button onClick={() => setIsAddingProduct(false)} className="text-gray-400 hover:text-black">
