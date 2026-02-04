@@ -23,18 +23,20 @@ const SessionRestorer: React.FC = () => {
   const [hasRestored, setHasRestored] = useState(false);
 
   useEffect(() => {
-    // Immediate Restoration Guard
+    // Immediate Restoration Guard - Run before anything else
     if (!hasRestored && (location.pathname === '/' || location.pathname === '')) {
       const urlParams = new URLSearchParams(window.location.search);
       
-      // PRIORITY 1: PWA Launcher Flag
-      if (urlParams.get('pwa') === 'admin') {
+      // PRIORITY 1: PWA Launcher Flag (or stored persistence)
+      const isPwaAdmin = urlParams.get('pwa') === 'admin' || localStorage.getItem('itx_pwa_force_admin') === 'true';
+      
+      if (isPwaAdmin) {
         navigate('/admin', { replace: true });
         setHasRestored(true);
         return;
       }
       
-      // PRIORITY 2: Local Storage persistence
+      // PRIORITY 2: Local Storage persistence for general navigation
       const savedRoute = localStorage.getItem('itx_last_route');
       if (savedRoute && savedRoute.includes('/admin')) {
         navigate('/admin', { replace: true });
@@ -50,8 +52,10 @@ const SessionRestorer: React.FC = () => {
       
       if (window.location.hash.includes('/admin')) {
         localStorage.setItem('itx_last_mode', 'admin');
+        localStorage.setItem('itx_pwa_force_admin', 'true');
       } else {
         localStorage.setItem('itx_last_mode', 'store');
+        localStorage.removeItem('itx_pwa_force_admin');
       }
     }
   }, [location]);
@@ -78,7 +82,7 @@ const MainLayout: React.FC<{
   </div>
 );
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -272,15 +276,10 @@ const App: React.FC = () => {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <HashRouter>
+    <>
       <SessionRestorer />
-      <Suspense fallback={
-        <div className="min-h-screen flex items-center justify-center bg-white">
-          <div className="w-8 h-8 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      }>
+      <Suspense fallback={null}>
         <Routes>
-          {/* Admin Route - No main layout */}
           <Route path="/admin/*" element={
             <AdminDashboard 
               products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
@@ -291,8 +290,6 @@ const App: React.FC = () => {
               updateStatusOverride={updateStatusOverride}
             />
           } />
-
-          {/* Customer Routes - With main layout */}
           <Route path="/*" element={
             <MainLayout cartCount={cartCount} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }} isSyncing={isSyncing}>
               <Routes>
@@ -309,8 +306,14 @@ const App: React.FC = () => {
           } />
         </Routes>
       </Suspense>
-    </HashRouter>
+    </>
   );
 };
+
+const App: React.FC = () => (
+  <HashRouter>
+    <AppContent />
+  </HashRouter>
+);
 
 export default App;

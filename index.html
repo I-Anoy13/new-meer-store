@@ -12,17 +12,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta id="ios-app-title" name="apple-mobile-web-app-title" content="ITX SHOP MEER">
 
-    <!-- PRE-BOOTSTRAP REDIRECT GUARD -->
+    <!-- CRITICAL PWA BOOTSTRAP GUARD (MUST RUN BEFORE BODY) -->
     <script>
       (function() {
         const url = new URL(window.location.href);
-        const params = url.searchParams;
-        const hash = window.location.hash;
+        const isPwaAdmin = url.searchParams.get('pwa') === 'admin' || localStorage.getItem('itx_pwa_force_admin') === 'true';
+        const currentHash = window.location.hash;
 
-        // CRITICAL: If launched via Admin PWA flag (?pwa=admin), 
-        // force the hash to admin before React even starts.
-        if (params.get('pwa') === 'admin' && !hash.includes('/admin')) {
-          window.location.hash = '#/admin';
+        if (isPwaAdmin) {
+          // Force Admin Persistence
+          localStorage.setItem('itx_pwa_force_admin', 'true');
+          
+          // If we are launched as admin but don't have the hash, force it immediately
+          if (!currentHash.includes('/admin')) {
+            const target = url.pathname + url.search + '#/admin';
+            window.location.replace(target);
+          }
         }
       })();
     </script>
@@ -36,8 +41,8 @@
 
     <script>
       /**
-       * ULTIMATE PWA CONTEXT SYNC (PERMANENT FIX)
-       * Ensures Safari captures the Admin context for "Add to Home Screen".
+       * DYNAMIC CONTEXT SYNCHRONIZER
+       * Keeps the manifest and meta tags in sync with the current URL.
        */
       function syncPWAContext() {
         const url = new URL(window.location.href);
@@ -45,50 +50,46 @@
         const isAdmin = hash.includes('/admin');
         const hasAdminFlag = url.searchParams.get('pwa') === 'admin';
 
-        // 1. FORCE HARD RELOAD FOR SAFARI
-        // If we are in Admin but the URL search params are missing the flag,
-        // we MUST force a reload. Safari's Share Sheet captures the URL in the bar.
+        // 1. URL STATE SYNC
         if (isAdmin && !hasAdminFlag) {
+          // If in admin mode, make sure the URL reflected in the bar has the pwa flag 
+          // so "Add to Home Screen" works correctly
           url.searchParams.set('pwa', 'admin');
-          // Replace keeps history clean but forces the browser to re-read meta tags
-          window.location.replace(url.pathname + url.search + hash);
-          return;
+          window.history.replaceState(null, '', url.pathname + url.search + hash);
+          localStorage.setItem('itx_pwa_force_admin', 'true');
+        } else if (!isAdmin && hasAdminFlag) {
+          // Clear admin flag if user manually navigated back to store
+          url.searchParams.delete('pwa');
+          window.history.replaceState(null, '', url.pathname + url.search + hash);
+          localStorage.removeItem('itx_pwa_force_admin');
         }
 
-        // 2. METADATA SYNCHRONIZATION
+        // 2. METADATA & MANIFEST SYNC
         const targetTitle = isAdmin ? 'ITX ADMIN' : 'ITX SHOP MEER';
-        
-        // Update Document Title
-        if (document.title !== targetTitle) {
-          document.title = targetTitle;
-        }
-
-        // Update Apple PWA Title
-        const iosMeta = document.getElementById('ios-app-title');
-        if (iosMeta && iosMeta.getAttribute('content') !== targetTitle) {
-          iosMeta.setAttribute('content', targetTitle);
-        }
-
-        // 3. MANIFEST ROTATION
         const targetManifest = isAdmin ? '/manifest-admin.json' : '/manifest.json';
-        const currentLink = document.getElementById('pwa-manifest');
         
-        if (currentLink && currentLink.getAttribute('href').split('?')[0] !== targetManifest) {
+        // Update document title
+        if (document.title !== targetTitle) document.title = targetTitle;
+
+        // Update Apple title
+        const iosMeta = document.getElementById('ios-app-title');
+        if (iosMeta) iosMeta.setAttribute('content', targetTitle);
+
+        // Update Manifest
+        const currentLink = document.getElementById('pwa-manifest');
+        if (currentLink && !currentLink.getAttribute('href').startsWith(targetManifest)) {
           const newLink = document.createElement('link');
           newLink.id = 'pwa-manifest';
           newLink.rel = 'manifest';
-          // Using a version string to bypass aggressive mobile caching
           newLink.href = targetManifest + '?v=' + Date.now();
           currentLink.parentNode.replaceChild(newLink, currentLink);
         }
       }
 
-      // Listen for hash changes (internal navigation)
       window.addEventListener('hashchange', syncPWAContext);
-      // Run on initial load
       document.addEventListener('DOMContentLoaded', syncPWAContext);
-      // Aggressive polling to ensure meta tags are ready before user hits the Share button
-      setInterval(syncPWAContext, 500);
+      // High frequency check for iOS Safari state synchronization
+      setInterval(syncPWAContext, 1000);
     </script>
 
     <style>

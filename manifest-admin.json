@@ -3,10 +3,11 @@
   "name": "ITX ADMIN",
   "short_name": "ITX ADMIN",
   "description": "Store Management Dashboard for ITX MEER",
-  "start_url": "/?pwa=admin",
+  "start_url": "/?pwa=admin#/admin",
   "display": "standalone",
   "background_color": "#1a1c1d",
   "theme_color": "#1a1c1d",
+  "scope": "/",
   "icons": [
     {
       "src": "https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop",
