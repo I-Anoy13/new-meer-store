@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v7-instant';
+const CACHE_NAME = 'itx-meer-v8-always-on';
 const ASSETS = [
   '/',
   '/index.html',
@@ -25,7 +25,14 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Faster Stale-while-revalidate for static assets only
+// Real-time Notification Bridge
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, options } = event.data;
+    self.registration.showNotification(title, options);
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.hostname.includes('supabase.co')) return;
@@ -42,21 +49,16 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Handle background notifications more reliably
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      if (clientList.length > 0) {
-        let client = clientList[0];
-        for (let i = 0; i < clientList.length; i++) {
-          if (clientList[i].focused) {
-            client = clientList[i];
-          }
+      for (const client of clientList) {
+        if (client.url.includes('/admin.html') && 'focus' in client) {
+          return client.focus();
         }
-        return client.focus();
       }
-      return clients.openWindow('/admin.html');
+      if (clients.openWindow) return clients.openWindow('/admin.html');
     })
   );
 });
