@@ -4,13 +4,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ITX SHOP MEER - Admin & Store</title>
+    <title>ITX SHOP MEER</title>
     <meta name="theme-color" content="#1a1c1d" />
     
     <!-- iOS PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="ITX SHOP MEER">
+    <meta id="ios-app-title" name="apple-mobile-web-app-title" content="ITX SHOP MEER">
 
     <!-- PRE-BOOTSTRAP REDIRECT GUARD -->
     <script>
@@ -19,10 +19,10 @@
         const params = url.searchParams;
         const hash = window.location.hash;
 
-        // If launched via Admin PWA flag, ensure we go straight to admin dashboard
+        // If launched via Admin PWA flag (?pwa=admin), force the hash to admin 
+        // to ensure React Router lands on the dashboard.
         if (params.get('pwa') === 'admin' && !hash.includes('/admin')) {
           window.location.hash = '#/admin';
-          console.log('PWA Admin Launch: Redirection forced.');
         }
       })();
     </script>
@@ -36,52 +36,54 @@
 
     <script>
       /**
-       * FOOLPROOF PWA CAPTURE LOGIC
-       * 1. Detects if user is in the /admin hash.
-       * 2. If so, and the URL doesn't have ?pwa=admin, it FORCES a page reload.
-       *    This is necessary because iOS Safari captures the Share URL *at the time of sharing*
-       *    and pushState/replaceState is sometimes ignored in favor of the 'real' navigation URL.
-       * 3. Aggressively replaces the manifest link to clear browser cache.
+       * ULTIMATE PWA CONTEXT SYNC
+       * This script ensures that when a user is in the Admin section, 
+       * Safari's "Add to Home Screen" captures the correct parameters.
        */
-      function forceSyncPWAContext() {
+      function syncPWAContext() {
         const url = new URL(window.location.href);
         const hash = window.location.hash;
         const isAdmin = hash.includes('/admin');
         const hasAdminFlag = url.searchParams.get('pwa') === 'admin';
 
-        // 1. Force reload with param if in Admin but no flag present
-        // This ensures the Share Sheet sees the flag.
+        // 1. HARD RELOAD SYNC
+        // If we are in Admin but the URL doesn't have the ?pwa=admin flag,
+        // we MUST force a reload. This is the ONLY way to make iOS Safari 
+        // update the Share Sheet's metadata and URL capture.
         if (isAdmin && !hasAdminFlag) {
           url.searchParams.set('pwa', 'admin');
           window.location.href = url.toString();
           return;
         }
 
-        // 2. Remove flag if NOT in admin to prevent store users from accidentally saving admin icons
-        if (!isAdmin && hasAdminFlag) {
-          url.searchParams.delete('pwa');
-          window.history.replaceState(null, '', url.toString());
+        // 2. METADATA SYNC (Dynamic Titles)
+        // Updating these ensures the Share Sheet shows "ITX ADMIN" instead of "ITX SHOP MEER"
+        const targetTitle = isAdmin ? 'ITX ADMIN' : 'ITX SHOP MEER';
+        if (document.title !== targetTitle) {
+          document.title = targetTitle;
+          const iosMeta = document.getElementById('ios-app-title');
+          if (iosMeta) iosMeta.setAttribute('content', targetTitle);
         }
 
-        // 3. Aggressive Manifest Swapping
+        // 3. MANIFEST RECONSTRUCTION
+        // Physically replace the link tag to bypass browser manifest caching
         const targetManifest = isAdmin ? '/manifest-admin.json' : '/manifest.json';
         const currentLink = document.getElementById('pwa-manifest');
         
         if (currentLink && currentLink.getAttribute('href').split('?')[0] !== targetManifest) {
-          // Create a brand new element to force the browser to re-read it
           const newLink = document.createElement('link');
           newLink.id = 'pwa-manifest';
           newLink.rel = 'manifest';
           newLink.href = targetManifest + '?v=' + Date.now();
           currentLink.parentNode.replaceChild(newLink, currentLink);
-          console.log('Manifest rebuilt for context:', targetManifest);
+          console.log('Manifest switched to:', targetManifest);
         }
       }
 
-      window.addEventListener('hashchange', forceSyncPWAContext);
-      document.addEventListener('DOMContentLoaded', forceSyncPWAContext);
-      // Extra check for late renders
-      setTimeout(forceSyncPWAContext, 1000);
+      window.addEventListener('hashchange', syncPWAContext);
+      document.addEventListener('DOMContentLoaded', syncPWAContext);
+      // Fallback interval to catch transitions that might miss the events
+      setInterval(syncPWAContext, 3000);
     </script>
 
     <style>
