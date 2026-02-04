@@ -6,6 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITX SHOP MEER - Admin & Store</title>
     <meta name="theme-color" content="#1a1c1d" />
+    
+    <!-- PRE-BOOTSTRAP REDIRECT GUARD -->
+    <script>
+      (function() {
+        const params = new URLSearchParams(window.location.search);
+        // If we detect the Admin PWA launch flag, force the hash to #/admin 
+        // before React even starts rendering.
+        if (params.get('pwa') === 'admin') {
+          window.location.hash = '#/admin';
+          console.log('PWA Admin Launch Detected: Forcing Redirect');
+        }
+      })();
+    </script>
+
     <link id="pwa-manifest" rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop" />
     
@@ -18,29 +32,28 @@
         const manifestLink = document.getElementById('pwa-manifest');
         if (!manifestLink) return;
         
+        // Use hash or current path to determine which manifest to show to the OS
         const isAdmin = window.location.hash.includes('/admin') || window.location.search.includes('pwa=admin');
         const target = isAdmin ? '/manifest-admin.json' : '/manifest.json';
         
         if (manifestLink.getAttribute('href').split('?')[0] !== target) {
           manifestLink.setAttribute('href', target + '?v=' + Date.now());
-          console.log('Manifest updated to:', target);
+          console.log('Context Switch: Manifest set to', target);
         }
       }
 
       window.addEventListener('hashchange', updatePWAManifest);
-      // Run immediately and after a short delay to catch late URL updates
+      // Run immediately
       updatePWAManifest();
-      setTimeout(updatePWAManifest, 500);
     </script>
 
     <!-- TikTok Pixel Base Code -->
     <script>
       !function (w, d, t) {
-        w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){
+        w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var e=0;e<ttq.methods.length;e++)ttq.setAndDefer(ttq,ttq.methods[e]);ttq.instance=function(t){for(var e=ttq[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){
           if(e.includes('PIXEL_ID') || e === 'YOUR_PIXEL_ID') return;
           var i="https://analytics.tiktok.com/i18n/pixel/events.js";ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=i,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n;var o=document.createElement("script");o.type="text/javascript",o.async=!0,o.src=i+"?sdkid="+e+"&lib="+t;var a=document.getElementsByTagName("script")[0];a.parentNode.insertBefore(o,a)};
         ttq.load('YOUR_PIXEL_ID');
-        ttq.page();
       }(window, document, 'ttq');
     </script>
 
@@ -53,21 +66,15 @@
       @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; }
       
-      @keyframes slideInLeft { 
-        from { opacity: 0; transform: translateX(-20px); } 
-        to { opacity: 1; transform: translateX(0); } 
-      }
-      .animate-slideInLeft { animation: slideInLeft 0.3s ease-out forwards; }
-      
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
       @keyframes pulseRed {
         0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
         70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
         100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
       }
       .animate-pulse-red { animation: pulseRed 2s infinite; }
-      
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
   <script type="importmap">
 {

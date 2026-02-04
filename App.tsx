@@ -23,31 +23,28 @@ const SessionRestorer: React.FC = () => {
   const [hasRestored, setHasRestored] = useState(false);
 
   useEffect(() => {
-    // Check for explicit PWA flag in search params OR saved admin preference
-    const searchParams = new URLSearchParams(window.location.search);
-    const isAdminIntent = searchParams.get('pwa') === 'admin' || localStorage.getItem('itx_last_mode') === 'admin';
-    const isPWA = window.matchMedia('(display-mode: standalone)').matches;
-
-    if (!hasRestored) {
-      // If the URL has the admin flag, or we are in a PWA and the last mode was admin
-      if (isAdminIntent && (location.pathname === '/' || location.pathname === '')) {
+    // If we're at the root, check if we should be elsewhere based on session
+    if (!hasRestored && (location.pathname === '/' || location.pathname === '')) {
+      const savedRoute = localStorage.getItem('itx_last_route');
+      // If the saved route was admin, go there
+      if (savedRoute && savedRoute.includes('/admin')) {
         navigate('/admin');
       }
-      setHasRestored(true);
     }
+    setHasRestored(true);
   }, [hasRestored, location, navigate]);
 
   useEffect(() => {
-    // Keep track of the "mode" (Admin vs Store)
-    if (location.pathname.startsWith('/admin')) {
-      localStorage.setItem('itx_last_mode', 'admin');
-    } else if (location.pathname === '/' || location.pathname === '/checkout' || location.pathname === '/cart') {
-      localStorage.setItem('itx_last_mode', 'store');
-    }
-    
-    // Also save the specific hash for detailed restoration
+    // Save current hash whenever it changes
     if (window.location.hash) {
       localStorage.setItem('itx_last_route', window.location.hash);
+      
+      // Also save a specific flag for Admin mode persistence
+      if (window.location.hash.includes('/admin')) {
+        localStorage.setItem('itx_last_mode', 'admin');
+      } else {
+        localStorage.setItem('itx_last_mode', 'store');
+      }
     }
   }, [location]);
 
