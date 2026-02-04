@@ -18,7 +18,6 @@ interface AdminDashboardProps {
 }
 
 const DEFAULT_CHIME = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
-const SILENT_HEARTBEAT_B64 = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   products, setProducts, deleteProduct, orders, setOrders, user, login, systemPassword, setSystemPassword, refreshData, updateStatusOverride
@@ -32,93 +31,77 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [lastAlertTime, setLastAlertTime] = useState<string | null>(null);
   const [permStatus, setPermStatus] = useState<string>(Notification.permission);
   
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const heartbeatRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const chimeRef = useRef<HTMLAudioElement | null>(null);
   const channelRef = useRef<any>(null);
 
-  const [isAudioUnlocked, setIsAudioUnlocked] = useState(() => localStorage.getItem('itx_v13_unlocked') === 'true');
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(() => localStorage.getItem('itx_v14_unlocked') === 'true');
   const [customSound, setCustomSound] = useState<string | null>(() => localStorage.getItem('itx_v13_tone'));
 
-  // 1. Audio Session Initialization
+  // 1. Initial State Sync
   useEffect(() => {
-    if (!audioRef.current) {
-      audioRef.current = new Audio(customSound || DEFAULT_CHIME);
-      audioRef.current.preload = "auto";
+    if (!chimeRef.current) {
+      chimeRef.current = new Audio(customSound || DEFAULT_CHIME);
+      chimeRef.current.preload = "auto";
     }
-    if (!heartbeatRef.current) {
-      heartbeatRef.current = new Audio(SILENT_HEARTBEAT_B64);
-      heartbeatRef.current.loop = true;
-      heartbeatRef.current.volume = 0.05; // Audible at minimum to keep context 'playing'
-    }
-    audioRef.current.src = customSound || DEFAULT_CHIME;
+    chimeRef.current.src = customSound || DEFAULT_CHIME;
   }, [customSound]);
 
-  // 2. High-Priority Alert Trigger
+  // 2. High-Priority Alert Engine
   const triggerAlert = (name: string, amount: number) => {
     setLastAlertTime(new Date().toLocaleTimeString());
-    console.log(`[TRIGGER] New Order: ${name} (Rs. ${amount})`);
-
-    // A. Visual Feedback
+    
+    // A. Visual Tab Flash
     const originalTitle = document.title;
-    let count = 0;
-    const flasher = setInterval(() => {
-      document.title = (count % 2 === 0) ? "🚨 NEW ORDER 🚨" : "ITX ADMIN";
-      count++;
-      if (count > 20) {
-        clearInterval(flasher);
+    let flashCount = 0;
+    const flashInterval = setInterval(() => {
+      document.title = (flashCount % 2 === 0) ? "🔔 NEW ORDER! 🔔" : "ITX ADMIN";
+      flashCount++;
+      if (flashCount > 10) {
+        clearInterval(flashInterval);
         document.title = originalTitle;
       }
     }, 500);
 
-    // B. Immediate Audio Playback
-    if (isAudioUnlocked && audioRef.current) {
-      audioRef.current.currentTime = 0;
-      audioRef.current.volume = 1.0;
-      const playPromise = audioRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(e => {
-          console.warn("Audio autoplay blocked. Heartbeat might be dead.", e);
-          // Retry through heartbeat context
-          if (heartbeatRef.current) {
-            heartbeatRef.current.volume = 1.0;
-            heartbeatRef.current.play();
-          }
-        });
+    // B. Sound Playback with Robust Recovery
+    if (isAudioUnlocked && chimeRef.current) {
+      // Re-initialize AudioContext if it was suspended
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume();
       }
+
+      chimeRef.current.currentTime = 0;
+      chimeRef.current.volume = 1.0;
+      chimeRef.current.play().catch(e => {
+        console.warn("Audio Context likely suspended by OS. Retrying via background channel...", e);
+        // Fallback: try to notify the user via a system prompt if sound keeps failing
+      });
     }
 
-    // C. Service Worker Push Notification (Works in background/minimized)
+    // C. Background Push (Service Worker)
     if ('serviceWorker' in navigator && Notification.permission === 'granted') {
       navigator.serviceWorker.ready.then(reg => {
         reg.active?.postMessage({
           type: 'TRIGGER_NOTIFICATION',
           title: `🔥 ORDER RECEIVED: Rs. ${amount.toLocaleString()}`,
           options: {
-            body: `From: ${name} — Tap to process.`,
-            tag: 'itx-order-alert',
+            body: `Customer: ${name} — High Priority Order`,
+            tag: 'itx-new-order',
             renotify: true
           }
         });
-      });
-    } else if (Notification.permission === 'granted') {
-      new Notification(`🔥 ORDER RECEIVED: Rs. ${amount.toLocaleString()}`, {
-        body: `From: ${name}`,
-        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
       });
     }
   };
 
   // 3. Persistent Realtime Connection
   const initSocket = () => {
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-    }
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
 
-    console.log("[SOCKET] Initiating secure stream...");
-    const channel = supabase.channel('itx_v13_ultra_guard', {
+    const channel = supabase.channel('itx_v14_stable_guard', {
       config: {
         broadcast: { self: true },
-        presence: { key: `admin-v13-${Date.now()}` }
+        presence: { key: `admin-v14-${Date.now()}` }
       }
     });
 
@@ -126,12 +109,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
         const newOrder = payload.new;
         setOrders(newOrder);
-        triggerAlert(newOrder.customer_name || 'Guest', newOrder.total_pkr || newOrder.total || 0);
+        triggerAlert(newOrder.customer_name || 'Anonymous', newOrder.total_pkr || newOrder.total || 0);
       })
       .subscribe((status) => {
         setRealtimeStatus(status === 'SUBSCRIBED' ? 'online' : 'connecting');
         if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          console.warn("[SOCKET] Disconnected. Retrying in 3s...");
           setTimeout(initSocket, 3000);
         }
       });
@@ -143,68 +125,82 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!user) return;
     initSocket();
     
-    // Background health check: Restart socket if it looks dead
-    const watchdog = setInterval(() => {
+    const healthMonitor = setInterval(() => {
       if (realtimeStatus !== 'online' && document.visibilityState === 'visible') {
         initSocket();
       }
-    }, 15000);
+    }, 12000);
 
     return () => {
-      clearInterval(watchdog);
+      clearInterval(healthMonitor);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
   }, [user, realtimeStatus]);
 
-  // 4. Focus & Wake Management
+  // 4. Focus & Visibility Sync
   useEffect(() => {
     const handleReactivation = () => {
       setPermStatus(Notification.permission);
       if (document.visibilityState === 'visible') {
-        console.log("[SYSTEM] Re-activating foreground services.");
         refreshData();
-        // Always bounce socket on focus to clear "Connecting" hang
         initSocket();
-        if (heartbeatRef.current && isAudioUnlocked) {
-          heartbeatRef.current.play().catch(() => {});
+        if (audioContextRef.current?.state === 'suspended') {
+          audioContextRef.current.resume();
         }
       }
     };
-
     window.addEventListener('focus', handleReactivation);
     document.addEventListener('visibilitychange', handleReactivation);
     return () => {
       window.removeEventListener('focus', handleReactivation);
       document.removeEventListener('visibilitychange', handleReactivation);
     };
-  }, [refreshData, isAudioUnlocked]);
+  }, [refreshData]);
 
+  // 5. Explicit System Unlock (Crucial for bypassing browser block)
   const unlockSystem = async () => {
-    const permission = await Notification.requestPermission();
-    setPermStatus(permission);
+    try {
+      // Step A: Request Push Permissions
+      const permission = await Notification.requestPermission();
+      setPermStatus(permission);
 
-    if (audioRef.current && heartbeatRef.current) {
-      try {
-        // Start the silent heartbeat - this is crucial for background audio
-        await heartbeatRef.current.play();
-        heartbeatRef.current.volume = 0.05;
-        
-        // Test chime
-        await audioRef.current.play();
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-
-        setIsAudioUnlocked(true);
-        localStorage.setItem('itx_v13_unlocked', 'true');
-        
-        if (permission === 'granted') {
-          triggerAlert("System Armed", 0);
-        } else {
-          alert("Notification Permission Denied. You will only receive sound alerts.");
-        }
-      } catch (e) {
-        alert("Browser blocked audio. Please tap 'Enable' again to permit background chimes.");
+      // Step B: Create and Initialize AudioContext on User Click
+      // This is the "User Gesture" that browsers require
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
+      
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+
+      // Step C: Play a test buffer to "Warm Up" the context
+      const oscillator = audioContextRef.current.createOscillator();
+      const gainNode = audioContextRef.current.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContextRef.current.destination);
+      gainNode.gain.value = 0.001; // Inaudible test
+      oscillator.start(0);
+      oscillator.stop(0.1);
+
+      // Step D: Warm up the Chime HTML Element
+      if (chimeRef.current) {
+        await chimeRef.current.play();
+        chimeRef.current.pause();
+        chimeRef.current.currentTime = 0;
+      }
+
+      setIsAudioUnlocked(true);
+      localStorage.setItem('itx_v14_unlocked', 'true');
+      
+      if (permission === 'granted') {
+        triggerAlert("System Fully Armed", 0);
+      } else {
+        alert("System Warning: Notifications are disabled. You will only hear sounds.");
+      }
+    } catch (error) {
+      console.error("Unlock Error:", error);
+      alert("Error: Browser refused to start audio. Please check your browser settings for ITX Store.");
     }
   };
 
@@ -277,18 +273,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="p-4 border-t border-gray-800 space-y-2">
            {!isAudioUnlocked ? (
              <button onClick={unlockSystem} className="w-full bg-blue-600 text-white p-3 rounded-xl font-black uppercase text-[9px] tracking-widest animate-pulse flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30">
-               <i className="fas fa-play"></i> Enable Alerts
+               <i className="fas fa-bolt"></i> Enable Sound Alerts
              </button>
            ) : (
              <div className="space-y-2">
                 <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-xl border border-white/10">
                   <div className={`w-2 h-2 rounded-full ${realtimeStatus === 'online' ? 'bg-green-500 animate-ping' : 'bg-red-500'}`}></div>
                   <div className="text-left">
-                    <p className="text-[9px] font-black text-white uppercase tracking-widest">Live Guardian</p>
-                    <p className="text-[8px] text-gray-400 font-bold uppercase">{realtimeStatus === 'online' ? 'Monitoring' : 'Syncing...'}</p>
+                    <p className="text-[9px] font-black text-white uppercase tracking-widest">Active Stream</p>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase">{realtimeStatus === 'online' ? 'Connected' : 'Syncing...'}</p>
                   </div>
                 </div>
-                <button onClick={() => triggerAlert("SYSTEM TEST", 0)} className="w-full bg-white/5 text-gray-500 hover:text-white p-2 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/5 transition">Test Chime</button>
+                <button onClick={() => triggerAlert("SYSTEM TEST", 0)} className="w-full bg-white/5 text-gray-400 hover:text-white p-2 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/5 transition">Test Chime</button>
              </div>
            )}
         </div>
@@ -305,15 +301,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
               <div className="h-4 w-[1px] bg-gray-200"></div>
               <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
-                 <i className={`fas fa-bell ${permStatus === 'granted' ? 'text-blue-500' : 'text-red-500 animate-pulse'}`}></i>
+                 <i className={`fas fa-bell ${permStatus === 'granted' ? 'text-blue-500' : 'text-red-500'}`}></i>
                  PUSH: {permStatus.toUpperCase()}
               </div>
             </div>
           </div>
           {lastAlertTime && (
             <div className="bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full border border-blue-100 flex items-center gap-2 animate-fadeIn">
-               <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping"></span>
-               <span className="text-[9px] font-black uppercase tracking-widest">Last Order: {lastAlertTime}</span>
+               <span className="text-[9px] font-black uppercase tracking-widest">New Order: {lastAlertTime}</span>
             </div>
           )}
         </header>
@@ -335,7 +330,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
-                  { label: 'Revenue Generated', val: `Rs. ${totalSales.toLocaleString()}`, color: 'text-blue-600' },
+                  { label: 'Revenue Stream', val: `Rs. ${totalSales.toLocaleString()}`, color: 'text-blue-600' },
                   { label: 'Orders Handled', val: filteredOrders.length.toString(), color: 'text-black' },
                   { label: 'Link Quality', val: realtimeStatus.toUpperCase(), color: realtimeStatus === 'online' ? 'text-green-500' : 'text-red-500' },
                   { label: 'Guardian Mode', val: isAudioUnlocked ? 'ACTIVE' : 'IDLE', color: isAudioUnlocked ? 'text-blue-500' : 'text-gray-300' },
@@ -349,7 +344,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/10">
-                   <h3 className="font-black uppercase text-[10px] tracking-widest text-black">Recent Live Orders</h3>
+                   <h3 className="font-black uppercase text-[10px] tracking-widest text-black italic">Live Transaction Feed</h3>
                    <div className="flex items-center space-x-2">
                       <div className={`w-1.5 h-1.5 rounded-full ${realtimeStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Listening...</span>
@@ -389,7 +384,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               <p className="text-[9px] text-gray-400 font-bold uppercase">{customSound ? 'Custom MP3 File' : 'System Standard'}</p>
                            </div>
                         </div>
-                        <button onClick={() => audioRef.current?.play()} className="bg-white text-black border border-gray-200 px-6 py-3 rounded-xl text-[10px] font-black uppercase hover:bg-black hover:text-white transition shadow-sm">Test Audio</button>
+                        <button onClick={() => chimeRef.current?.play()} className="bg-white text-black border border-gray-200 px-6 py-3 rounded-xl text-[10px] font-black uppercase hover:bg-black hover:text-white transition shadow-sm">Test Audio</button>
                       </div>
                       <div className="relative border-2 border-dashed border-gray-200 rounded-[2rem] p-12 text-center bg-gray-50/50 hover:border-blue-600 transition-all cursor-pointer group">
                         <input type="file" accept="audio/*" onChange={(e) => {

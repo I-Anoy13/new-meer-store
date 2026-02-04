@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v13-guardian';
+const CACHE_NAME = 'itx-meer-v14-guardian';
 const ASSETS = [
   '/',
   '/index.html',
@@ -33,6 +33,7 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options } = event.data;
     
+    // Using self.registration is essential for showing notifications when the tab is not in focus
     const notificationPromise = self.registration.showNotification(title, {
       ...options,
       icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
@@ -41,7 +42,7 @@ self.addEventListener('message', (event) => {
       requireInteraction: true,
       tag: 'itx-new-order',
       renotify: true,
-      silent: false // Explicitly allow sound
+      silent: false
     });
 
     event.waitUntil(notificationPromise);
@@ -52,19 +53,16 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Focus existing admin window if open
       for (const client of clientList) {
         if (client.url.includes('admin.html') && 'focus' in client) {
           return client.focus();
         }
       }
-      // Otherwise open new
       if (clients.openWindow) return clients.openWindow('/admin.html');
     })
   );
 });
 
-// Ensure the fetch doesn't block realtime
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.hostname.includes('supabase.co')) return;
