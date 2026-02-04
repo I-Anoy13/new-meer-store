@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Order, User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -28,9 +28,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<'Today' | 'Yesterday' | 'Last 7 Days' | 'All Time'>('All Time');
+  const [notificationStatus, setNotificationStatus] = useState<NotificationPermission>(Notification.permission);
   
   const [newProduct, setNewProduct] = useState({ name: '', price: '', category: 'Watches', description: '' });
   const [mainImageFile, setMainImageFile] = useState<File | null>(null);
+
+  // Notification Engine
+  useEffect(() => {
+    if (user && Notification.permission === 'granted') {
+      const channel = supabase
+        .channel('admin-notifications')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+          const newOrder = payload.new;
+          new Notification("🔔 New Order Received!", {
+            body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
+            icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
+          });
+          refreshData();
+        })
+        .subscribe();
+      return () => { supabase.removeChannel(channel); };
+    }
+  }, [user, notificationStatus, refreshData]);
+
+  const requestNotificationPermission = async () => {
+    const permission = await Notification.requestPermission();
+    setNotificationStatus(permission);
+  };
 
   const menuItems = [
     { label: 'Home', icon: 'fa-house' },
@@ -170,6 +194,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           ))}
         </nav>
+        
+        {/* PWA / NOTIFICATION STATUS */}
+        <div className="p-4 border-t border-gray-800">
+           <button 
+             onClick={requestNotificationPermission}
+             className={`w-full flex items-center space-x-3 p-3 rounded-xl transition-all ${notificationStatus === 'granted' ? 'bg-green-500/10' : 'bg-yellow-500/10 animate-pulse'}`}
+           >
+              <div className={`w-2 h-2 rounded-full ${notificationStatus === 'granted' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]'}`}></div>
+              <div className="text-left">
+                 <p className="text-[9px] font-black text-white uppercase tracking-widest">Notification Engine</p>
+                 <p className="text-[8px] text-gray-400 uppercase font-bold">{notificationStatus === 'granted' ? 'System Active' : 'Setup Required'}</p>
+              </div>
+           </button>
+        </div>
       </aside>
 
       <div className="flex-grow flex flex-col min-w-0 w-full overflow-hidden">
@@ -303,7 +341,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </td>
                         <td className="px-6 py-5 text-center font-bold text-gray-900">Rs. {p.price.toLocaleString()}</td>
                         <td className="px-6 py-5 text-center">
-                          <button onClick={() => { if(window.confirm('Delete this product permanently?')) deleteProduct(p.id); }} className="text-red-400 hover:text-red-600 p-2 transition-colors"><i className="fas fa-trash-can text-base"></i></button>
+                          <button onClick={() => { if(window.confirm('Delete this product permanently?')) deleteProduct(p.id); }} className="text-red-400 hover:text-red-600 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
                         </td>
                       </tr>
                     ))}
@@ -435,7 +473,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
                     <div className="pt-8 border-t border-gray-100 mt-8">
-                      <p className="text-[9px] font-black text-gray-400 uppercase mb-4 tracking-widest">Update Order Lifecycle</p>
+                      <p className="text-[9px] font-black text-gray-400 uppercase mb-4 tracking-widest">Order Status</p>
                       <div className="relative">
                         <select 
                           value={viewingOrder.status}
