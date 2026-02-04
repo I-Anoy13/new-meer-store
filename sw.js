@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v9-persistent';
+const CACHE_NAME = 'itx-meer-v10-always-on';
 const ASSETS = [
   '/',
   '/index.html',
@@ -25,15 +25,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Force-trigger notifications from background
+// The bridge that allows background logic to trigger system-level UI
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'FORCE_NOTIFICATION') {
+  if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options } = event.data;
     event.waitUntil(
       self.registration.showNotification(title, {
         ...options,
-        vibrate: [200, 100, 200, 100, 200],
         badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
+        vibrate: [300, 100, 300, 100, 300],
+        requireInteraction: true,
         data: { url: '/admin.html' }
       })
     );
@@ -56,6 +57,7 @@ self.addEventListener('notificationclick', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+  // Do not cache supabase realtime or API calls
   if (url.hostname.includes('supabase.co')) return;
   event.respondWith(
     caches.match(event.request).then((res) => res || fetch(event.request))
