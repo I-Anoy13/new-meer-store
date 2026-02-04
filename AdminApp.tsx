@@ -3,8 +3,8 @@ import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
-// Fix: Use named import for AdminDashboard as it does not have a default export
-import { AdminDashboard } from './views/AdminDashboard';
+// Fix: Changed from named import to default import as per project convention and to resolve export error
+import AdminDashboard from './views/AdminDashboard';
 
 const AdminApp: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => {
