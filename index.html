@@ -14,25 +14,34 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <script>
-      // Dynamic Manifest Switcher
-      // This allows the user to "Add to Home Screen" from the admin page
-      // and get a dedicated Admin icon.
+      // Force-refresh manifest when user switches between Store and Admin
       function updatePWAManifest() {
-        const manifestLink = document.getElementById('pwa-manifest');
-        if (!manifestLink) return;
+        const oldLink = document.getElementById('pwa-manifest');
+        if (!oldLink) return;
         
         const isInternalAdmin = window.location.hash.includes('/admin');
         const targetManifest = isInternalAdmin ? '/manifest-admin.json' : '/manifest.json';
         
-        if (manifestLink.getAttribute('href') !== targetManifest) {
-          manifestLink.setAttribute('href', targetManifest);
-          console.log('PWA Manifest switched to:', targetManifest);
+        // Append a version/timestamp to force the browser to re-evaluate the manifest
+        const newHref = targetManifest + '?v=' + new Date().getTime();
+        
+        if (oldLink.getAttribute('href').split('?')[0] !== targetManifest) {
+          const newLink = document.createElement('link');
+          newLink.id = 'pwa-manifest';
+          newLink.rel = 'manifest';
+          newLink.href = newHref;
+          oldLink.parentNode.replaceChild(newLink, oldLink);
+          console.log('PWA Context Switched to:', targetManifest);
         }
       }
 
       window.addEventListener('hashchange', updatePWAManifest);
-      // Run on initial load
-      window.addEventListener('DOMContentLoaded', updatePWAManifest);
+      // Run immediately
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', updatePWAManifest);
+      } else {
+        updatePWAManifest();
+      }
     </script>
 
     <!-- TikTok Pixel Base Code -->

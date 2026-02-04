@@ -23,21 +23,31 @@ const SessionRestorer: React.FC = () => {
   const [hasRestored, setHasRestored] = useState(false);
 
   useEffect(() => {
-    // On mount, if we are at root and have a saved route, restore it
     const isPWA = window.matchMedia('(display-mode: standalone)').matches;
-    if (!hasRestored && isPWA && location.pathname === '/') {
-      const savedRoute = localStorage.getItem('itx_last_route');
-      if (savedRoute && savedRoute !== '/') {
-        navigate(savedRoute);
+    const searchParams = new URLSearchParams(window.location.search);
+    const isAdminPWA = searchParams.get('pwa') === 'admin';
+    
+    // Restoration Logic
+    if (!hasRestored && isPWA) {
+      // 1. If we have the explicit Admin PWA flag, go to Admin immediately
+      if (isAdminPWA) {
+        navigate('/admin');
+      } 
+      // 2. Otherwise check session storage for last route (useful for non-flagged PWAs)
+      else if (location.pathname === '/' && (!location.hash || location.hash === '#/')) {
+        const savedRoute = localStorage.getItem('itx_last_route');
+        if (savedRoute && savedRoute !== '/' && savedRoute !== '#/') {
+          navigate(savedRoute.replace('#', '')); // Router expects path without hash
+        }
       }
     }
     setHasRestored(true);
   }, [hasRestored, location, navigate]);
 
   useEffect(() => {
-    // Save current route whenever it changes (if it's an admin route or home)
-    if (location.pathname.startsWith('/admin') || location.pathname === '/') {
-      localStorage.setItem('itx_last_route', location.pathname + location.search + location.hash);
+    // Save current hash whenever it changes (since we use HashRouter)
+    if (window.location.hash) {
+      localStorage.setItem('itx_last_route', window.location.hash);
     }
   }, [location]);
 

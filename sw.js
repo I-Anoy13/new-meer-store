@@ -2,8 +2,7 @@
 const CACHE_NAME = 'itx-meer-v1';
 const ASSETS = [
   '/',
-  '/index.html',
-  '/manifest.json'
+  '/index.html'
 ];
 
 self.addEventListener('install', (event) => {

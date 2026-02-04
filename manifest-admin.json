@@ -3,7 +3,7 @@
   "name": "ITX Store Admin",
   "short_name": "ITX Admin",
   "description": "Manage ITX SHOP MEER",
-  "start_url": "/#/admin",
+  "start_url": "/index.html?pwa=admin#/admin",
   "display": "standalone",
   "background_color": "#1a1c1d",
   "theme_color": "#1a1c1d",
