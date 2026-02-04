@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v11-always-on';
+const CACHE_NAME = 'itx-meer-v12-persistent';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,20 +28,21 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Robust Background Notification Bridge
+// The standard "showNotification" can be throttled if called from main thread.
+// We handle it here in the SW thread which has higher background priority.
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options } = event.data;
     
-    // Ensure we can show notifications even if the app is backgrounded
     event.waitUntil(
       self.registration.showNotification(title, {
         ...options,
+        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
         badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-        vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40, 450, 110, 200, 110, 170, 40],
+        vibrate: [500, 100, 500, 100, 500],
         requireInteraction: true,
+        tag: 'itx-new-order',
         renotify: true,
-        tag: 'itx-order-alert',
         data: { url: '/admin.html' }
       })
     );
