@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Product, Order, User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
 
@@ -17,8 +17,11 @@ interface AdminDashboardProps {
   updateStatusOverride?: (orderId: string, status: Order['status']) => void;
 }
 
+const DEFAULT_CHIME = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
+
+// Fix: Added setSystemPassword to the props destructuring list
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
-  products, setProducts, deleteProduct, orders, user, login, systemPassword, refreshData, updateStatusOverride
+  products, setProducts, deleteProduct, orders, user, login, systemPassword, setSystemPassword, refreshData, updateStatusOverride
 }) => {
   const [activeNav, setActiveNav] = useState('Home');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
@@ -29,61 +32,87 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<'Today' | 'Yesterday' | 'Last 7 Days' | 'All Time'>('All Time');
   
-  // Refined Notification State
+  // Notification & Audio State
   const [notificationStatus, setNotificationStatus] = useState<string>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       return Notification.permission;
     }
     return 'unsupported';
   });
-  
+
+  const [customSound, setCustomSound] = useState<string | null>(() => localStorage.getItem('itx_admin_sound'));
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const [newProduct, setNewProduct] = useState({ name: '', price: '', category: 'Watches', description: '' });
   const [mainImageFile, setMainImageFile] = useState<File | null>(null);
 
-  // Notification Engine - Safely handled for mobile
+  // Initialize Audio
   useEffect(() => {
-    if (user && notificationStatus === 'granted' && 'Notification' in window) {
+    audioRef.current = new Audio(customSound || DEFAULT_CHIME);
+  }, [customSound]);
+
+  const playNotificationSound = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(e => console.warn("Audio play blocked. User must interact first.", e));
+    }
+  };
+
+  const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setCustomSound(base64);
+        localStorage.setItem('itx_admin_sound', base64);
+        alert("Custom notification sound updated!");
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const enableAudio = () => {
+    setIsAudioEnabled(true);
+    playNotificationSound(); // Plays once to "unlock" browser audio
+  };
+
+  // Notification Engine - Real-time updates with Sound
+  useEffect(() => {
+    if (user) {
       const channel = supabase
-        .channel('admin-notifications-v2')
+        .channel('admin-realtime-v3')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
           const newOrder = payload.new;
-          try {
-            // Check for service worker registration to show background notification if possible
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-               navigator.serviceWorker.ready.then(registration => {
-                 registration.showNotification("🔔 New Order Received!", {
-                   body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
-                   icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
-                 });
-               });
-            } else {
-               new Notification("🔔 New Order Received!", {
-                 body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
+          
+          // 1. Play Sound
+          playNotificationSound();
+
+          // 2. Browser Notification
+          if (notificationStatus === 'granted') {
+             try {
+               new Notification("🔔 New Order Alert!", {
+                 body: `${newOrder.customer_name} placed an order for Rs. ${newOrder.total_pkr}`,
                  icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
                });
-            }
-          } catch (e) {
-            console.warn("Notification failed", e);
+             } catch (e) {
+               console.warn("Notification error", e);
+             }
           }
           refreshData();
         })
         .subscribe();
       return () => { supabase.removeChannel(channel); };
     }
-  }, [user, notificationStatus, refreshData]);
+  }, [user, notificationStatus, refreshData, customSound]);
 
   const requestNotificationPermission = async () => {
     if ('Notification' in window) {
       const permission = await Notification.requestPermission();
       setNotificationStatus(permission);
     } else {
-      // Logic for iOS Safari: Tell them to Add to Home Screen
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      if (isIOS) {
-        alert("To enable notifications on iPhone:\n1. Tap 'Share' button\n2. Select 'Add to Home Screen'\n3. Open ITX from your home screen.");
-      } else {
-        alert("This browser does not support system notifications. Try Chrome or install the app.");
-      }
+      alert("Please Add to Home Screen to enable notifications on this device.");
     }
   };
 
@@ -91,8 +120,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     { label: 'Home', icon: 'fa-house' },
     { label: 'Orders', icon: 'fa-shopping-cart', badge: orders.filter(o => o.status === 'Pending').length },
     { label: 'Products', icon: 'fa-box' },
-    { label: 'Customers', icon: 'fa-user-group' },
     { label: 'Analytics', icon: 'fa-chart-line' },
+    { label: 'Settings', icon: 'fa-gears' },
   ];
 
   const handleRefresh = async () => {
@@ -226,20 +255,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           ))}
         </nav>
         
-        {/* PWA / NOTIFICATION STATUS */}
-        <div className="p-4 border-t border-gray-800">
+        {/* NOTIFICATION STATUS & AUDIO UNLOCK */}
+        <div className="p-4 border-t border-gray-800 space-y-2">
+           {!isAudioEnabled ? (
+             <button 
+               onClick={enableAudio}
+               className="w-full flex items-center justify-center space-x-2 p-3 rounded-xl bg-blue-600 text-white animate-pulse"
+             >
+                <i className="fas fa-volume-high text-xs"></i>
+                <span className="text-[9px] font-black uppercase tracking-widest">Unlock Audio Alerts</span>
+             </button>
+           ) : (
+             <div className="w-full flex items-center space-x-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
+                <i className="fas fa-bell text-green-500 text-xs"></i>
+                <div className="text-left overflow-hidden">
+                   <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">Live Alerts</p>
+                   <p className="text-[8px] text-gray-400 uppercase font-bold truncate">Audio Engine Active</p>
+                </div>
+             </div>
+           )}
            <button 
              onClick={requestNotificationPermission}
-             className={`w-full flex items-center space-x-3 p-3 rounded-xl transition-all ${notificationStatus === 'granted' ? 'bg-green-500/10' : 'bg-yellow-500/10'}`}
+             className={`w-full flex items-center space-x-3 p-3 rounded-xl transition-all ${notificationStatus === 'granted' ? 'bg-white/5' : 'bg-yellow-500/10'}`}
            >
-              <div className={`w-2 h-2 rounded-full ${notificationStatus === 'granted' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : notificationStatus === 'unsupported' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse shadow-[0_0_10px_rgba(234,179,8,0.5)]'}`}></div>
+              <div className={`w-2 h-2 rounded-full ${notificationStatus === 'granted' ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></div>
               <div className="text-left overflow-hidden">
-                 <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">
-                    {notificationStatus === 'unsupported' ? 'Install Admin App' : 'Notifications'}
-                 </p>
-                 <p className="text-[8px] text-gray-400 uppercase font-bold truncate">
-                    {notificationStatus === 'granted' ? 'System Active' : notificationStatus === 'unsupported' ? 'Add to Home Screen' : 'Setup Required'}
-                 </p>
+                 <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">Push Status</p>
+                 <p className="text-[8px] text-gray-400 uppercase font-bold truncate">{notificationStatus}</p>
               </div>
            </button>
         </div>
@@ -257,19 +299,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <main className="flex-grow overflow-y-auto p-4 md:p-10 animate-fadeIn custom-scrollbar">
           {activeNav === 'Home' && (
             <div className="max-w-6xl mx-auto space-y-8">
-              {/* PWA TIP for Admin icon */}
-              {window.matchMedia('(display-mode: standalone)').matches === false && (
-                <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between animate-fadeIn">
-                  <div className="flex items-center space-x-4">
-                    <i className="fas fa-mobile-screen-button text-2xl opacity-50"></i>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest">PWA Feature Detected</p>
-                      <p className="text-sm font-bold tracking-tight">Add to Home Screen now to get a dedicated Admin App icon.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <h2 className="text-2xl font-black tracking-tight uppercase">Store Overview</h2>
                 <div className="flex items-center bg-white rounded-xl border border-gray-200 p-1 shadow-sm overflow-x-auto no-scrollbar">
@@ -300,7 +329,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-100 font-black uppercase text-[10px] tracking-widest text-gray-400">Recent Stream ({dateRange})</div>
+                <div className="p-6 border-b border-gray-100 font-black uppercase text-[10px] tracking-widest text-gray-400">Recent Stream</div>
                 <div className="divide-y divide-gray-50">
                   {filteredOrders.slice(0, 5).map(o => (
                     <div key={o.id} onClick={() => setViewingOrder(o)} className="p-5 flex justify-between items-center hover:bg-gray-50 cursor-pointer transition">
@@ -314,7 +343,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
                   ))}
-                  {filteredOrders.length === 0 && <div className="p-20 text-center text-gray-300 uppercase text-xs font-black">No transaction stream found for this period</div>}
+                  {filteredOrders.length === 0 && <div className="p-20 text-center text-gray-300 uppercase text-xs font-black">No transaction stream found</div>}
                 </div>
               </div>
             </div>
@@ -324,38 +353,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-black tracking-tight uppercase">Order Management</h2>
-                <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
-                  Total: {orders.length} Orders
-                </div>
               </div>
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs min-w-[800px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Order ID / Status</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer Details</th>
-                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Shipping City</th>
-                        <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-gray-400 tracking-widest">Order Total</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Order ID</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">City</th>
+                        <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-gray-400 tracking-widest">Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {orders.map(o => (
                         <tr key={o.id} onClick={() => setViewingOrder(o)} className="hover:bg-gray-50 cursor-pointer transition">
                           <td className="px-6 py-5">
-                            <div className="flex flex-col space-y-1">
-                              <span className="font-black text-blue-600 text-sm">#{o.id}</span>
-                              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black w-fit uppercase border ${o.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{o.status}</span>
-                            </div>
+                            <span className="font-black text-blue-600 text-sm">#{o.id}</span>
                           </td>
                           <td className="px-6 py-5">
                             <div className="font-black uppercase tracking-tight text-gray-900">{o.customer.name}</div>
-                            <div className="text-[10px] text-gray-400 mt-1 font-bold tracking-widest">{o.customer.phone}</div>
                           </td>
-                          <td className="px-6 py-5">
-                            <div className="font-black uppercase tracking-widest text-gray-700 text-[11px]">{o.customer.city || 'N/A'}</div>
-                          </td>
-                          <td className="px-6 py-5 text-right font-black text-sm text-gray-900">Rs. {o.total.toLocaleString()}</td>
+                          <td className="px-6 py-5 font-black uppercase text-gray-700">{o.customer.city || 'N/A'}</td>
+                          <td className="px-6 py-5 text-right font-black text-sm">Rs. {o.total.toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -365,11 +385,59 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
+          {activeNav === 'Settings' && (
+            <div className="max-w-3xl mx-auto space-y-8">
+               <h2 className="text-2xl font-black tracking-tight uppercase">Console Settings</h2>
+               
+               <div className="bg-white p-8 rounded-[2rem] border border-gray-200 shadow-sm space-y-8">
+                  <div>
+                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest">Audio Notifications</h3>
+                     <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                           <div className="flex items-center space-x-4">
+                              <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center">
+                                 <i className="fas fa-music text-xs"></i>
+                              </div>
+                              <div>
+                                 <p className="text-xs font-black uppercase tracking-tight">Notification Sound</p>
+                                 <p className="text-[10px] text-gray-400 font-bold uppercase">{customSound ? 'Custom File Active' : 'Default Chime Active'}</p>
+                              </div>
+                           </div>
+                           <button onClick={playNotificationSound} className="bg-white text-black border border-gray-200 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition">Test Sound</button>
+                        </div>
+
+                        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50 relative group hover:border-black transition">
+                           <input type="file" accept="audio/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleSoundUpload} />
+                           <i className="fas fa-cloud-arrow-up text-2xl text-gray-300 mb-2 group-hover:text-black transition-colors"></i>
+                           <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Upload Custom Alert (.mp3/.wav)</p>
+                        </div>
+                        {customSound && (
+                          <button onClick={() => { setCustomSound(null); localStorage.removeItem('itx_admin_sound'); }} className="w-full text-center text-red-500 text-[10px] font-black uppercase tracking-widest hover:underline">Reset to Default Sound</button>
+                        )}
+                     </div>
+                  </div>
+
+                  <div className="pt-8 border-t border-gray-100">
+                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest">System Access</h3>
+                     <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200">
+                        <p className="text-[10px] font-black uppercase text-gray-500 mb-3">Administrator Password</p>
+                        <input 
+                           type="text" 
+                           value={systemPassword} 
+                           onChange={(e) => { setSystemPassword(e.target.value); localStorage.setItem('systemPassword', e.target.value); }}
+                           className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-black outline-none"
+                        />
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
           {activeNav === 'Products' && (
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-black tracking-tight uppercase">Product Catalog</h2>
-                <button onClick={() => setActiveNav('AddProduct')} className="bg-black text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-800 transition shadow-lg active:scale-95">Add New Product</button>
+                <button onClick={() => setActiveNav('AddProduct')} className="bg-black text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-800 transition shadow-lg">Add New Product</button>
               </div>
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <table className="w-full text-left text-xs">
@@ -389,7 +457,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </td>
                         <td className="px-6 py-5 text-center font-bold text-gray-900">Rs. {p.price.toLocaleString()}</td>
                         <td className="px-6 py-5 text-center">
-                          <button onClick={() => { if(window.confirm('Delete this product permanently?')) deleteProduct(p.id); }} className="text-red-400 hover:text-red-600 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
+                          <button onClick={() => { if(window.confirm('Delete product?')) deleteProduct(p.id); }} className="text-red-400 hover:text-red-600 p-2"><i className="fas fa-trash-can"></i></button>
                         </td>
                       </tr>
                     ))}
@@ -410,36 +478,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-black outline-none focus:border-black" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="e.g. MEER Royal Oak" />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Retail Price (PKR)</label>
-                      <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-black outline-none focus:border-black" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="45000" />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Category</label>
-                      <select className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-[11px] font-black uppercase tracking-widest outline-none cursor-pointer focus:border-black" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
-                        <option>Watches</option>
-                        <option>Luxury Artisan</option>
-                        <option>Professional</option>
-                        <option>Minimalist / Heritage</option>
-                      </select>
+                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Price (PKR)</label>
+                      <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-black outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="45000" />
                     </div>
                   </div>
                   <div className="space-y-6">
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Product Image</label>
-                      <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center hover:border-black transition cursor-pointer relative bg-gray-50 group">
+                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Image</label>
+                      <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center bg-gray-50 relative group">
                         <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => setMainImageFile(e.target.files ? e.target.files[0] : null)} />
-                        <i className="fas fa-image text-3xl text-gray-300 mb-3 group-hover:text-black transition-colors"></i>
+                        <i className="fas fa-image text-3xl text-gray-300 mb-2 group-hover:text-black transition-colors"></i>
                         <p className="text-[10px] font-black uppercase text-gray-400 truncate tracking-widest">{mainImageFile ? mainImageFile.name : 'Upload Photo'}</p>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Product Description</label>
-                      <textarea className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-bold outline-none h-24 resize-none leading-relaxed focus:border-black" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} placeholder="Describe features..." />
-                    </div>
                   </div>
                 </div>
-                <button onClick={handleCreateProduct} disabled={isAddingProduct} className="w-full bg-black text-white font-black uppercase py-5 rounded-2xl text-[11px] tracking-[0.4em] hover:bg-blue-600 transition shadow-xl active:scale-[0.98]">
-                  {isAddingProduct ? <i className="fas fa-circle-notch fa-spin"></i> : 'Publish Product to Catalog'}
+                <button onClick={handleCreateProduct} disabled={isAddingProduct} className="w-full bg-black text-white font-black uppercase py-5 rounded-2xl text-[11px] tracking-[0.4em]">
+                  {isAddingProduct ? <i className="fas fa-circle-notch fa-spin"></i> : 'Publish Product'}
                 </button>
               </div>
             </div>
@@ -453,17 +508,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border border-gray-100">
             <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
               <h2 className="text-sm font-black tracking-widest uppercase text-gray-900 flex items-center gap-3">
-                <i className="fas fa-receipt text-blue-600"></i> Order Fulfillment: #{viewingOrder.id}
+                <i className="fas fa-receipt text-blue-600"></i> Order: #{viewingOrder.id}
               </h2>
-              <button onClick={() => setViewingOrder(null)} className="text-gray-400 hover:text-black transition-all hover:scale-110 p-2"><i className="fas fa-times text-xl"></i></button>
+              <button onClick={() => setViewingOrder(null)} className="text-gray-400 hover:text-black p-2"><i className="fas fa-times text-xl"></i></button>
             </div>
             <div className="flex-grow overflow-y-auto p-10 space-y-12 custom-scrollbar">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 <div className="space-y-8">
                   <div className="bg-gray-50 rounded-3xl p-8 border border-gray-100 shadow-inner">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div> Items Summary
-                    </h3>
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest flex items-center gap-2">Items</h3>
                     <div className="space-y-6">
                       {viewingOrder.items.map((item, i) => (
                         <div key={i} className="flex items-center space-x-6 pb-6 border-b border-gray-200 last:border-0 last:pb-0">
@@ -471,74 +524,52 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <div className="flex-grow min-w-0">
                             <p className="text-sm font-black uppercase tracking-tight truncate text-gray-900">{item.product.name}</p>
                             <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-tight">Quantity: {item.quantity}</p>
-                            {item.variantName && <p className="text-[9px] text-blue-500 font-black uppercase mt-0.5">{item.variantName}</p>}
                           </div>
                           <p className="text-base font-black text-gray-900">Rs. {(item.product.price * item.quantity).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
-                    <div className="pt-6 border-t border-gray-200 mt-6 flex justify-between items-center font-black">
-                      <span className="text-[10px] uppercase text-gray-400 tracking-widest">Total Payable (COD)</span>
-                      <span className="text-xl text-blue-600 tracking-tighter">Rs. {viewingOrder.total.toLocaleString()}</span>
-                    </div>
                   </div>
                 </div>
                 <div className="space-y-8">
                   <div className="bg-white rounded-3xl border border-gray-200 p-8 shadow-sm">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest flex items-center gap-2">
-                       <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div> Customer Details
-                    </h3>
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Customer</h3>
                     <div className="space-y-6">
                       <div className="flex justify-between items-center group">
                         <div className="min-w-0">
-                          <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Customer Name</p>
+                          <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Name</p>
                           <p className="text-sm font-black text-blue-600 uppercase tracking-tighter truncate">{viewingOrder.customer.name}</p>
                         </div>
                         <CopyBtn text={viewingOrder.customer.name} id="m-name" />
                       </div>
                       <div className="flex justify-between items-center group">
                         <div className="min-w-0">
-                          <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Phone Number</p>
+                          <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Phone</p>
                           <p className="text-sm font-black text-gray-900 tracking-tight">{viewingOrder.customer.phone}</p>
                         </div>
                         <CopyBtn text={viewingOrder.customer.phone} id="m-phone" />
                       </div>
                       <div className="pt-6 border-t border-gray-50">
-                        <div className="flex justify-between items-start group mb-4">
-                           <div className="min-w-0">
-                              <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Shipping City</p>
-                              <p className="text-sm font-black text-gray-900 uppercase tracking-widest">{viewingOrder.customer.city || 'N/A'}</p>
-                           </div>
-                           <CopyBtn text={viewingOrder.customer.city || ''} id="m-city" />
-                        </div>
-                        <div className="flex justify-between items-start group">
-                           <div className="min-w-0">
-                              <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Street Address</p>
-                              <p className="text-xs font-bold leading-relaxed text-gray-500 italic max-w-[200px]">"{viewingOrder.customer.address}"</p>
-                           </div>
-                           <CopyBtn text={viewingOrder.customer.address} id="m-addr" />
-                        </div>
+                        <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Address</p>
+                        <p className="text-xs font-bold text-gray-500">"{viewingOrder.customer.address}"</p>
                       </div>
                     </div>
                     <div className="pt-8 border-t border-gray-100 mt-8">
-                      <p className="text-[9px] font-black text-gray-400 uppercase mb-4 tracking-widest">Order Status</p>
-                      <div className="relative">
-                        <select 
-                          value={viewingOrder.status}
-                          onChange={(e) => updateStatusOverride && updateStatusOverride(viewingOrder.id, e.target.value as any)}
-                          className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 px-5 text-[11px] font-black uppercase tracking-widest outline-none cursor-pointer focus:border-black appearance-none transition-colors"
-                        >
-                          {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <i className="fas fa-chevron-down absolute right-5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none text-[10px]"></i>
-                      </div>
+                      <p className="text-[9px] font-black text-gray-400 uppercase mb-4 tracking-widest">Status</p>
+                      <select 
+                        value={viewingOrder.status}
+                        onChange={(e) => updateStatusOverride && updateStatusOverride(viewingOrder.id, e.target.value as any)}
+                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 px-5 text-[11px] font-black uppercase tracking-widest outline-none appearance-none"
+                      >
+                        {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
             <div className="p-8 border-t border-gray-100 flex justify-center bg-gray-50/30">
-               <button onClick={() => setViewingOrder(null)} className="w-full sm:w-auto min-w-[300px] bg-black text-white px-12 py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.4em] shadow-xl hover:bg-gray-800 transition active:scale-[0.98] shadow-black/20">Close Fulfillment View</button>
+               <button onClick={() => setViewingOrder(null)} className="w-full sm:w-auto min-w-[300px] bg-black text-white px-12 py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.4em]">Close View</button>
             </div>
           </div>
         </div>
