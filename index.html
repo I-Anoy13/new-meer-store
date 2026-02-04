@@ -10,12 +10,13 @@
     <!-- PRE-BOOTSTRAP REDIRECT GUARD -->
     <script>
       (function() {
-        const params = new URLSearchParams(window.location.search);
-        // If we detect the Admin PWA launch flag, force the hash to #/admin 
-        // before React even starts rendering.
-        if (params.get('pwa') === 'admin') {
-          window.location.hash = '#/admin';
-          console.log('PWA Admin Launch Detected: Forcing Redirect');
+        const url = new URL(window.location.href);
+        const params = url.searchParams;
+        const hash = window.location.hash;
+
+        // CRITICAL: If pwa=admin is in URL, force-jump to #/admin instantly
+        if (params.get('pwa') === 'admin' && !hash.includes('/admin')) {
+          window.location.replace(window.location.pathname + window.location.search + '#/admin');
         }
       })();
     </script>
@@ -28,23 +29,40 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <script>
-      function updatePWAManifest() {
+      /**
+       * Forces the browser to recognize the Admin context.
+       * 1. Swaps manifest to manifest-admin.json
+       * 2. Appends ?pwa=admin to the URL without refreshing (via history.replaceState)
+       *    This ensures that when a user clicks 'Add to Home Screen', Safari 
+       *    captures the URL with the pwa=admin flag.
+       */
+      function syncPWAContext() {
         const manifestLink = document.getElementById('pwa-manifest');
-        if (!manifestLink) return;
+        const hash = window.location.hash;
+        const isAdmin = hash.includes('/admin');
         
-        // Use hash or current path to determine which manifest to show to the OS
-        const isAdmin = window.location.hash.includes('/admin') || window.location.search.includes('pwa=admin');
-        const target = isAdmin ? '/manifest-admin.json' : '/manifest.json';
-        
-        if (manifestLink.getAttribute('href').split('?')[0] !== target) {
-          manifestLink.setAttribute('href', target + '?v=' + Date.now());
-          console.log('Context Switch: Manifest set to', target);
+        // 1. Swap Manifest
+        const targetManifest = isAdmin ? '/manifest-admin.json' : '/manifest.json';
+        if (manifestLink && manifestLink.getAttribute('href').split('?')[0] !== targetManifest) {
+          manifestLink.setAttribute('href', targetManifest + '?v=' + Date.now());
+        }
+
+        // 2. Sync URL Search Params for PWA capture
+        const url = new URL(window.location.href);
+        if (isAdmin && url.searchParams.get('pwa') !== 'admin') {
+          url.searchParams.set('pwa', 'admin');
+          window.history.replaceState(null, '', url.toString());
+        } else if (!isAdmin && url.searchParams.has('pwa')) {
+          url.searchParams.delete('pwa');
+          window.history.replaceState(null, '', url.toString());
         }
       }
 
-      window.addEventListener('hashchange', updatePWAManifest);
-      // Run immediately
-      updatePWAManifest();
+      window.addEventListener('hashchange', syncPWAContext);
+      // Run once on load
+      document.addEventListener('DOMContentLoaded', syncPWAContext);
+      // Periodically check in case of internal transitions
+      setInterval(syncPWAContext, 2000);
     </script>
 
     <!-- TikTok Pixel Base Code -->
