@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CartItem, Product, Order, User } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
@@ -57,7 +57,7 @@ const AppContent: React.FC = () => {
     try {
       const { data, error } = await supabase.from('products').select('*');
       if (error) throw error;
-      if (data) {
+      if (data && data.length > 0) {
         setProducts(data.map(row => ({
           id: String(row.id),
           name: row.name || 'Untitled Item',
@@ -164,6 +164,8 @@ const AppContent: React.FC = () => {
           <Route path="/terms-of-service" element={<TermsOfService />} />
           <Route path="/refund-policy" element={<RefundPolicy />} />
           <Route path="/shipping-policy" element={<ShippingPolicy />} />
+          {/* Catch-all route to redirect back home if the path is invalid (like /#/admin) */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </MainLayout>
     </Suspense>
