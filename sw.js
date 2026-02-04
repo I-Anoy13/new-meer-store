@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-v19-guardian';
+const CACHE_NAME = 'itx-v20-guardian';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,21 +28,20 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Listener for order alerts from the Admin UI
+// Primary listener for messages from the Admin UI
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options, orderId } = event.data;
     
-    // We use the Order ID as a tag so each order shows up as its own notification
     const notificationPromise = self.registration.showNotification(title, {
       ...options,
       icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
       badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-      vibrate: [200, 100, 200, 100, 200, 100, 400],
+      vibrate: [500, 110, 500, 110, 450, 110, 200, 110],
       requireInteraction: true,
-      tag: orderId || 'itx-generic-alert', 
+      tag: orderId || 'itx-new-order',
       renotify: true,
-      silent: false
+      data: { url: '/admin.html' }
     });
 
     event.waitUntil(notificationPromise);
@@ -53,7 +52,6 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Focus existing admin tab or open new one
       for (const client of clientList) {
         if (client.url.includes('admin.html') && 'focus' in client) {
           return client.focus();
