@@ -28,22 +28,33 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<'Today' | 'Yesterday' | 'Last 7 Days' | 'All Time'>('All Time');
-  const [notificationStatus, setNotificationStatus] = useState<NotificationPermission>(Notification.permission);
+  
+  // Safe notification permission initialization
+  const [notificationStatus, setNotificationStatus] = useState<string>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'denied';
+  });
   
   const [newProduct, setNewProduct] = useState({ name: '', price: '', category: 'Watches', description: '' });
   const [mainImageFile, setMainImageFile] = useState<File | null>(null);
 
-  // Notification Engine
+  // Notification Engine - Safely handled for mobile
   useEffect(() => {
-    if (user && Notification.permission === 'granted') {
+    if (user && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       const channel = supabase
         .channel('admin-notifications')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
           const newOrder = payload.new;
-          new Notification("🔔 New Order Received!", {
-            body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
-            icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
-          });
+          try {
+            new Notification("🔔 New Order Received!", {
+              body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
+              icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
+            });
+          } catch (e) {
+            console.warn("Notification failed to display", e);
+          }
           refreshData();
         })
         .subscribe();
@@ -52,8 +63,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [user, notificationStatus, refreshData]);
 
   const requestNotificationPermission = async () => {
-    const permission = await Notification.requestPermission();
-    setNotificationStatus(permission);
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setNotificationStatus(permission);
+    } else {
+      alert("System notifications are not supported on this browser/device.");
+    }
   };
 
   const menuItems = [

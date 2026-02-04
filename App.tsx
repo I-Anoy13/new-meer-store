@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
-import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import { CartItem, Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
@@ -14,9 +14,7 @@ import RefundPolicy from './views/RefundPolicy';
 import ShippingPolicy from './views/ShippingPolicy';
 import Header from './components/Header';
 import Footer from './components/Footer';
-
-// Lazy load the admin panel for complete isolation
-const AdminDashboard = lazy(() => import('./views/AdminDashboard'));
+import AdminDashboard from './views/AdminDashboard';
 
 const MainLayout: React.FC<{
   children: React.ReactNode;
