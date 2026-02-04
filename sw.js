@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v8-always-on';
+const CACHE_NAME = 'itx-meer-v9-persistent';
 const ASSETS = [
   '/',
   '/index.html',
@@ -25,28 +25,19 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Real-time Notification Bridge
+// Force-trigger notifications from background
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+  if (event.data && event.data.type === 'FORCE_NOTIFICATION') {
     const { title, options } = event.data;
-    self.registration.showNotification(title, options);
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        ...options,
+        vibrate: [200, 100, 200, 100, 200],
+        badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
+        data: { url: '/admin.html' }
+      })
+    );
   }
-});
-
-self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  if (url.hostname.includes('supabase.co')) return;
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networked = fetch(event.request).then((response) => {
-        const cacheCopy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cacheCopy));
-        return response;
-      }).catch(() => cached);
-      return cached || networked;
-    })
-  );
 });
 
 self.addEventListener('notificationclick', (event) => {
@@ -54,11 +45,19 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if (client.url.includes('/admin.html') && 'focus' in client) {
+        if (client.url.includes('admin.html') && 'focus' in client) {
           return client.focus();
         }
       }
       if (clients.openWindow) return clients.openWindow('/admin.html');
     })
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  if (url.hostname.includes('supabase.co')) return;
+  event.respondWith(
+    caches.match(event.request).then((res) => res || fetch(event.request))
   );
 });
