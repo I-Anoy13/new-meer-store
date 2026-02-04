@@ -7,9 +7,18 @@ import { supabase } from './lib/supabase';
 import AdminDashboard from './views/AdminDashboard';
 
 const AdminApp: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
-  const [rawOrders, setRawOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Load from cache for instant startup
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem('itx_cached_products');
+    return saved ? JSON.parse(saved) : MOCK_PRODUCTS;
+  });
+  
+  const [rawOrders, setRawOrders] = useState<any[]>(() => {
+    const saved = localStorage.getItem('itx_cached_orders');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [loading, setLoading] = useState(rawOrders.length === 0);
   
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -25,9 +34,12 @@ const AdminApp: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
+  // Background Cache Persistence
   useEffect(() => {
+    localStorage.setItem('itx_cached_products', JSON.stringify(products));
+    localStorage.setItem('itx_cached_orders', JSON.stringify(rawOrders));
     localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
-  }, [statusOverrides]);
+  }, [products, rawOrders, statusOverrides]);
 
   const orders = useMemo(() => {
     return rawOrders.map((row): Order | null => {
@@ -37,7 +49,7 @@ const AdminApp: React.FC = () => {
       const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
       const dbStatus = (capitalized || 'Pending') as Order['status'];
       const finalStatus = statusOverrides[orderId] || dbStatus;
-      const totalAmount = row.subtotal_pkr ?? row.total_pkr ?? row.total ?? 0;
+      const totalAmount = row.total_pkr ?? row.subtotal_pkr ?? row.total ?? 0;
 
       return {
         id: orderId,
@@ -78,8 +90,7 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      // Limit to 50 latest for fast dashboard boot
-      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
+      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(100);
       if (!error && data) {
         setRawOrders(data);
       }
@@ -111,9 +122,9 @@ const AdminApp: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#1a1c1d]">
-        <div className="text-center">
-          <div className="w-10 h-10 border-2 border-white/20 border-t-blue-500 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Secure Console Booting...</p>
+        <div className="text-center animate-pulse">
+          <div className="w-12 h-12 border-4 border-white/5 border-t-blue-500 rounded-full animate-spin mb-4 mx-auto"></div>
+          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-white">ITX Instant Sync</p>
         </div>
       </div>
     );
@@ -128,10 +139,15 @@ const AdminApp: React.FC = () => {
             setProducts={setProducts} 
             deleteProduct={deleteProduct} 
             orders={orders} 
-            setOrders={(newRaw: any) => setRawOrders(prev => [newRaw, ...prev])} 
+            setOrders={(newRaw: any) => setRawOrders(prev => {
+              // Deduplicate and prepend
+              const exists = prev.some(o => o.order_id === newRaw.order_id);
+              if (exists) return prev;
+              return [newRaw, ...prev];
+            })} 
             user={user} 
             login={(role) => { 
-              const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; 
+              const u = { id: '1', name: 'Master', email: 'itx@me.pk', role }; 
               setUser(u); 
               localStorage.setItem('itx_user_session', JSON.stringify(u)); 
             }}

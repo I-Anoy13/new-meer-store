@@ -35,8 +35,13 @@ const MainLayout: React.FC<{
 );
 
 const AppContent: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
-  const [loading, setLoading] = useState(true);
+  // Use cached products for instant initial render
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem('itx_cached_products');
+    return saved ? JSON.parse(saved) : MOCK_PRODUCTS;
+  });
+  
+  const [loading, setLoading] = useState(products.length === 0);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const [cart, setCart] = useState<CartItem[]>(() => {
@@ -51,7 +56,8 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cart));
-  }, [cart]);
+    localStorage.setItem('itx_cached_products', JSON.stringify(products));
+  }, [cart, products]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -74,20 +80,13 @@ const AppContent: React.FC = () => {
       }
     } catch (e) {
       console.error("Product Sync Failure:", e);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-    const initData = async () => {
-      try {
-        await fetchProducts();
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    initData();
-    return () => { mounted = false; };
+    fetchProducts();
   }, [fetchProducts]);
 
   const addToCart = (product: Product, quantity: number = 1, variantId?: string) => {
@@ -123,7 +122,7 @@ const AppContent: React.FC = () => {
         product_image: firstItem?.product.image || '',
         total_pkr: totalAmount,
         subtotal_pkr: totalAmount,
-        status: order.status.toLowerCase(),
+        status: 'pending',
         items: order.items,
         source: 'Web App'
       };
@@ -142,9 +141,8 @@ const AppContent: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="w-12 h-12 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Loading ITX Store...</p>
+        <div className="text-center animate-pulse">
+          <div className="w-10 h-10 border-2 border-black/5 border-t-black rounded-full animate-spin mb-4 mx-auto"></div>
         </div>
       </div>
     );
@@ -164,7 +162,6 @@ const AppContent: React.FC = () => {
           <Route path="/terms-of-service" element={<TermsOfService />} />
           <Route path="/refund-policy" element={<RefundPolicy />} />
           <Route path="/shipping-policy" element={<ShippingPolicy />} />
-          {/* Catch-all route to redirect back home if the path is invalid (like /#/admin) */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </MainLayout>
