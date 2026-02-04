@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Order, User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
@@ -29,12 +28,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<'Today' | 'Yesterday' | 'Last 7 Days' | 'All Time'>('All Time');
   
-  // Safe notification permission initialization
+  // Refined Notification State
   const [notificationStatus, setNotificationStatus] = useState<string>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       return Notification.permission;
     }
-    return 'denied';
+    return 'unsupported';
   });
   
   const [newProduct, setNewProduct] = useState({ name: '', price: '', category: 'Watches', description: '' });
@@ -42,18 +41,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Notification Engine - Safely handled for mobile
   useEffect(() => {
-    if (user && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    if (user && notificationStatus === 'granted' && 'Notification' in window) {
       const channel = supabase
-        .channel('admin-notifications')
+        .channel('admin-notifications-v2')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
           const newOrder = payload.new;
           try {
-            new Notification("🔔 New Order Received!", {
-              body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
-              icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
-            });
+            // Check for service worker registration to show background notification if possible
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+               navigator.serviceWorker.ready.then(registration => {
+                 // Fix: Removed 'vibrate' property to resolve TypeScript error 'NotificationOptions' does not contain 'vibrate'
+                 registration.showNotification("🔔 New Order Received!", {
+                   body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
+                   icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
+                 });
+               });
+            } else {
+               new Notification("🔔 New Order Received!", {
+                 body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
+                 icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
+               });
+            }
           } catch (e) {
-            console.warn("Notification failed to display", e);
+            console.warn("Notification failed", e);
           }
           refreshData();
         })
@@ -63,11 +73,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }, [user, notificationStatus, refreshData]);
 
   const requestNotificationPermission = async () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
+    if ('Notification' in window) {
       const permission = await Notification.requestPermission();
       setNotificationStatus(permission);
     } else {
-      alert("System notifications are not supported on this browser/device.");
+      // Logic for iOS Safari: Tell them to Add to Home Screen
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS) {
+        alert("To enable notifications on iPhone:\n1. Tap 'Share' button\n2. Select 'Add to Home Screen'\n3. Open ITX from your home screen.");
+      } else {
+        alert("This browser does not support system notifications. Try Chrome or install the app.");
+      }
     }
   };
 
@@ -214,12 +230,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="p-4 border-t border-gray-800">
            <button 
              onClick={requestNotificationPermission}
-             className={`w-full flex items-center space-x-3 p-3 rounded-xl transition-all ${notificationStatus === 'granted' ? 'bg-green-500/10' : 'bg-yellow-500/10 animate-pulse'}`}
+             className={`w-full flex items-center space-x-3 p-3 rounded-xl transition-all ${notificationStatus === 'granted' ? 'bg-green-500/10' : 'bg-yellow-500/10'}`}
            >
-              <div className={`w-2 h-2 rounded-full ${notificationStatus === 'granted' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : 'bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.5)]'}`}></div>
-              <div className="text-left">
-                 <p className="text-[9px] font-black text-white uppercase tracking-widest">Notification Engine</p>
-                 <p className="text-[8px] text-gray-400 uppercase font-bold">{notificationStatus === 'granted' ? 'System Active' : 'Setup Required'}</p>
+              <div className={`w-2 h-2 rounded-full ${notificationStatus === 'granted' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : notificationStatus === 'unsupported' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse shadow-[0_0_10px_rgba(234,179,8,0.5)]'}`}></div>
+              <div className="text-left overflow-hidden">
+                 <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">
+                    {notificationStatus === 'unsupported' ? 'Install ITX App' : 'Notifications'}
+                 </p>
+                 <p className="text-[8px] text-gray-400 uppercase font-bold truncate">
+                    {notificationStatus === 'granted' ? 'System Active' : notificationStatus === 'unsupported' ? 'Add to Home Screen' : 'Setup Required'}
+                 </p>
               </div>
            </button>
         </div>
