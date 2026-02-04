@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Product, Order, User, UserRole } from '../types';
 import { supabase } from '../lib/supabase';
@@ -50,7 +51,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             // Check for service worker registration to show background notification if possible
             if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                navigator.serviceWorker.ready.then(registration => {
-                 // Fix: Removed 'vibrate' property to resolve TypeScript error 'NotificationOptions' does not contain 'vibrate'
                  registration.showNotification("🔔 New Order Received!", {
                    body: `${newOrder.customer_name} from ${newOrder.customer_city} spent Rs. ${newOrder.total_pkr}`,
                    icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
@@ -235,7 +235,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className={`w-2 h-2 rounded-full ${notificationStatus === 'granted' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]' : notificationStatus === 'unsupported' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse shadow-[0_0_10px_rgba(234,179,8,0.5)]'}`}></div>
               <div className="text-left overflow-hidden">
                  <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">
-                    {notificationStatus === 'unsupported' ? 'Install ITX App' : 'Notifications'}
+                    {notificationStatus === 'unsupported' ? 'Install Admin App' : 'Notifications'}
                  </p>
                  <p className="text-[8px] text-gray-400 uppercase font-bold truncate">
                     {notificationStatus === 'granted' ? 'System Active' : notificationStatus === 'unsupported' ? 'Add to Home Screen' : 'Setup Required'}
@@ -257,6 +257,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <main className="flex-grow overflow-y-auto p-4 md:p-10 animate-fadeIn custom-scrollbar">
           {activeNav === 'Home' && (
             <div className="max-w-6xl mx-auto space-y-8">
+              {/* PWA TIP for Admin icon */}
+              {window.matchMedia('(display-mode: standalone)').matches === false && (
+                <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between animate-fadeIn">
+                  <div className="flex items-center space-x-4">
+                    <i className="fas fa-mobile-screen-button text-2xl opacity-50"></i>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest">PWA Feature Detected</p>
+                      <p className="text-sm font-bold tracking-tight">Add to Home Screen now to get a dedicated Admin App icon.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <h2 className="text-2xl font-black tracking-tight uppercase">Store Overview</h2>
                 <div className="flex items-center bg-white rounded-xl border border-gray-200 p-1 shadow-sm overflow-x-auto no-scrollbar">

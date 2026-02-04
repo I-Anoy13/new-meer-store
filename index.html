@@ -6,12 +6,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITX SHOP MEER - Admin & Store</title>
     <meta name="theme-color" content="#1a1c1d" />
-    <link rel="manifest" href="/manifest.json" />
+    <link id="pwa-manifest" rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop" />
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <script>
+      // Dynamic Manifest Switcher
+      // This allows the user to "Add to Home Screen" from the admin page
+      // and get a dedicated Admin icon.
+      function updatePWAManifest() {
+        const manifestLink = document.getElementById('pwa-manifest');
+        if (!manifestLink) return;
+        
+        const isInternalAdmin = window.location.hash.includes('/admin');
+        const targetManifest = isInternalAdmin ? '/manifest-admin.json' : '/manifest.json';
+        
+        if (manifestLink.getAttribute('href') !== targetManifest) {
+          manifestLink.setAttribute('href', targetManifest);
+          console.log('PWA Manifest switched to:', targetManifest);
+        }
+      }
+
+      window.addEventListener('hashchange', updatePWAManifest);
+      // Run on initial load
+      window.addEventListener('DOMContentLoaded', updatePWAManifest);
+    </script>
 
     <!-- TikTok Pixel Base Code -->
     <script>

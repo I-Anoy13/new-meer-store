@@ -1,0 +1,23 @@
+
+{
+  "name": "ITX Store Admin",
+  "short_name": "ITX Admin",
+  "description": "Manage ITX SHOP MEER",
+  "start_url": "/#/admin",
+  "display": "standalone",
+  "background_color": "#1a1c1d",
+  "theme_color": "#1a1c1d",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=512&h=512&auto=format&fit=crop",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

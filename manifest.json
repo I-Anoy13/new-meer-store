@@ -25,14 +25,14 @@
       "name": "Admin Dashboard",
       "short_name": "Admin",
       "description": "Manage orders and products",
-      "url": "/#/admin",
+      "url": "/index.html#/admin",
       "icons": [{ "src": "https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop", "sizes": "192x192" }]
     },
     {
       "name": "View Orders",
       "short_name": "Orders",
       "description": "Check new orders",
-      "url": "/#/admin/orders",
+      "url": "/index.html#/admin",
       "icons": [{ "src": "https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop", "sizes": "192x192" }]
     }
   ]
