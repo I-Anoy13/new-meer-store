@@ -7,7 +7,6 @@ import { supabase } from './lib/supabase';
 import AdminDashboard from './views/AdminDashboard';
 
 const AdminApp: React.FC = () => {
-  // Load from cache for instant startup
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('itx_cached_products');
     return saved ? JSON.parse(saved) : MOCK_PRODUCTS;
@@ -34,7 +33,6 @@ const AdminApp: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  // Background Cache Persistence
   useEffect(() => {
     localStorage.setItem('itx_cached_products', JSON.stringify(products));
     localStorage.setItem('itx_cached_orders', JSON.stringify(rawOrders));
@@ -90,7 +88,7 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(100);
+      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
       if (!error && data) {
         setRawOrders(data);
       }
@@ -119,17 +117,6 @@ const AdminApp: React.FC = () => {
     if (!error) setProducts(prev => prev.filter(p => p.id !== productId));
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#1a1c1d]">
-        <div className="text-center animate-pulse">
-          <div className="w-12 h-12 border-4 border-white/5 border-t-blue-500 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-white">ITX Instant Sync</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <HashRouter>
       <Routes>
@@ -139,12 +126,14 @@ const AdminApp: React.FC = () => {
             setProducts={setProducts} 
             deleteProduct={deleteProduct} 
             orders={orders} 
-            setOrders={(newRaw: any) => setRawOrders(prev => {
-              // Deduplicate and prepend
-              const exists = prev.some(o => o.order_id === newRaw.order_id);
-              if (exists) return prev;
-              return [newRaw, ...prev];
-            })} 
+            setOrders={(newRow: any) => {
+              setRawOrders(prev => {
+                const idToCheck = newRow.order_id || `ORD-${newRow.id}`;
+                const exists = prev.some(o => (o.order_id || `ORD-${o.id}`) === idToCheck);
+                if (exists) return prev;
+                return [newRow, ...prev];
+              });
+            }} 
             user={user} 
             login={(role) => { 
               const u = { id: '1', name: 'Master', email: 'itx@me.pk', role }; 

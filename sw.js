@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v5-instant';
+const CACHE_NAME = 'itx-meer-v6-hyper';
 const ASSETS = [
   '/',
   '/index.html',
@@ -25,19 +25,22 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Stale-while-revalidate for faster perceived performance
+// Hyper-fast Stale-while-revalidate
 self.addEventListener('fetch', (event) => {
-  if (event.request.url.includes('supabase.co')) return; // Don't cache DB calls
+  const url = new URL(event.request.url);
   
+  // Never cache database or real-time calls
+  if (url.hostname.includes('supabase.co')) return;
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      const fetchPromise = fetch(event.request).then((networkResponse) => {
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, networkResponse.clone());
-        });
-        return networkResponse;
-      });
-      return cachedResponse || fetchPromise;
+    caches.match(event.request).then((cached) => {
+      const networked = fetch(event.request).then((response) => {
+        const cacheCopy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cacheCopy));
+        return response;
+      }).catch(() => cached);
+      
+      return cached || networked;
     })
   );
 });
