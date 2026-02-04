@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v14-guardian';
+const CACHE_NAME = 'itx-meer-v15-guardian';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,24 +28,22 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Primary Background Notification Listener
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options } = event.data;
     
-    // Using self.registration is essential for showing notifications when the tab is not in focus
-    const notificationPromise = self.registration.showNotification(title, {
-      ...options,
-      icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-      badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-      vibrate: [500, 110, 500, 110, 450, 110, 200, 110],
-      requireInteraction: true,
-      tag: 'itx-new-order',
-      renotify: true,
-      silent: false
-    });
-
-    event.waitUntil(notificationPromise);
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        ...options,
+        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
+        badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
+        vibrate: [500, 100, 500, 100, 500],
+        requireInteraction: true,
+        tag: 'itx-order-alert',
+        renotify: true,
+        silent: false
+      })
+    );
   }
 });
 
