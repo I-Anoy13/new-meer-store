@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
-import AdminDashboard from './views/AdminDashboard';
+// Fix: Use named import for AdminDashboard as it does not have a default export
+import { AdminDashboard } from './views/AdminDashboard';
 
 const AdminApp: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => {
