@@ -14,34 +14,23 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <script>
-      // Force-refresh manifest when user switches between Store and Admin
       function updatePWAManifest() {
-        const oldLink = document.getElementById('pwa-manifest');
-        if (!oldLink) return;
+        const manifestLink = document.getElementById('pwa-manifest');
+        if (!manifestLink) return;
         
-        const isInternalAdmin = window.location.hash.includes('/admin');
-        const targetManifest = isInternalAdmin ? '/manifest-admin.json' : '/manifest.json';
+        const isAdmin = window.location.hash.includes('/admin') || window.location.search.includes('pwa=admin');
+        const target = isAdmin ? '/manifest-admin.json' : '/manifest.json';
         
-        // Append a version/timestamp to force the browser to re-evaluate the manifest
-        const newHref = targetManifest + '?v=' + new Date().getTime();
-        
-        if (oldLink.getAttribute('href').split('?')[0] !== targetManifest) {
-          const newLink = document.createElement('link');
-          newLink.id = 'pwa-manifest';
-          newLink.rel = 'manifest';
-          newLink.href = newHref;
-          oldLink.parentNode.replaceChild(newLink, oldLink);
-          console.log('PWA Context Switched to:', targetManifest);
+        if (manifestLink.getAttribute('href').split('?')[0] !== target) {
+          manifestLink.setAttribute('href', target + '?v=' + Date.now());
+          console.log('Manifest updated to:', target);
         }
       }
 
       window.addEventListener('hashchange', updatePWAManifest);
-      // Run immediately
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', updatePWAManifest);
-      } else {
-        updatePWAManifest();
-      }
+      // Run immediately and after a short delay to catch late URL updates
+      updatePWAManifest();
+      setTimeout(updatePWAManifest, 500);
     </script>
 
     <!-- TikTok Pixel Base Code -->

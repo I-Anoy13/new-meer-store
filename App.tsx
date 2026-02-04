@@ -23,29 +23,29 @@ const SessionRestorer: React.FC = () => {
   const [hasRestored, setHasRestored] = useState(false);
 
   useEffect(() => {
-    const isPWA = window.matchMedia('(display-mode: standalone)').matches;
+    // Check for explicit PWA flag in search params OR saved admin preference
     const searchParams = new URLSearchParams(window.location.search);
-    const isAdminPWA = searchParams.get('pwa') === 'admin';
-    
-    // Restoration Logic
-    if (!hasRestored && isPWA) {
-      // 1. If we have the explicit Admin PWA flag, go to Admin immediately
-      if (isAdminPWA) {
+    const isAdminIntent = searchParams.get('pwa') === 'admin' || localStorage.getItem('itx_last_mode') === 'admin';
+    const isPWA = window.matchMedia('(display-mode: standalone)').matches;
+
+    if (!hasRestored) {
+      // If the URL has the admin flag, or we are in a PWA and the last mode was admin
+      if (isAdminIntent && (location.pathname === '/' || location.pathname === '')) {
         navigate('/admin');
-      } 
-      // 2. Otherwise check session storage for last route (useful for non-flagged PWAs)
-      else if (location.pathname === '/' && (!location.hash || location.hash === '#/')) {
-        const savedRoute = localStorage.getItem('itx_last_route');
-        if (savedRoute && savedRoute !== '/' && savedRoute !== '#/') {
-          navigate(savedRoute.replace('#', '')); // Router expects path without hash
-        }
       }
+      setHasRestored(true);
     }
-    setHasRestored(true);
   }, [hasRestored, location, navigate]);
 
   useEffect(() => {
-    // Save current hash whenever it changes (since we use HashRouter)
+    // Keep track of the "mode" (Admin vs Store)
+    if (location.pathname.startsWith('/admin')) {
+      localStorage.setItem('itx_last_mode', 'admin');
+    } else if (location.pathname === '/' || location.pathname === '/checkout' || location.pathname === '/cart') {
+      localStorage.setItem('itx_last_mode', 'store');
+    }
+    
+    // Also save the specific hash for detailed restoration
     if (window.location.hash) {
       localStorage.setItem('itx_last_route', window.location.hash);
     }
