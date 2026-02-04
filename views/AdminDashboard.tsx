@@ -31,23 +31,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [dateRange, setDateRange] = useState<'Today' | 'Yesterday' | 'Last 7 Days' | 'All Time'>('All Time');
   
-  // Notification & Audio State
-  const [notificationStatus, setNotificationStatus] = useState<string>(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission;
-    }
-    return 'unsupported';
-  });
-
-  const [customSound, setCustomSound] = useState<string | null>(() => localStorage.getItem('itx_admin_sound'));
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
+  // Fix: Added missing state for product creation
   const [newProduct, setNewProduct] = useState({ name: '', price: '', category: 'Watches', description: '' });
   const [mainImageFile, setMainImageFile] = useState<File | null>(null);
 
-  // Initialize Audio Object once
+  // Audio & Notification Logic
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(false);
+  const [customSound, setCustomSound] = useState<string | null>(() => localStorage.getItem('itx_custom_tone'));
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
+    // Initialize or update audio object when customSound changes
     if (!audioRef.current) {
       audioRef.current = new Audio(customSound || DEFAULT_CHIME);
     } else {
@@ -56,85 +50,63 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     audioRef.current.load();
   }, [customSound]);
 
-  const playNotificationSound = () => {
-    if (audioRef.current) {
-      // Browsers require a fresh user interaction to play audio. 
-      // If isAudioEnabled is true, it means they clicked the unlock button.
+  const triggerAlert = () => {
+    if (audioRef.current && isAudioUnlocked) {
       audioRef.current.currentTime = 0;
-      const playPromise = audioRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.warn("Playback failed. Interaction needed:", error);
-          setIsAudioEnabled(false); // Reset to show the unlock button again if blocked
-        });
-      }
+      audioRef.current.play().catch(e => console.warn("Playback blocked by browser settings.", e));
+    }
+    
+    if (Notification.permission === 'granted') {
+      new Notification("🔔 New Order Received!", {
+        body: "A new customer has just placed an order. Check the dashboard now.",
+        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
+      });
     }
   };
 
-  const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Real-time Instant Listener
+  useEffect(() => {
+    if (user) {
+      console.log("Initializing Real-time Order Engine...");
+      const channel = supabase
+        .channel('admin_live_orders')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+          console.log("Instant order detected!", payload);
+          triggerAlert();
+          refreshData(); // Updates the UI lists immediately
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user, isAudioUnlocked, customSound, refreshData]);
+
+  const unlockAudio = () => {
+    setIsAudioUnlocked(true);
+    if (audioRef.current) {
+      audioRef.current.play().then(() => {
+        audioRef.current?.pause();
+        audioRef.current!.currentTime = 0;
+      });
+    }
+    if (Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
+  };
+
+  const handleToneUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("File is too large. Please use a sound under 2MB.");
-        return;
-      }
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = event.target?.result as string;
         setCustomSound(base64);
-        localStorage.setItem('itx_admin_sound', base64);
-        // Test immediately
-        if (audioRef.current) {
-          audioRef.current.src = base64;
-          audioRef.current.play();
-        }
-        alert("Custom alert sound saved!");
+        localStorage.setItem('itx_custom_tone', base64);
+        alert("Custom MP3 Tone Saved Successfully!");
       };
       reader.readAsDataURL(file);
-    }
-  };
-
-  const enableAudio = () => {
-    setIsAudioEnabled(true);
-    if (audioRef.current) {
-      audioRef.current.play().then(() => {
-        // Stop immediately, we just needed to trigger the interaction
-        audioRef.current?.pause();
-        audioRef.current!.currentTime = 0;
-      }).catch(e => console.log("Audio unlock attempted", e));
-    }
-  };
-
-  // Notification Engine - Listen for new orders
-  useEffect(() => {
-    if (user && isAudioEnabled) {
-      const channel = supabase
-        .channel('admin-realtime-v4')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-          const newOrder = payload.new;
-          
-          // 1. Play Sound (Only works if user interacted/unlocked)
-          playNotificationSound();
-
-          // 2. Browser Notification (Visible)
-          if (Notification.permission === 'granted') {
-             new Notification("New Order: " + newOrder.customer_name, {
-               body: `Total: Rs. ${newOrder.total_pkr}`,
-               icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
-             });
-          }
-          
-          refreshData();
-        })
-        .subscribe();
-      return () => { supabase.removeChannel(channel); };
-    }
-  }, [user, isAudioEnabled, refreshData]);
-
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window) {
-      const permission = await Notification.requestPermission();
-      setNotificationStatus(permission);
     }
   };
 
@@ -261,6 +233,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden text-gray-400"><i className="fas fa-times"></i></button>
         </div>
+        
         <nav className="flex-grow px-3 py-6 space-y-1">
           {menuItems.map(item => (
             <button 
@@ -276,36 +249,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           ))}
         </nav>
-        
-        {/* NOTIFICATION STATUS & AUDIO UNLOCK */}
+
+        {/* Real-time Status & Audio Unlock */}
         <div className="p-4 border-t border-gray-800 space-y-2">
-           {!isAudioEnabled ? (
+           {!isAudioUnlocked ? (
              <button 
-               onClick={enableAudio}
-               className="w-full flex items-center justify-center space-x-2 p-3 rounded-xl bg-blue-600 text-white animate-pulse"
+               onClick={unlockAudio}
+               className="w-full bg-blue-600 text-white p-3 rounded-xl font-black uppercase text-[9px] tracking-widest animate-pulse shadow-lg flex items-center justify-center gap-2"
              >
-                <i className="fas fa-volume-high text-xs"></i>
-                <span className="text-[9px] font-black uppercase tracking-widest text-center">Tap to Enable Sound</span>
+               <i className="fas fa-volume-high"></i> Unlock Audio Alerts
              </button>
            ) : (
-             <div className="w-full flex items-center space-x-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
-                <i className="fas fa-volume-up text-green-500 text-xs"></i>
-                <div className="text-left overflow-hidden">
-                   <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">Sound Ready</p>
-                   <p className="text-[8px] text-gray-400 uppercase font-bold truncate">Monitoring Live</p>
+             <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-xl border border-white/10">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-ping"></div>
+                <div className="text-left">
+                  <p className="text-[9px] font-black text-white uppercase tracking-widest">Live Engine</p>
+                  <p className="text-[8px] text-gray-400 font-bold uppercase">Connected & Sound On</p>
                 </div>
              </div>
            )}
-           <button 
-             onClick={requestNotificationPermission}
-             className={`w-full flex items-center space-x-3 p-3 rounded-xl transition-all ${notificationStatus === 'granted' ? 'bg-white/5' : 'bg-yellow-500/10'}`}
-           >
-              <div className={`w-2 h-2 rounded-full ${notificationStatus === 'granted' ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></div>
-              <div className="text-left overflow-hidden">
-                 <p className="text-[9px] font-black text-white uppercase tracking-widest truncate">Push Status</p>
-                 <p className="text-[8px] text-gray-400 uppercase font-bold truncate">{notificationStatus}</p>
-              </div>
-           </button>
         </div>
       </aside>
 
@@ -351,7 +313,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-100 font-black uppercase text-[10px] tracking-widest text-gray-400">Recent Stream</div>
+                <div className="p-6 border-b border-gray-100 font-black uppercase text-[10px] tracking-widest text-gray-400">Instant Order Stream</div>
                 <div className="divide-y divide-gray-50">
                   {filteredOrders.slice(0, 5).map(o => (
                     <div key={o.id} onClick={() => setViewingOrder(o)} className="p-5 flex justify-between items-center hover:bg-gray-50 cursor-pointer transition">
@@ -365,9 +327,58 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
                   ))}
-                  {filteredOrders.length === 0 && <div className="p-20 text-center text-gray-300 uppercase text-xs font-black">No transaction stream found</div>}
+                  {filteredOrders.length === 0 && <div className="p-20 text-center text-gray-300 uppercase text-xs font-black">No transactions found</div>}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeNav === 'Settings' && (
+            <div className="max-w-2xl mx-auto space-y-8">
+               <h2 className="text-2xl font-black tracking-tight uppercase">Console Settings</h2>
+               
+               <div className="bg-white p-8 rounded-[2rem] border border-gray-200 shadow-sm space-y-8">
+                  <div>
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest">Custom Audio Tone</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
+                        <div className="flex items-center gap-4">
+                           <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center">
+                              <i className="fas fa-music text-xs"></i>
+                           </div>
+                           <div>
+                              <p className="text-xs font-black uppercase tracking-tight">Active Alert Tone</p>
+                              <p className="text-[10px] text-gray-400 font-bold uppercase">{customSound ? 'Custom MP3 File' : 'System Default Chime'}</p>
+                           </div>
+                        </div>
+                        <button onClick={() => audioRef.current?.play()} className="bg-white text-black border border-gray-200 px-4 py-2 rounded-lg text-[10px] font-black uppercase hover:bg-gray-50 transition">Test Sound</button>
+                      </div>
+
+                      <div className="relative border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50 hover:border-black transition cursor-pointer group">
+                        <input type="file" accept="audio/*" onChange={handleToneUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                        <i className="fas fa-file-audio text-2xl text-gray-300 mb-2 group-hover:text-black transition"></i>
+                        <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Pick Custom MP3 Alert</p>
+                      </div>
+
+                      {customSound && (
+                        <button onClick={() => { setCustomSound(null); localStorage.removeItem('itx_custom_tone'); }} className="w-full text-red-500 font-black uppercase text-[10px] tracking-widest hover:underline">Reset to default</button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-8 border-t border-gray-100">
+                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest">Security</h3>
+                     <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200">
+                        <p className="text-[10px] font-black uppercase text-gray-500 mb-3 tracking-widest">Admin Access Key</p>
+                        <input 
+                           type="text" 
+                           value={systemPassword} 
+                           onChange={(e) => { setSystemPassword(e.target.value); localStorage.setItem('systemPassword', e.target.value); }}
+                           className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-black outline-none focus:border-black"
+                        />
+                     </div>
+                  </div>
+               </div>
             </div>
           )}
 
@@ -407,55 +418,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {activeNav === 'Settings' && (
-            <div className="max-w-3xl mx-auto space-y-8">
-               <h2 className="text-2xl font-black tracking-tight uppercase">Console Settings</h2>
-               
-               <div className="bg-white p-8 rounded-[2rem] border border-gray-200 shadow-sm space-y-8">
-                  <div>
-                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest">Audio Alerts</h3>
-                     <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200">
-                           <div className="flex items-center space-x-4">
-                              <div className="w-10 h-10 bg-black text-white rounded-xl flex items-center justify-center">
-                                 <i className="fas fa-music text-xs"></i>
-                              </div>
-                              <div>
-                                 <p className="text-xs font-black uppercase tracking-tight">Active Sound</p>
-                                 <p className="text-[10px] text-gray-400 font-bold uppercase">{customSound ? 'Custom File' : 'System Default'}</p>
-                              </div>
-                           </div>
-                           <button onClick={playNotificationSound} className="bg-white text-black border border-gray-200 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition shadow-sm">Test Play</button>
-                        </div>
-
-                        <div className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50 relative group hover:border-black transition-all cursor-pointer">
-                           <input type="file" accept="audio/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleSoundUpload} />
-                           <i className="fas fa-cloud-arrow-up text-2xl text-gray-300 mb-2 group-hover:text-black transition-colors"></i>
-                           <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Click to upload custom sound (.mp3)</p>
-                        </div>
-                        
-                        {customSound && (
-                          <button onClick={() => { setCustomSound(null); localStorage.removeItem('itx_admin_sound'); }} className="w-full text-center text-red-500 text-[10px] font-black uppercase tracking-widest hover:underline">Reset to Default Chime</button>
-                        )}
-                     </div>
-                  </div>
-
-                  <div className="pt-8 border-t border-gray-100">
-                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-4 tracking-widest">System Access</h3>
-                     <div className="bg-gray-50 rounded-2xl p-6 border border-gray-200">
-                        <p className="text-[10px] font-black uppercase text-gray-500 mb-3">Administrator Password</p>
-                        <input 
-                           type="text" 
-                           value={systemPassword} 
-                           onChange={(e) => { setSystemPassword(e.target.value); localStorage.setItem('systemPassword', e.target.value); }}
-                           className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-black outline-none focus:border-black"
-                        />
-                     </div>
-                  </div>
-               </div>
-            </div>
-          )}
-
           {activeNav === 'Products' && (
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex justify-between items-center">
@@ -490,36 +452,52 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
+          {/* Fix: Added missing AddProduct view to handle product creation */}
           {activeNav === 'AddProduct' && (
-            <div className="max-w-3xl mx-auto space-y-8 pb-20">
-              <h2 className="text-2xl font-black tracking-tight uppercase">Add New Product</h2>
-              <div className="bg-white p-8 rounded-[2rem] border border-gray-200 shadow-sm space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-6">
+            <div className="max-w-2xl mx-auto space-y-8">
+               <div className="flex items-center gap-4">
+                  <button onClick={() => setActiveNav('Products')} className="p-2 hover:bg-gray-100 rounded-lg transition"><i className="fas fa-arrow-left"></i></button>
+                  <h2 className="text-2xl font-black tracking-tight uppercase">Add New Product</h2>
+               </div>
+               
+               <form onSubmit={handleCreateProduct} className="bg-white p-8 rounded-[2rem] border border-gray-200 shadow-sm space-y-6">
+                  <div className="space-y-4">
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Product Name</label>
-                      <input type="text" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-black outline-none focus:border-black" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} placeholder="e.g. MEER Royal Oak" />
+                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-2">Product Name</label>
+                      <input required type="text" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-black outline-none focus:border-black" placeholder="e.g. MEER Royal Oak" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-2">Price (PKR)</label>
+                        <input required type="number" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-black outline-none focus:border-black" placeholder="45000" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-2">Category</label>
+                        <select value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-black outline-none focus:border-black uppercase text-[10px] tracking-widest">
+                          <option>Watches</option>
+                          <option>Luxury Artisan</option>
+                          <option>Professional Series</option>
+                          <option>Minimalist / Heritage</option>
+                        </select>
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Price (PKR)</label>
-                      <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-black outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="45000" />
+                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-2">Description</label>
+                      <textarea required value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:border-black h-32 resize-none" placeholder="Masterpiece details..." />
                     </div>
-                  </div>
-                  <div className="space-y-6">
                     <div>
-                      <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Image</label>
-                      <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center bg-gray-50 relative group">
-                        <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => setMainImageFile(e.target.files ? e.target.files[0] : null)} />
-                        <i className="fas fa-image text-3xl text-gray-300 mb-2 group-hover:text-black transition-colors"></i>
-                        <p className="text-[10px] font-black uppercase text-gray-400 truncate tracking-widest">{mainImageFile ? mainImageFile.name : 'Upload Photo'}</p>
+                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest block mb-2">Main Image</label>
+                      <div className="relative border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center bg-gray-50 hover:border-black transition cursor-pointer group">
+                        <input type="file" accept="image/*" onChange={e => setMainImageFile(e.target.files?.[0] || null)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                        <i className="fas fa-image text-2xl text-gray-300 mb-2 group-hover:text-black transition"></i>
+                        <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{mainImageFile ? mainImageFile.name : 'Upload Product Photo'}</p>
                       </div>
                     </div>
                   </div>
-                </div>
-                <button onClick={handleCreateProduct} disabled={isAddingProduct} className="w-full bg-black text-white font-black uppercase py-5 rounded-2xl text-[11px] tracking-[0.4em]">
-                  {isAddingProduct ? <i className="fas fa-circle-notch fa-spin"></i> : 'Publish Product'}
-                </button>
-              </div>
+                  <button type="submit" disabled={isAddingProduct} className="w-full bg-black text-white py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-600 transition shadow-lg active:scale-[0.98]">
+                    {isAddingProduct ? <i className="fas fa-circle-notch fa-spin"></i> : 'Publish Product'}
+                  </button>
+               </form>
             </div>
           )}
         </main>
