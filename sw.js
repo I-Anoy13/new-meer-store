@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-v17-guardian';
+const CACHE_NAME = 'itx-v18-guardian';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,22 +28,24 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Primary listener for messages from the Admin Dashboard
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options } = event.data;
     
-    event.waitUntil(
-      self.registration.showNotification(title, {
-        ...options,
-        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-        badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-        vibrate: [500, 150, 500, 150, 500],
-        requireInteraction: true,
-        tag: 'itx-order-alert',
-        renotify: true,
-        silent: false
-      })
-    );
+    const notificationPromise = self.registration.showNotification(title, {
+      ...options,
+      icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
+      badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
+      vibrate: [500, 110, 500, 110, 450, 110, 200, 110],
+      requireInteraction: true,
+      tag: 'itx-new-order-alert',
+      renotify: true,
+      silent: false, // Ensure system sounds also play if available
+      data: { url: '/admin.html' }
+    });
+
+    event.waitUntil(notificationPromise);
   }
 });
 
