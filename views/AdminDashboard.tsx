@@ -17,7 +17,7 @@ interface AdminDashboardProps {
   updateStatusOverride?: (orderId: string, status: Order['status']) => void;
 }
 
-const DEFAULT_CHIME = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
+const CHIME_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   products, setProducts, deleteProduct, orders, setOrders, user, login, systemPassword, setSystemPassword, refreshData, updateStatusOverride
@@ -29,62 +29,58 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [dateRange, setDateRange] = useState<'Today' | 'All Time'>('Today');
   const [realtimeStatus, setRealtimeStatus] = useState<'connecting' | 'online' | 'error' | 'idle'>('idle');
   const [lastAlertTime, setLastAlertTime] = useState<string | null>(null);
-  const [permStatus, setPermStatus] = useState<string>(Notification.permission || 'default');
   const [isArming, setIsArming] = useState(false);
   const [isPWA, setIsPWA] = useState(false);
-  const [wakeLock, setWakeLock] = useState<any>(null);
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState(() => localStorage.getItem('itx_v25_unlocked') === 'true');
+  const [permStatus, setPermStatus] = useState<string>(Notification.permission);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const chimeRef = useRef<HTMLAudioElement | null>(null);
+  const silentLoopRef = useRef<any>(null);
+  const wakeLockRef = useRef<any>(null);
   const channelRef = useRef<any>(null);
-  const heartbeatTimer = useRef<any>(null);
-  const pollTimer = useRef<any>(null);
 
-  const [isAudioUnlocked, setIsAudioUnlocked] = useState(() => localStorage.getItem('itx_v24_unlocked') === 'true');
-
-  // 1. Detect Environment
+  // Environment Check
   useEffect(() => {
     const isStandalone = (window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches;
     setIsPWA(!!isStandalone);
+    setPermStatus(Notification.permission);
   }, []);
 
-  // 2. Data Calculations (Fixing the undefined errors)
+  // Data Selectors
   const filteredOrders = useMemo(() => {
     if (dateRange === 'All Time') return orders;
     const today = new Date().toDateString();
     return orders.filter(o => {
-      try {
-        return new Date(o.date).toDateString() === today;
-      } catch (e) { return false; }
+      try { return new Date(o.date).toDateString() === today; } catch(e) { return false; }
     });
   }, [orders, dateRange]);
 
-  const totalSales = useMemo(() => {
-    return filteredOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-  }, [filteredOrders]);
+  const totalSales = useMemo(() => filteredOrders.reduce((s, o) => s + (Number(o.total) || 0), 0), [filteredOrders]);
 
-  // 3. Audio & Wake Lock Engine
+  // THE GUARD TRIGGER
   const triggerAlert = (order: any) => {
     const time = new Date().toLocaleTimeString();
     setLastAlertTime(time);
     
-    const name = order.customer_name || 'New Order';
+    const name = order.customer_name || 'New Client';
     const amount = order.total_pkr || order.total || 0;
     const orderId = order.order_id || `ORD-${order.id || Date.now()}`;
 
-    // A. Vibration
-    if ("vibrate" in navigator) navigator.vibrate([400, 100, 400]);
+    // 1. PHYSICAL VIBRATE (Recursive)
+    if (navigator.vibrate) {
+       navigator.vibrate([400, 100, 400, 100, 600]);
+    }
 
-    // B. Sound (Forced Bypass)
+    // 2. AUDIO PLAYBACK
     if (isAudioUnlocked) {
       if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
-
-      // Attempt MP3
+      
       if (chimeRef.current) {
         chimeRef.current.currentTime = 0;
         chimeRef.current.volume = 1.0;
         chimeRef.current.play().catch(() => {
-          // Fallback to pure Web Audio Oscillator (iOS-safe)
+          // Final Fallback: Square wave beep (Always works if Context is active)
           if (audioContextRef.current) {
             const osc = audioContextRef.current.createOscillator();
             const g = audioContextRef.current.createGain();
@@ -92,118 +88,126 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             osc.type = 'square';
             osc.frequency.setValueAtTime(880, audioContextRef.current.currentTime);
             g.gain.setValueAtTime(0, audioContextRef.current.currentTime);
-            g.gain.linearRampToValueAtTime(0.4, audioContextRef.current.currentTime + 0.1);
-            g.gain.linearRampToValueAtTime(0, audioContextRef.current.currentTime + 0.6);
-            osc.start(); osc.stop(audioContextRef.current.currentTime + 0.7);
+            g.gain.linearRampToValueAtTime(0.5, audioContextRef.current.currentTime + 0.05);
+            g.gain.linearRampToValueAtTime(0, audioContextRef.current.currentTime + 0.4);
+            osc.start(); osc.stop(audioContextRef.current.currentTime + 0.5);
           }
         });
       }
     }
 
-    // C. PWA Push
+    // 3. PWA LOCK-SCREEN NOTIFICATION
     if ('serviceWorker' in navigator && Notification.permission === 'granted') {
       navigator.serviceWorker.ready.then(reg => {
         reg.active?.postMessage({
           type: 'TRIGGER_NOTIFICATION',
-          title: `🔥 NEW ORDER: Rs. ${amount.toLocaleString()}`,
-          options: { body: `Client: ${name}\nCity: ${order.customer_city || 'Pakistan'}`, tag: orderId }
+          title: `🛍️ RS. ${amount.toLocaleString()}`,
+          body: `CUSTOMER: ${name}\nID: ${orderId}`,
+          orderId: orderId
         });
       });
     }
   };
 
-  // 4. Synchronous Sync System
+  // PERSISTENT SYNC ENGINE
   const initSync = async () => {
     if (channelRef.current) supabase.removeChannel(channelRef.current);
-    if (pollTimer.current) clearInterval(pollTimer.current);
-
     setRealtimeStatus('connecting');
 
-    const channel = supabase.channel(`itx_infinity_${Math.random().toString(36).slice(7)}`);
+    const channel = supabase.channel(`itx_iron_${Math.random().toString(36).slice(7)}`);
     channel
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (p) => {
-        setOrders(p.new);
-        triggerAlert(p.new);
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        setOrders(payload.new);
+        triggerAlert(payload.new);
       })
-      .subscribe(s => setRealtimeStatus(s === 'SUBSCRIBED' ? 'online' : 'error'));
-    
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setRealtimeStatus('online');
+        else {
+          setRealtimeStatus('error');
+          setTimeout(initSync, 10000); // Auto-reconnect
+        }
+      });
     channelRef.current = channel;
-
-    // Background Poll Backup
-    pollTimer.current = setInterval(async () => {
-      const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(5);
-      if (data) {
-        data.forEach(order => {
-          const id = order.order_id || `ORD-${order.id}`;
-          if (!orders.some(o => o.id === id)) {
-            setOrders(order);
-            triggerAlert(order);
-          }
-        });
-      }
-    }, 15000);
   };
 
   useEffect(() => {
-    if (user) initSync();
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-      if (pollTimer.current) clearInterval(pollTimer.current);
-      if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
-      if (wakeLock) wakeLock.release();
-    };
+    if (user) {
+      initSync();
+      // Periodically refresh data to catch anything missed during signal loss
+      const ticker = setInterval(refreshData, 30000);
+      return () => {
+        clearInterval(ticker);
+        if (channelRef.current) supabase.removeChannel(channelRef.current);
+      };
+    }
   }, [user]);
 
-  // 5. The Ultimate iOS Unlock
-  const armGuardian = async () => {
+  // WAKE LOCK & FOREGROUND RESTORATION
+  useEffect(() => {
+    const handleSync = async () => {
+      if (document.visibilityState === 'visible') {
+        refreshData();
+        if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
+        setPermStatus(Notification.permission);
+      }
+    };
+    window.addEventListener('focus', handleSync);
+    document.addEventListener('visibilitychange', handleSync);
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleSync);
+    };
+  }, [refreshData]);
+
+  // THE "IRON GUARD" UNLOCK GESTURE
+  const armSystem = async () => {
     if (isArming) return;
     setIsArming(true);
 
     try {
-      // Step A: Wake Lock (Keep Screen ON - Required for reliable background sound on iOS)
+      // Step A: Wake Lock
       if ('wakeLock' in navigator) {
         try {
-          const lock = await (navigator as any).wakeLock.request('screen');
-          setWakeLock(lock);
-          console.log("[SYSTEM] Wake Lock Active. Phone will not sleep.");
-        } catch (e) { console.warn("Wake Lock denied."); }
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        } catch (e) {}
       }
 
-      // Step B: Audio Context Priming
+      // Step B: Multi-Stage Audio Priming
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!audioContextRef.current) audioContextRef.current = new AudioCtx();
       await audioContextRef.current.resume();
 
-      // Step C: Audio Element Setup
-      if (!chimeRef.current) chimeRef.current = new Audio(DEFAULT_CHIME);
+      // Step C: Initialize Chime
+      if (!chimeRef.current) chimeRef.current = new Audio(CHIME_URL);
       chimeRef.current.muted = true;
       await chimeRef.current.play();
       chimeRef.current.pause();
       chimeRef.current.muted = false;
 
-      // Step D: Notification Access
-      const permission = await Notification.requestPermission();
-      setPermStatus(permission);
-
-      // Step E: Heartbeat (Prevents iOS from suspending the process)
-      if (heartbeatTimer.current) clearInterval(heartbeatTimer.current);
-      heartbeatTimer.current = setInterval(() => {
+      // Step D: THE SECRET SAUCE - Silent Loop Heartbeat
+      // This creates a silent constant tone that forces iOS to keep the audio process alive in the background
+      if (silentLoopRef.current) clearInterval(silentLoopRef.current);
+      silentLoopRef.current = setInterval(() => {
         if (audioContextRef.current) {
           const osc = audioContextRef.current.createOscillator();
           const g = audioContextRef.current.createGain();
           osc.connect(g); g.connect(audioContextRef.current.destination);
-          g.gain.value = 0.001; // Silent heartbeat
+          g.gain.setValueAtTime(0.001, audioContextRef.current.currentTime);
           osc.start(); osc.stop(audioContextRef.current.currentTime + 0.1);
         }
-      }, 25000);
+      }, 20000);
 
+      // Step E: Notifications
+      const permission = await Notification.requestPermission();
+      setPermStatus(permission);
+
+      // Step F: Success State
       setIsAudioUnlocked(true);
-      localStorage.setItem('itx_v24_unlocked', 'true');
-      triggerAlert({ customer_name: 'ITX SYSTEM', total: 0, order_id: 'ARMED' });
+      localStorage.setItem('itx_v25_unlocked', 'true');
+      triggerAlert({ customer_name: 'IRON GUARD', total: 0, order_id: 'ARMED-OK' });
 
     } catch (err) {
-      console.error(err);
-      alert("Arming failed. Please use Safari on iPhone.");
+      alert("iPhone blocked activation. Please use Safari and make sure you aren't in Private mode.");
     } finally {
       setIsArming(false);
     }
@@ -211,7 +215,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#1a1c1d] flex items-center justify-center p-6 font-sans">
+      <div className="min-h-screen bg-[#1a1c1d] flex items-center justify-center p-6">
         <div className="w-full max-w-sm bg-white p-12 rounded-[3rem] shadow-2xl text-center">
           <h1 className="text-3xl font-black italic tracking-tighter uppercase mb-8">ITX<span className="text-blue-600">ADMIN</span></h1>
           <form onSubmit={(e) => { e.preventDefault(); if (adminPasswordInput === systemPassword) login(UserRole.ADMIN); }} className="space-y-6">
@@ -220,7 +224,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-6 py-4 text-center font-black focus:border-blue-600 outline-none"
               value={adminPasswordInput} onChange={(e) => setAdminPasswordInput(e.target.value)}
             />
-            <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg active:scale-95 transition">Login Console</button>
+            <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg active:scale-95 transition">Enter Console</button>
           </form>
         </div>
       </div>
@@ -232,7 +236,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <aside className={`fixed inset-y-0 left-0 w-[280px] bg-[#1a1c1d] flex flex-col z-[110] transition-transform lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="p-8 border-b border-gray-800 flex items-center space-x-3 text-white">
           <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-lg font-black italic shadow-lg shadow-blue-600/20">I</div>
-          <div className="font-black text-xs tracking-widest uppercase">Console v24</div>
+          <div className="font-black text-[10px] tracking-widest uppercase">Admin v25</div>
         </div>
         
         <nav className="flex-grow px-4 py-8 space-y-1">
@@ -249,30 +253,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           ))}
         </nav>
 
-        <div className="p-6 border-t border-gray-800 space-y-3">
-           {!isAudioUnlocked || !wakeLock ? (
+        <div className="p-6 border-t border-gray-800 space-y-4">
+           {/* Guardian Checklist */}
+           <div className="space-y-2 mb-2">
+              <div className="flex items-center justify-between px-1">
+                 <span className="text-[8px] font-black uppercase text-gray-500 tracking-widest">Health Check</span>
+              </div>
+              {[
+                { label: 'PWA Mode', ok: isPWA },
+                { label: 'Push Alert', ok: permStatus === 'granted' },
+                { label: 'Audio Guard', ok: isAudioUnlocked }
+              ].map((item, i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                  <span className="text-[9px] font-bold text-gray-400 uppercase">{item.label}</span>
+                  <div className={`w-2 h-2 rounded-full ${item.ok ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,44,44,0.6)]'}`}></div>
+                </div>
+              ))}
+           </div>
+
+           {!isAudioUnlocked ? (
              <button 
-               onClick={armGuardian} disabled={isArming}
-               className={`w-full bg-blue-600 text-white p-6 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-3 shadow-lg transition-all ${isArming ? 'opacity-50' : 'animate-pulse'}`}
+               onClick={armSystem} disabled={isArming}
+               className={`w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-3 shadow-lg transition-all ${isArming ? 'opacity-50' : 'animate-pulse'}`}
              >
                <i className={isArming ? "fas fa-circle-notch fa-spin" : "fas fa-shield-halved"}></i>
-               {isArming ? "Initializing..." : "ARM SYSTEM"}
+               {isArming ? "Arming..." : "ARM GUARDIAN"}
              </button>
            ) : (
              <div className="space-y-3">
-                <div className="p-4 bg-green-500/10 rounded-2xl border border-green-500/20">
-                   <div className="flex items-center justify-between mb-2 text-[8px] font-black text-green-500 uppercase tracking-widest italic">
-                     <span>Infinity Guard ON</span>
-                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping"></div>
-                   </div>
-                   <p className="text-[9px] font-black text-white uppercase tracking-tight">System Status: ARMED</p>
+                <div className="p-4 bg-green-500/10 rounded-2xl border border-green-500/20 text-center">
+                   <p className="text-[9px] font-black text-green-500 uppercase tracking-widest italic animate-pulse">Infinity Stream Active</p>
                 </div>
-                {!isPWA && (
-                   <div className="p-3 bg-blue-600/10 rounded-xl border border-blue-600/20 text-center">
-                      <p className="text-[8px] font-bold text-blue-400 uppercase leading-tight">Must "Add to Home Screen" for background alerts</p>
-                   </div>
-                )}
-                <button onClick={() => triggerAlert({customer_name: 'TEST', total: 0})} className="w-full bg-white/5 text-gray-500 hover:text-white p-3 rounded-xl text-[8px] font-black uppercase tracking-widest border border-white/5 transition">Test Chime</button>
+                <button onClick={() => triggerAlert({customer_name: 'TEST', total: 0})} className="w-full bg-white/5 text-gray-500 hover:text-white p-3 rounded-xl text-[8px] font-black uppercase tracking-widest border border-white/5 transition">Force Test Chime</button>
              </div>
            )}
         </div>
@@ -284,18 +296,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden text-gray-500 p-2"><i className="fas fa-bars text-xl"></i></button>
             <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest text-gray-400">
                <div className="flex items-center gap-2">
-                 <span className={`w-2 h-2 rounded-full ${realtimeStatus === 'online' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></span>
+                 <span className={`w-2 h-2 rounded-full ${realtimeStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
                  <span>Stream: {realtimeStatus}</span>
                </div>
                <div className="flex items-center gap-2">
-                 <i className={`fas fa-bell ${permStatus === 'granted' ? 'text-blue-500' : 'text-red-400'}`}></i>
-                 <span>Push: {permStatus}</span>
+                 <i className="fas fa-clock text-blue-600"></i>
+                 <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                </div>
             </div>
           </div>
           {lastAlertTime && (
-            <div className="bg-blue-50 text-blue-600 px-5 py-2 rounded-full border border-blue-100 flex items-center gap-2 animate-fadeIn">
-               <span className="text-[10px] font-black uppercase tracking-widest italic">Last Event: {lastAlertTime}</span>
+            <div className="bg-blue-600 text-white px-5 py-2 rounded-full flex items-center gap-2 animate-fadeIn shadow-xl shadow-blue-600/20">
+               <span className="text-[10px] font-black uppercase tracking-widest italic">New Event at {lastAlertTime}</span>
             </div>
           )}
         </header>
@@ -305,8 +317,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="max-w-7xl mx-auto space-y-10">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-8">
                 <div>
-                  <h2 className="text-4xl font-black tracking-tighter uppercase text-black italic leading-none">Monitor</h2>
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-2">Active Order Analytics</p>
+                  <h2 className="text-4xl font-black tracking-tighter uppercase text-black italic leading-none">Console</h2>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-2">Active Transaction Monitor</p>
                 </div>
                 <div className="flex bg-white rounded-2xl border border-gray-200 p-1.5 shadow-sm">
                   {['Today', 'All Time'].map((range) => (
@@ -317,14 +329,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                 {[
-                  { label: 'Revenue', val: `Rs. ${totalSales.toLocaleString()}`, color: 'text-blue-600' },
-                  { label: 'Total Orders', val: filteredOrders.length.toString(), color: 'text-black' },
-                  { label: 'Sync Status', val: realtimeStatus.toUpperCase(), color: realtimeStatus === 'online' ? 'text-green-500' : 'text-red-500' },
-                  { label: 'Guard Status', val: wakeLock ? 'WAKE LOCK ACTIVE' : 'SYSTEM IDLE', color: wakeLock ? 'text-blue-600' : 'text-gray-300' },
+                  { label: 'Net Revenue', val: `Rs. ${totalSales.toLocaleString()}`, color: 'text-blue-600' },
+                  { label: 'New Orders', val: filteredOrders.length.toString(), color: 'text-black' },
+                  { label: 'Realtime Sync', val: realtimeStatus.toUpperCase(), color: realtimeStatus === 'online' ? 'text-green-500' : 'text-red-500' },
+                  { label: 'Wake Lock', ok: !!wakeLockRef.current, color: wakeLockRef.current ? 'text-blue-600' : 'text-gray-300' },
                 ].map((stat, i) => (
-                  <div key={i} className="bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-sm transition-all hover:border-blue-300">
+                  <div key={i} className="bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-sm transition-all hover:scale-105 duration-300">
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-6">{stat.label}</span>
-                    <span className={`text-4xl font-black ${stat.color} tracking-tighter block`}>{stat.val}</span>
+                    <span className={`text-4xl font-black ${stat.color} tracking-tighter block`}>{stat.val !== undefined ? stat.val : (stat.ok ? 'ACTIVE' : 'OFF')}</span>
                   </div>
                 ))}
               </div>
@@ -332,11 +344,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="bg-white rounded-[3rem] border border-gray-200 shadow-sm overflow-hidden">
                 <div className="p-10 border-b border-gray-50 flex items-center justify-between bg-gray-50/10">
                    <h3 className="font-black uppercase text-[11px] tracking-widest text-black italic flex items-center gap-3">
-                     <i className="fas fa-bolt text-blue-600"></i> Live Activity
+                     <i className="fas fa-wave-square text-blue-600"></i> Transaction Log
                    </h3>
                 </div>
                 <div className="divide-y divide-gray-50">
-                  {filteredOrders.slice(0, 30).map(o => (
+                  {filteredOrders.slice(0, 40).map(o => (
                     <div key={o.id} onClick={() => setViewingOrder(o)} className="p-8 flex justify-between items-center hover:bg-gray-50 cursor-pointer transition animate-fadeIn group">
                       <div className="min-w-0">
                         <p className="text-base font-black text-gray-900 group-hover:text-blue-600 transition truncate uppercase tracking-tight">#{o.id} — {o.customer.name}</p>
@@ -360,7 +372,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {viewingOrder && (
         <div className="fixed inset-0 z-[200] bg-black/70 backdrop-blur-xl flex items-center justify-center p-6 animate-fadeIn">
           <div className="bg-white w-full max-w-4xl rounded-[3.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-10 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 shrink-0">
+            <div className="p-10 border-b border-gray-100 flex justify-between items-center shrink-0">
               <h2 className="text-lg font-black tracking-widest uppercase text-gray-900 italic">#{viewingOrder.id}</h2>
               <button onClick={() => setViewingOrder(null)} className="text-gray-400 hover:text-black transition p-2"><i className="fas fa-times text-2xl"></i></button>
             </div>
@@ -380,14 +392,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                      ))}
                   </div>
                   <div className="space-y-8">
-                     <h3 className="text-[11px] font-black uppercase text-gray-400 tracking-widest italic">Shipping Data</h3>
+                     <h3 className="text-[11px] font-black uppercase text-gray-400 tracking-widest italic">Dispatch Information</h3>
                      <div className="bg-gray-50 p-8 rounded-3xl border border-gray-200 space-y-6">
                         <div>
-                          <p className="text-[10px] font-black text-gray-300 uppercase italic">Client</p>
+                          <p className="text-[10px] font-black text-gray-300 uppercase italic">Client Name</p>
                           <p className="text-lg font-black text-blue-600 uppercase">{viewingOrder.customer.name}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-black text-gray-300 uppercase italic">Contact</p>
+                          <p className="text-[10px] font-black text-gray-300 uppercase italic">Phone</p>
                           <p className="text-base font-black text-gray-900">{viewingOrder.customer.phone}</p>
                         </div>
                         <div>
@@ -395,14 +407,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <p className="text-base font-black text-gray-900 uppercase italic">{viewingOrder.customer.city || 'N/A'}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] font-black text-gray-300 uppercase italic">Address</p>
+                          <p className="text-[10px] font-black text-gray-300 uppercase italic">Shipping Address</p>
                           <p className="text-sm font-bold text-gray-600 leading-relaxed italic border-l-2 border-gray-200 pl-4">{viewingOrder.customer.address}</p>
                         </div>
                         <div className="pt-6 border-t border-gray-200">
                           <select 
                             value={viewingOrder.status}
                             onChange={(e) => updateStatusOverride && updateStatusOverride(viewingOrder.id, e.target.value as any)}
-                            className="w-full bg-white border border-gray-200 rounded-2xl py-4 px-6 text-xs font-black uppercase outline-none focus:border-blue-600 transition"
+                            className="w-full bg-white border border-gray-200 rounded-2xl py-4 px-6 text-xs font-black uppercase outline-none focus:border-blue-600"
                           >
                             {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
