@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
-import { HashRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
-import { CartItem, Product, Order, User, UserRole } from './types';
+import { HashRouter, Routes, Route } from 'react-router-dom';
+import { CartItem, Product, Order, User } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
 import Home from './views/Home';
@@ -14,54 +14,6 @@ import RefundPolicy from './views/RefundPolicy';
 import ShippingPolicy from './views/ShippingPolicy';
 import Header from './components/Header';
 import Footer from './components/Footer';
-import AdminDashboard from './views/AdminDashboard';
-
-// Helper component to track and restore last route for PWA users
-const SessionRestorer: React.FC = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [hasRestored, setHasRestored] = useState(false);
-
-  useEffect(() => {
-    // Immediate Restoration Guard - Run before anything else
-    if (!hasRestored && (location.pathname === '/' || location.pathname === '')) {
-      const urlParams = new URLSearchParams(window.location.search);
-      
-      // PRIORITY 1: PWA Launcher Flag (or stored persistence)
-      const isPwaAdmin = urlParams.get('pwa') === 'admin' || localStorage.getItem('itx_pwa_force_admin') === 'true';
-      
-      if (isPwaAdmin) {
-        navigate('/admin', { replace: true });
-        setHasRestored(true);
-        return;
-      }
-      
-      // PRIORITY 2: Local Storage persistence for general navigation
-      const savedRoute = localStorage.getItem('itx_last_route');
-      if (savedRoute && savedRoute.includes('/admin')) {
-        navigate('/admin', { replace: true });
-      }
-    }
-    setHasRestored(true);
-  }, [hasRestored, location, navigate]);
-
-  useEffect(() => {
-    // Continuous state tracking for PWA re-launches
-    if (window.location.hash) {
-      localStorage.setItem('itx_last_route', window.location.hash);
-      
-      if (window.location.hash.includes('/admin')) {
-        localStorage.setItem('itx_last_mode', 'admin');
-        localStorage.setItem('itx_pwa_force_admin', 'true');
-      } else {
-        localStorage.setItem('itx_last_mode', 'store');
-        localStorage.removeItem('itx_pwa_force_admin');
-      }
-    }
-  }, [location]);
-
-  return null;
-};
 
 const MainLayout: React.FC<{
   children: React.ReactNode;
@@ -84,22 +36,12 @@ const MainLayout: React.FC<{
 
 const AppContent: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
-  const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
-    const saved = localStorage.getItem('itx_status_overrides');
-    return saved ? JSON.parse(saved) : {};
-  });
 
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('cart');
     return saved ? JSON.parse(saved) : [];
-  });
-
-  const [systemPassword, setSystemPassword] = useState<string>(() => {
-    return localStorage.getItem('systemPassword') || 'admin123';
   });
 
   const [user, setUser] = useState<User | null>(() => {
@@ -108,36 +50,8 @@ const AppContent: React.FC = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
-  }, [statusOverrides]);
-
-  const orders = useMemo(() => {
-    return rawOrders.map((row): Order | null => {
-      if (!row) return null;
-      const orderId = row.order_id || (row.id ? `ORD-${row.id}` : 'ORD-UNKNOWN');
-      const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
-      const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
-      const dbStatus = (capitalized || 'Pending') as Order['status'];
-      const finalStatus = statusOverrides[orderId] || dbStatus;
-      const totalAmount = row.subtotal_pkr ?? row.total_pkr ?? row.total ?? 0;
-
-      return {
-        id: orderId,
-        dbId: row.id ? Number(row.id) : undefined,
-        items: Array.isArray(row.items) ? row.items : [],
-        total: Number(totalAmount),
-        status: finalStatus,
-        customer: {
-          name: row.customer_name || 'Anonymous',
-          email: '',
-          phone: row.customer_phone || '',
-          address: row.customer_address || '',
-          city: row.customer_city || ''
-        },
-        date: row.created_at || row.date || new Date().toISOString()
-      };
-    }).filter((o): o is Order => o !== null);
-  }, [rawOrders, statusOverrides]);
+    localStorage.setItem('cart', JSON.stringify(cart));
+  }, [cart]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -163,52 +77,18 @@ const AppContent: React.FC = () => {
     }
   }, []);
 
-  const fetchOrders = useCallback(async (silent = false) => {
-    if (!silent) setIsSyncing(true);
-    try {
-      const { data, error } = await supabase.from('orders').select('*');
-      if (error) throw error;
-      if (data) {
-        const sortedData = [...data].sort((a, b) => {
-          const dateA = new Date(a.created_at || a.date || 0).getTime();
-          const dateB = new Date(b.created_at || b.date || 0).getTime();
-          return dateB - dateA;
-        });
-        setRawOrders(sortedData);
-      }
-    } catch (e) {
-      console.error("Order Sync Failure:", e);
-    } finally {
-      if (!silent) setIsSyncing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('realtime-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchOrders(true);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchOrders]);
-
   useEffect(() => {
     let mounted = true;
     const initData = async () => {
       try {
-        await Promise.allSettled([fetchProducts(), fetchOrders(true)]);
+        await fetchProducts();
       } finally {
         if (mounted) setLoading(false);
       }
     };
     initData();
     return () => { mounted = false; };
-  }, [fetchProducts, fetchOrders]);
-
-  const updateStatusOverride = (orderId: string, status: Order['status']) => {
-    setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
-  };
+  }, [fetchProducts]);
 
   const addToCart = (product: Product, quantity: number = 1, variantId?: string) => {
     setCart(prev => {
@@ -226,12 +106,8 @@ const AppContent: React.FC = () => {
     setCart(prev => prev.map(item => item.product.id === productId && item.variantId === variantId ? { ...item, quantity } : item));
   };
 
-  const deleteProduct = async (productId: string) => {
-    const { error } = await supabase.from('products').delete().eq('id', productId);
-    if (!error) setProducts(prev => prev.filter(p => p.id !== productId));
-  };
-
   const placeOrder = async (order: Order): Promise<boolean> => {
+    setIsSyncing(true);
     try {
       const firstItem = order.items[0];
       const totalAmount = Math.round(Number(order.total) || 0);
@@ -253,12 +129,13 @@ const AppContent: React.FC = () => {
       };
       const { error } = await supabase.from('orders').insert([payload]);
       if (error) throw error;
-      await fetchOrders(true);
       setCart([]);
       return true;
     } catch (e: any) {
       console.error("Order Failure:", e);
       return false;
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -267,7 +144,7 @@ const AppContent: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Booting ITX Core...</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Loading ITX Store...</p>
         </div>
       </div>
     );
@@ -276,37 +153,20 @@ const AppContent: React.FC = () => {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <>
-      <SessionRestorer />
-      <Suspense fallback={null}>
+    <Suspense fallback={null}>
+      <MainLayout cartCount={cartCount} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }} isSyncing={isSyncing}>
         <Routes>
-          <Route path="/admin/*" element={
-            <AdminDashboard 
-              products={products} setProducts={setProducts} deleteProduct={deleteProduct} 
-              orders={orders} setOrders={() => {}} 
-              user={user} login={(role) => { const u = { id: '1', name: 'Manager', email: 'm@itx.pk', role }; setUser(u); localStorage.setItem('itx_user_session', JSON.stringify(u)); }}
-              systemPassword={systemPassword} setSystemPassword={setSystemPassword}
-              refreshData={() => { fetchOrders(); fetchProducts(); }}
-              updateStatusOverride={updateStatusOverride}
-            />
-          } />
-          <Route path="/*" element={
-            <MainLayout cartCount={cartCount} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }} isSyncing={isSyncing}>
-              <Routes>
-                <Route path="/" element={<Home products={products} />} />
-                <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
-                <Route path="/cart" element={<CartView cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
-                <Route path="/checkout" element={<Checkout cart={cart} placeOrder={placeOrder} />} />
-                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                <Route path="/terms-of-service" element={<TermsOfService />} />
-                <Route path="/refund-policy" element={<RefundPolicy />} />
-                <Route path="/shipping-policy" element={<ShippingPolicy />} />
-              </Routes>
-            </MainLayout>
-          } />
+          <Route path="/" element={<Home products={products} />} />
+          <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
+          <Route path="/cart" element={<CartView cart={cart} updateQuantity={updateQuantity} removeFromCart={removeFromCart} />} />
+          <Route path="/checkout" element={<Checkout cart={cart} placeOrder={placeOrder} />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-of-service" element={<TermsOfService />} />
+          <Route path="/refund-policy" element={<RefundPolicy />} />
+          <Route path="/shipping-policy" element={<ShippingPolicy />} />
         </Routes>
-      </Suspense>
-    </>
+      </MainLayout>
+    </Suspense>
   );
 };
 

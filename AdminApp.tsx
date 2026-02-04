@@ -10,6 +10,8 @@ const AdminApp: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
   const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Local overrides for UI state
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
     return saved ? JSON.parse(saved) : {};
@@ -85,11 +87,30 @@ const AdminApp: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchProducts(), fetchOrders()]).finally(() => setLoading(false));
+    let mounted = true;
+    const init = async () => {
+      await Promise.allSettled([fetchProducts(), fetchOrders()]);
+      if (mounted) setLoading(false);
+    };
+    init();
+    return () => { mounted = false; };
   }, [fetchProducts, fetchOrders]);
 
-  const updateStatusOverride = (orderId: string, status: Order['status']) => {
+  const updateStatusOverride = async (orderId: string, status: Order['status']) => {
+    // 1. Update UI immediately
     setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
+    
+    // 2. Persist to DB if we have a dbId (assuming ORD-ID corresponds to row id or order_id)
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: status.toLowerCase() })
+        .eq('order_id', orderId);
+      
+      if (error) console.error("Sync error:", error);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const deleteProduct = async (productId: string) => {
@@ -99,10 +120,10 @@ const AdminApp: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f6f6f7]">
+      <div className="min-h-screen flex items-center justify-center bg-[#1a1c1d]">
         <div className="text-center">
-          <div className="w-10 h-10 border-2 border-black border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Loading Console...</p>
+          <div className="w-10 h-10 border-2 border-white/20 border-t-blue-500 rounded-full animate-spin mb-4 mx-auto"></div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Secure Console Booting...</p>
         </div>
       </div>
     );

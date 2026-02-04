@@ -21,6 +21,8 @@ const Footer: React.FC = () => {
             <ul className="space-y-2 text-xs text-gray-600 font-medium">
               <li><Link to="/" className="hover:text-blue-600 transition">Inquiry</Link></li>
               <li><Link to="/" className="hover:text-blue-600 transition">FAQ</Link></li>
+              {/* Discrete Admin Access */}
+              <li><a href="/admin.html" className="text-gray-300 hover:text-black transition">Console</a></li>
             </ul>
           </div>
           <div>
