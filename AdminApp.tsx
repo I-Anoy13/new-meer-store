@@ -88,7 +88,7 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
+      const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(60);
       if (!error && data) {
         setRawOrders(data);
       }

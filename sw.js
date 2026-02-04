@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v6-hyper';
+const CACHE_NAME = 'itx-meer-v7-instant';
 const ASSETS = [
   '/',
   '/index.html',
@@ -25,11 +25,9 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Hyper-fast Stale-while-revalidate
+// Faster Stale-while-revalidate for static assets only
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  
-  // Never cache database or real-time calls
   if (url.hostname.includes('supabase.co')) return;
 
   event.respondWith(
@@ -39,8 +37,26 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cacheCopy));
         return response;
       }).catch(() => cached);
-      
       return cached || networked;
+    })
+  );
+});
+
+// Handle background notifications more reliably
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      if (clientList.length > 0) {
+        let client = clientList[0];
+        for (let i = 0; i < clientList.length; i++) {
+          if (clientList[i].focused) {
+            client = clientList[i];
+          }
+        }
+        return client.focus();
+      }
+      return clients.openWindow('/admin.html');
     })
   );
 });
