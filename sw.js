@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-v20-guardian';
+const CACHE_NAME = 'itx-v21-guardian';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,18 +28,19 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Primary listener for messages from the Admin UI
+// Listener for events from the Admin UI
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options, orderId } = event.data;
     
+    // iOS requires a tag to prevent multiple alerts from being collapsed into one
     const notificationPromise = self.registration.showNotification(title, {
       ...options,
       icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
       badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-      vibrate: [500, 110, 500, 110, 450, 110, 200, 110],
+      vibrate: [400, 100, 400, 100, 400, 100, 400],
       requireInteraction: true,
-      tag: orderId || 'itx-new-order',
+      tag: orderId || `order-${Date.now()}`,
       renotify: true,
       data: { url: '/admin.html' }
     });
