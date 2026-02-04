@@ -27,6 +27,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [dateRange, setDateRange] = useState<'Today' | 'Yesterday' | 'Last 7 Days' | 'All Time'>('All Time');
   
   const [newProduct, setNewProduct] = useState({ name: '', price: '', category: 'Watches', description: '' });
   const [mainImageFile, setMainImageFile] = useState<File | null>(null);
@@ -52,7 +53,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setTimeout(() => setCopiedField(null), 1500);
   };
 
-  const totalSales = useMemo(() => orders.reduce((sum, o) => sum + o.total, 0), [orders]);
+  const filteredOrders = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterday = today - 86400000;
+    const last7Days = today - (7 * 86400000);
+
+    return orders.filter(order => {
+      const orderDate = new Date(order.date).getTime();
+      if (dateRange === 'Today') return orderDate >= today;
+      if (dateRange === 'Yesterday') return orderDate >= yesterday && orderDate < today;
+      if (dateRange === 'Last 7 Days') return orderDate >= last7Days;
+      return true;
+    });
+  }, [orders, dateRange]);
+
+  const totalSales = useMemo(() => filteredOrders.reduce((sum, o) => sum + o.total, 0), [filteredOrders]);
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,41 +177,58 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden text-gray-500 hover:text-black transition"><i className="fas fa-bars"></i></button>
           <div className="flex items-center space-x-6">
             <button onClick={handleRefresh} className={`text-gray-400 hover:text-black transition-all ${isRefreshing ? 'animate-spin' : ''}`}><i className="fas fa-sync-alt text-sm"></i></button>
-            <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-black border border-gray-200 uppercase tracking-tighter">ITX</div>
+            <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-black border border-gray-200 uppercase tracking-tighter text-gray-500">ITX</div>
           </div>
         </header>
 
         <main className="flex-grow overflow-y-auto p-4 md:p-10 animate-fadeIn custom-scrollbar">
           {activeNav === 'Home' && (
             <div className="max-w-6xl mx-auto space-y-8">
-              <h2 className="text-2xl font-black tracking-tight">Store Overview</h2>
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <h2 className="text-2xl font-black tracking-tight uppercase">Store Overview</h2>
+                <div className="flex items-center bg-white rounded-xl border border-gray-200 p-1 shadow-sm overflow-x-auto no-scrollbar">
+                  {(['Today', 'Yesterday', 'Last 7 Days', 'All Time'] as const).map((range) => (
+                    <button 
+                      key={range}
+                      onClick={() => setDateRange(range)}
+                      className={`whitespace-nowrap px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${dateRange === range ? 'bg-gray-100 text-black shadow-inner' : 'text-gray-400 hover:text-black hover:bg-gray-50'}`}
+                    >
+                      {range}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
                   { label: 'Total Revenue', val: `Rs. ${totalSales.toLocaleString()}`, color: 'text-blue-600' },
-                  { label: 'Total Orders', val: orders.length.toString(), color: 'text-gray-900' },
-                  { label: 'Active Customers', val: '142', color: 'text-gray-900' },
-                  { label: 'Avg Order Value', val: `Rs. ${orders.length > 0 ? Math.round(totalSales / orders.length).toLocaleString() : 0}`, color: 'text-gray-400' },
+                  { label: 'Total Orders', val: filteredOrders.length.toString(), color: 'text-gray-900' },
+                  { label: 'Active Customers', val: [...new Set(filteredOrders.map(o => o.customer.phone))].length.toString(), color: 'text-gray-900' },
+                  { label: 'Avg Order Value', val: `Rs. ${filteredOrders.length > 0 ? Math.round(totalSales / filteredOrders.length).toLocaleString() : 0}`, color: 'text-gray-400' },
                 ].map((stat, i) => (
-                  <div key={i} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                  <div key={i} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-4">{stat.label}</span>
-                    <span className={`text-2xl font-black ${stat.color}`}>{stat.val}</span>
+                    <span className={`text-2xl font-black ${stat.color} tracking-tighter`}>{stat.val}</span>
                   </div>
                 ))}
               </div>
 
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-gray-100 font-black uppercase text-[10px] tracking-widest text-gray-400">Recent Orders</div>
+                <div className="p-6 border-b border-gray-100 font-black uppercase text-[10px] tracking-widest text-gray-400">Recent Stream ({dateRange})</div>
                 <div className="divide-y divide-gray-50">
-                  {orders.slice(0, 5).map(o => (
+                  {filteredOrders.slice(0, 5).map(o => (
                     <div key={o.id} onClick={() => setViewingOrder(o)} className="p-5 flex justify-between items-center hover:bg-gray-50 cursor-pointer transition">
-                      <div>
-                        <p className="text-sm font-black text-gray-900">#{o.id} — {o.customer.name}</p>
-                        <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-widest">{new Date(o.date).toLocaleDateString()}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-gray-900 truncate">#{o.id} — {o.customer.name}</p>
+                        <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-widest">{o.customer.city} — {new Date(o.date).toLocaleDateString()}</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase border ${o.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{o.status}</span>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="text-sm font-black text-gray-900">Rs. {o.total.toLocaleString()}</span>
+                        <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase border ${o.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{o.status}</span>
+                      </div>
                     </div>
                   ))}
-                  {orders.length === 0 && <div className="p-20 text-center text-gray-300 uppercase text-xs font-black">No recent orders found</div>}
+                  {filteredOrders.length === 0 && <div className="p-20 text-center text-gray-300 uppercase text-xs font-black">No transaction stream found for this period</div>}
                 </div>
               </div>
             </div>
@@ -203,14 +236,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {activeNav === 'Orders' && (
             <div className="max-w-6xl mx-auto space-y-6">
-              <h2 className="text-2xl font-black tracking-tight">Order Management</h2>
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-black tracking-tight uppercase">Order Management</h2>
+                <div className="text-[10px] font-black uppercase text-gray-400 tracking-widest bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
+                  Total: {orders.length} Orders
+                </div>
+              </div>
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs min-w-[600px]">
+                  <table className="w-full text-left text-xs min-w-[800px]">
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
                         <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Order ID / Status</th>
                         <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Customer Details</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase text-gray-400 tracking-widest">Shipping City</th>
                         <th className="px-6 py-4 text-right text-[10px] font-black uppercase text-gray-400 tracking-widest">Order Total</th>
                       </tr>
                     </thead>
@@ -220,14 +259,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <td className="px-6 py-5">
                             <div className="flex flex-col space-y-1">
                               <span className="font-black text-blue-600 text-sm">#{o.id}</span>
-                              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black w-fit uppercase border ${o.status === 'Pending' ? 'bg-yellow-50 text-yellow-600' : 'bg-blue-50 text-blue-600'}`}>{o.status}</span>
+                              <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black w-fit uppercase border ${o.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-100' : 'bg-blue-50 text-blue-600 border-blue-100'}`}>{o.status}</span>
                             </div>
                           </td>
                           <td className="px-6 py-5">
                             <div className="font-black uppercase tracking-tight text-gray-900">{o.customer.name}</div>
                             <div className="text-[10px] text-gray-400 mt-1 font-bold tracking-widest">{o.customer.phone}</div>
                           </td>
-                          <td className="px-6 py-5 text-right font-black text-sm">Rs. {o.total.toLocaleString()}</td>
+                          <td className="px-6 py-5">
+                            <div className="font-black uppercase tracking-widest text-gray-700 text-[11px]">{o.customer.city || 'N/A'}</div>
+                          </td>
+                          <td className="px-6 py-5 text-right font-black text-sm text-gray-900">Rs. {o.total.toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -240,8 +282,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeNav === 'Products' && (
             <div className="max-w-6xl mx-auto space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-black tracking-tight">Product Catalog</h2>
-                <button onClick={() => setActiveNav('AddProduct')} className="bg-black text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-800 transition shadow-lg">Add New Product</button>
+                <h2 className="text-2xl font-black tracking-tight uppercase">Product Catalog</h2>
+                <button onClick={() => setActiveNav('AddProduct')} className="bg-black text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-800 transition shadow-lg active:scale-95">Add New Product</button>
               </div>
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                 <table className="w-full text-left text-xs">
@@ -259,9 +301,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <img src={p.image} className="w-12 h-12 rounded-xl object-cover border border-gray-100 shadow-sm" />
                           <span className="font-black text-gray-900 uppercase tracking-tight">{p.name}</span>
                         </td>
-                        <td className="px-6 py-5 text-center font-bold">Rs. {p.price.toLocaleString()}</td>
+                        <td className="px-6 py-5 text-center font-bold text-gray-900">Rs. {p.price.toLocaleString()}</td>
                         <td className="px-6 py-5 text-center">
-                          <button onClick={() => { if(window.confirm('Delete this product permanently?')) deleteProduct(p.id); }} className="text-red-400 hover:text-red-600 p-2 transition-colors"><i className="fas fa-trash-can"></i></button>
+                          <button onClick={() => { if(window.confirm('Delete this product permanently?')) deleteProduct(p.id); }} className="text-red-400 hover:text-red-600 p-2 transition-colors"><i className="fas fa-trash-can text-base"></i></button>
                         </td>
                       </tr>
                     ))}
@@ -273,7 +315,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {activeNav === 'AddProduct' && (
             <div className="max-w-3xl mx-auto space-y-8 pb-20">
-              <h2 className="text-2xl font-black tracking-tight">Add New Product</h2>
+              <h2 className="text-2xl font-black tracking-tight uppercase">Add New Product</h2>
               <div className="bg-white p-8 rounded-[2rem] border border-gray-200 shadow-sm space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-6">
@@ -283,34 +325,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                     <div>
                       <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Retail Price (PKR)</label>
-                      <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-black outline-none" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="45000" />
+                      <input type="number" className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-black outline-none focus:border-black" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} placeholder="45000" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Category</label>
-                      <select className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-xs font-black uppercase tracking-widest outline-none" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
+                      <select className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-[11px] font-black uppercase tracking-widest outline-none cursor-pointer focus:border-black" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})}>
                         <option>Watches</option>
                         <option>Luxury Artisan</option>
                         <option>Professional</option>
+                        <option>Minimalist / Heritage</option>
                       </select>
                     </div>
                   </div>
                   <div className="space-y-6">
                     <div>
                       <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Product Image</label>
-                      <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center hover:border-black transition cursor-pointer relative bg-gray-50">
+                      <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center hover:border-black transition cursor-pointer relative bg-gray-50 group">
                         <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => setMainImageFile(e.target.files ? e.target.files[0] : null)} />
-                        <i className="fas fa-image text-3xl text-gray-300 mb-3"></i>
-                        <p className="text-[10px] font-black uppercase text-gray-400 truncate">{mainImageFile ? mainImageFile.name : 'Upload Photo'}</p>
+                        <i className="fas fa-image text-3xl text-gray-300 mb-3 group-hover:text-black transition-colors"></i>
+                        <p className="text-[10px] font-black uppercase text-gray-400 truncate tracking-widest">{mainImageFile ? mainImageFile.name : 'Upload Photo'}</p>
                       </div>
                     </div>
                     <div>
                       <label className="block text-[10px] font-black uppercase text-gray-400 mb-2 tracking-widest">Product Description</label>
-                      <textarea className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-bold outline-none h-24 resize-none" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} placeholder="Describe features..." />
+                      <textarea className="w-full bg-gray-50 border border-gray-200 rounded-xl px-5 py-4 text-sm font-bold outline-none h-24 resize-none leading-relaxed focus:border-black" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} placeholder="Describe features..." />
                     </div>
                   </div>
                 </div>
-                <button onClick={handleCreateProduct} disabled={isAddingProduct} className="w-full bg-black text-white font-black uppercase py-5 rounded-2xl text-xs tracking-[0.3em] hover:bg-blue-600 transition shadow-xl active:scale-[0.98]">
-                  {isAddingProduct ? <i className="fas fa-circle-notch fa-spin"></i> : 'Publish Product'}
+                <button onClick={handleCreateProduct} disabled={isAddingProduct} className="w-full bg-black text-white font-black uppercase py-5 rounded-2xl text-[11px] tracking-[0.4em] hover:bg-blue-600 transition shadow-xl active:scale-[0.98]">
+                  {isAddingProduct ? <i className="fas fa-circle-notch fa-spin"></i> : 'Publish Product to Catalog'}
                 </button>
               </div>
             </div>
@@ -321,74 +364,95 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* ORDER DETAILS MODAL */}
       {viewingOrder && (
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh] border border-gray-100">
             <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-sm font-black tracking-widest uppercase text-gray-900">Order Details: #{viewingOrder.id}</h2>
-              <button onClick={() => setViewingOrder(null)} className="text-gray-400 hover:text-black transition"><i className="fas fa-times text-xl"></i></button>
+              <h2 className="text-sm font-black tracking-widest uppercase text-gray-900 flex items-center gap-3">
+                <i className="fas fa-receipt text-blue-600"></i> Order Fulfillment: #{viewingOrder.id}
+              </h2>
+              <button onClick={() => setViewingOrder(null)} className="text-gray-400 hover:text-black transition-all hover:scale-110 p-2"><i className="fas fa-times text-xl"></i></button>
             </div>
-            <div className="flex-grow overflow-y-auto p-10 space-y-12">
+            <div className="flex-grow overflow-y-auto p-10 space-y-12 custom-scrollbar">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 <div className="space-y-8">
-                  <div className="bg-gray-50 rounded-3xl p-8 border border-gray-100">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Items Ordered</h3>
-                    {viewingOrder.items.map((item, i) => (
-                      <div key={i} className="flex items-center space-x-6 pb-4 border-b border-gray-200 last:border-0 last:pb-0 mb-4">
-                        <img src={item.product.image} className="w-14 h-14 rounded-2xl object-cover border border-white shadow-md" />
-                        <div className="flex-grow min-w-0">
-                          <p className="text-sm font-black uppercase tracking-tight truncate">{item.product.name}</p>
-                          <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">Qty: {item.quantity}</p>
+                  <div className="bg-gray-50 rounded-3xl p-8 border border-gray-100 shadow-inner">
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest flex items-center gap-2">
+                       <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div> Items Summary
+                    </h3>
+                    <div className="space-y-6">
+                      {viewingOrder.items.map((item, i) => (
+                        <div key={i} className="flex items-center space-x-6 pb-6 border-b border-gray-200 last:border-0 last:pb-0">
+                          <img src={item.product.image} className="w-16 h-16 rounded-2xl object-cover border border-white shadow-md shrink-0" />
+                          <div className="flex-grow min-w-0">
+                            <p className="text-sm font-black uppercase tracking-tight truncate text-gray-900">{item.product.name}</p>
+                            <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-tight">Quantity: {item.quantity}</p>
+                            {item.variantName && <p className="text-[9px] text-blue-500 font-black uppercase mt-0.5">{item.variantName}</p>}
+                          </div>
+                          <p className="text-base font-black text-gray-900">Rs. {(item.product.price * item.quantity).toLocaleString()}</p>
                         </div>
-                        <p className="text-base font-black text-blue-600">Rs. {(item.product.price * item.quantity).toLocaleString()}</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                     <div className="pt-6 border-t border-gray-200 mt-6 flex justify-between items-center font-black">
-                      <span className="text-[10px] uppercase text-gray-400">Total Settlement</span>
-                      <span className="text-xl">Rs. {viewingOrder.total.toLocaleString()}</span>
+                      <span className="text-[10px] uppercase text-gray-400 tracking-widest">Total Payable (COD)</span>
+                      <span className="text-xl text-blue-600 tracking-tighter">Rs. {viewingOrder.total.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
                 <div className="space-y-8">
                   <div className="bg-white rounded-3xl border border-gray-200 p-8 shadow-sm">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Customer Information</h3>
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest flex items-center gap-2">
+                       <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div> Customer Details
+                    </h3>
                     <div className="space-y-6">
-                      <div className="flex justify-between items-center">
-                        <div>
+                      <div className="flex justify-between items-center group">
+                        <div className="min-w-0">
                           <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Customer Name</p>
-                          <p className="text-sm font-black text-blue-600 uppercase tracking-tighter">{viewingOrder.customer.name}</p>
+                          <p className="text-sm font-black text-blue-600 uppercase tracking-tighter truncate">{viewingOrder.customer.name}</p>
                         </div>
                         <CopyBtn text={viewingOrder.customer.name} id="m-name" />
                       </div>
-                      <div className="flex justify-between items-center">
-                        <div>
+                      <div className="flex justify-between items-center group">
+                        <div className="min-w-0">
                           <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Phone Number</p>
-                          <p className="text-sm font-bold text-gray-900">{viewingOrder.customer.phone}</p>
+                          <p className="text-sm font-black text-gray-900 tracking-tight">{viewingOrder.customer.phone}</p>
                         </div>
                         <CopyBtn text={viewingOrder.customer.phone} id="m-phone" />
                       </div>
                       <div className="pt-6 border-t border-gray-50">
-                        <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Shipping Address</p>
-                        <p className="text-xs font-bold leading-relaxed text-gray-500 italic">"{viewingOrder.customer.address}, {viewingOrder.customer.city}"</p>
-                        <div className="mt-3 flex justify-end">
-                           <CopyBtn text={`${viewingOrder.customer.address}, ${viewingOrder.customer.city}`} id="m-addr" />
+                        <div className="flex justify-between items-start group mb-4">
+                           <div className="min-w-0">
+                              <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Shipping City</p>
+                              <p className="text-sm font-black text-gray-900 uppercase tracking-widest">{viewingOrder.customer.city || 'N/A'}</p>
+                           </div>
+                           <CopyBtn text={viewingOrder.customer.city || ''} id="m-city" />
+                        </div>
+                        <div className="flex justify-between items-start group">
+                           <div className="min-w-0">
+                              <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Street Address</p>
+                              <p className="text-xs font-bold leading-relaxed text-gray-500 italic max-w-[200px]">"{viewingOrder.customer.address}"</p>
+                           </div>
+                           <CopyBtn text={viewingOrder.customer.address} id="m-addr" />
                         </div>
                       </div>
                     </div>
                     <div className="pt-8 border-t border-gray-100 mt-8">
-                      <p className="text-[9px] font-black text-gray-400 uppercase mb-4 tracking-widest">Order Status</p>
-                      <select 
-                        value={viewingOrder.status}
-                        onChange={(e) => updateStatusOverride && updateStatusOverride(viewingOrder.id, e.target.value as any)}
-                        className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 px-5 text-[11px] font-black uppercase tracking-widest outline-none cursor-pointer focus:border-black appearance-none transition-colors"
-                      >
-                        {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      <p className="text-[9px] font-black text-gray-400 uppercase mb-4 tracking-widest">Update Order Lifecycle</p>
+                      <div className="relative">
+                        <select 
+                          value={viewingOrder.status}
+                          onChange={(e) => updateStatusOverride && updateStatusOverride(viewingOrder.id, e.target.value as any)}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-4 px-5 text-[11px] font-black uppercase tracking-widest outline-none cursor-pointer focus:border-black appearance-none transition-colors"
+                        >
+                          {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <i className="fas fa-chevron-down absolute right-5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none text-[10px]"></i>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
             <div className="p-8 border-t border-gray-100 flex justify-center bg-gray-50/30">
-               <button onClick={() => setViewingOrder(null)} className="w-full sm:w-auto min-w-[300px] bg-black text-white px-12 py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.4em] shadow-xl hover:bg-gray-800 transition active:scale-[0.98]">Close Order View</button>
+               <button onClick={() => setViewingOrder(null)} className="w-full sm:w-auto min-w-[300px] bg-black text-white px-12 py-5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.4em] shadow-xl hover:bg-gray-800 transition active:scale-[0.98] shadow-black/20">Close Fulfillment View</button>
             </div>
           </div>
         </div>
