@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-meer-v10-always-on';
+const CACHE_NAME = 'itx-meer-v11-always-on';
 const ASSETS = [
   '/',
   '/index.html',
@@ -17,24 +17,31 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys.map((key) => {
-        if (key !== CACHE_NAME) return caches.delete(key);
-      })
-    ))
+    Promise.all([
+      self.clients.claim(),
+      caches.keys().then((keys) => Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) return caches.delete(key);
+        })
+      ))
+    ])
   );
 });
 
-// The bridge that allows background logic to trigger system-level UI
+// Robust Background Notification Bridge
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, options } = event.data;
+    
+    // Ensure we can show notifications even if the app is backgrounded
     event.waitUntil(
       self.registration.showNotification(title, {
         ...options,
         badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-        vibrate: [300, 100, 300, 100, 300],
+        vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40, 450, 110, 200, 110, 170, 40],
         requireInteraction: true,
+        renotify: true,
+        tag: 'itx-order-alert',
         data: { url: '/admin.html' }
       })
     );
@@ -57,7 +64,6 @@ self.addEventListener('notificationclick', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  // Do not cache supabase realtime or API calls
   if (url.hostname.includes('supabase.co')) return;
   event.respondWith(
     caches.match(event.request).then((res) => res || fetch(event.request))

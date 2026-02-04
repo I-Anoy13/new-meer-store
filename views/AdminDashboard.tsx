@@ -18,7 +18,7 @@ interface AdminDashboardProps {
 }
 
 const DEFAULT_CHIME = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
-// High-frequency silent wav to keep the audio context from entering 'suspended' state
+// Silent loop to keep audio context and process alive
 const SILENT_HEARTBEAT_WAV = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
@@ -38,7 +38,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isAudioUnlocked, setIsAudioUnlocked] = useState(() => localStorage.getItem('itx_alert_unlocked') === 'true');
   const [customSound, setCustomSound] = useState<string | null>(() => localStorage.getItem('itx_custom_tone'));
 
-  // 1. Initialize Audio Persistence
+  // 1. Audio and Process Keep-Alive (Media Session API)
   useEffect(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio(customSound || DEFAULT_CHIME);
@@ -50,48 +50,74 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       heartbeatRef.current.volume = 0.01;
     }
     audioRef.current.src = customSound || DEFAULT_CHIME;
+
+    // Use Media Session API to hint to the OS that this app should stay alive
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'ITX Admin Live Monitor',
+        artist: 'ITX Shop Meer',
+        album: 'Order Protection System',
+        artwork: [
+          { src: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop', sizes: '192x192', type: 'image/png' }
+        ]
+      });
+    }
   }, [customSound]);
 
-  // 2. The Alert Engine
+  // 2. The Alert Engine - Aggressive Notification & Sound
   const triggerAlert = (name: string, amount: number) => {
     setLastAlertTime(new Date().toLocaleTimeString());
     
-    // A. Audio Playback (Immediate)
+    // A. Direct Audio Play
     if (audioRef.current && isAudioUnlocked) {
       audioRef.current.currentTime = 0;
       audioRef.current.volume = 1.0;
-      audioRef.current.play().catch(e => console.warn("Background audio blocked:", e));
+      audioRef.current.play().catch(e => {
+        console.warn("Playback failed, likely throttled:", e);
+        // Fallback: try to play it through the heartbeat element if possible
+        if (heartbeatRef.current) {
+          heartbeatRef.current.src = audioRef.current!.src;
+          heartbeatRef.current.volume = 1.0;
+          heartbeatRef.current.play();
+          // Reset heartbeat after play
+          setTimeout(() => {
+            if (heartbeatRef.current) {
+               heartbeatRef.current.src = SILENT_HEARTBEAT_WAV;
+               heartbeatRef.current.volume = 0.01;
+               heartbeatRef.current.play();
+            }
+          }, 3000);
+        }
+      });
     }
 
-    // B. Service Worker Notification (Best for Background/Minimized)
-    if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+    // B. Service Worker Notification (Most reliable for background)
+    if ('serviceWorker' in navigator && Notification.permission === 'granted') {
       navigator.serviceWorker.ready.then(registration => {
         registration.active?.postMessage({
           type: 'TRIGGER_NOTIFICATION',
-          title: `🔔 NEW ORDER: Rs. ${amount.toLocaleString()}`,
+          title: `🔥 NEW ORDER: Rs. ${amount.toLocaleString()}`,
           options: {
-            body: `Customer: ${name} — Click to view details.`,
-            tag: 'new-itx-order',
-            renotify: true
+            body: `Customer: ${name} — High Priority Order`,
+            vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40]
           }
         });
       });
     } else if (Notification.permission === 'granted') {
-      // Fallback to standard browser notification if SW message fails
-      new Notification(`NEW ORDER: Rs. ${amount.toLocaleString()}`, {
+      new Notification(`🔥 NEW ORDER: Rs. ${amount.toLocaleString()}`, {
         body: `Customer: ${name}`,
-        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
+        requireInteraction: true
       });
     }
   };
 
-  // 3. Robust Real-time Socket Connection
+  // 3. Socket Management with Focus-Aware Reconnection
   const initSocket = () => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
     }
 
-    const channel = supabase.channel('itx_v10_persistent_stream', {
+    const channel = supabase.channel('itx_v11_stable_live', {
       config: {
         broadcast: { self: true },
         presence: { key: `admin-${Date.now()}` }
@@ -102,13 +128,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
         const newOrder = payload.new;
         setOrders(newOrder);
-        triggerAlert(newOrder.customer_name || 'Guest', newOrder.total_pkr || newOrder.total || 0);
+        triggerAlert(newOrder.customer_name || 'Anonymous', newOrder.total_pkr || newOrder.total || 0);
       })
       .subscribe((status) => {
-        console.log(`[REALTIME] ${status}`);
         setRealtimeStatus(status === 'SUBSCRIBED' ? 'online' : 'connecting');
         if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-          setTimeout(initSocket, 2000); // Aggressive auto-reconnect
+          setTimeout(initSocket, 3000);
         }
       });
 
@@ -119,48 +144,57 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!user) return;
     initSocket();
     
-    // Periodic check to ensure the socket hasn't gone stale in the background
-    const socketMonitor = setInterval(() => {
-      if (realtimeStatus !== 'online' && document.visibilityState === 'visible') {
+    // Background health check
+    const healthInterval = setInterval(() => {
+      if (realtimeStatus !== 'online') {
         initSocket();
       }
-    }, 15000);
+    }, 20000);
 
     return () => {
-      clearInterval(socketMonitor);
+      clearInterval(healthInterval);
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [user]);
+  }, [user, realtimeStatus]);
 
-  // 4. Visibility Re-sync Logic
+  // 4. Aggressive Visibility Management
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        console.log("[SYSTEM] Waking up. Syncing data...");
+        console.log("[WAKEUP] Re-establishing connection and state...");
         refreshData();
-        // If the socket was suspended by the OS, force a clean reconnect
-        initSocket();
-        // Poke the audio context to un-suspend it
+        initSocket(); // Force immediate reconnect on wake
+        
+        // Ensure audio context is warm
         if (heartbeatRef.current && isAudioUnlocked) {
           heartbeatRef.current.play().catch(() => {});
         }
+      } else {
+        console.log("[SLEEP] Entering background mode.");
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibility);
+    // Focus event is often more reliable than visibility on some mobile browsers
+    window.addEventListener('focus', handleVisibility);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
   }, [refreshData, isAudioUnlocked]);
 
   const unlockSystem = async () => {
-    // A. Request Permissions
+    // A. Notification Permissions
     const permission = await Notification.requestPermission();
     
-    // B. Un-suspend Audio Context (Browser User Gesture Requirement)
+    // B. Warm up audio context
     if (audioRef.current && heartbeatRef.current) {
       try {
         await heartbeatRef.current.play();
-        heartbeatRef.current.volume = 0; // Keep silent heartbeat loop active
+        heartbeatRef.current.volume = 0.01;
         
+        // Test sound
         await audioRef.current.play();
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
@@ -171,10 +205,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         if (permission === 'granted') {
           triggerAlert("Console Armed", 0);
         } else {
-          alert("Note: System notifications are disabled. Alerts will only play sound.");
+          alert("Warning: Notifications blocked. You will only receive sound alerts.");
         }
       } catch (e) {
-        alert("Action Required: Please tap 'Activate' to enable background order chimes.");
+        alert("Please allow Audio & Notifications in your browser settings to enable live order chimes.");
       }
     }
   };
@@ -202,12 +236,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="w-full max-w-sm bg-white p-10 rounded-[2.5rem] shadow-2xl">
           <div className="text-center mb-10">
             <h1 className="text-3xl font-black italic tracking-tighter uppercase">ITX<span className="text-blue-600">STORE</span></h1>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">Management Gateway</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">Live Console Login</p>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); if (adminPasswordInput === systemPassword) login(UserRole.ADMIN); }} className="space-y-6">
             <input 
               type="password" 
-              placeholder="Admin Passcode" 
+              placeholder="Admin Key" 
               className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-4 py-4 text-center font-black focus:outline-none focus:border-blue-600 transition"
               value={adminPasswordInput}
               onChange={(e) => setAdminPasswordInput(e.target.value)}
@@ -225,7 +259,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="p-6 border-b border-gray-800 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 bg-blue-600 text-white rounded-lg flex items-center justify-center text-lg font-black italic shadow-lg">I</div>
-            <div className="font-black text-xs tracking-tight text-white uppercase">ITX Dashboard</div>
+            <div className="font-black text-xs tracking-tight text-white uppercase">ITX Live Monitor</div>
           </div>
         </div>
         
@@ -248,18 +282,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="p-4 border-t border-gray-800 space-y-2">
            {!isAudioUnlocked ? (
              <button onClick={unlockSystem} className="w-full bg-blue-600 text-white p-3 rounded-xl font-black uppercase text-[9px] tracking-widest animate-pulse flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30">
-               <i className="fas fa-power-off"></i> Activate Live Chimes
+               <i className="fas fa-bolt"></i> Activate Audio & Push
              </button>
            ) : (
              <div className="space-y-2">
                 <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-xl border border-white/10">
                   <div className={`w-2 h-2 rounded-full ${realtimeStatus === 'online' ? 'bg-green-500 animate-ping' : 'bg-red-500'}`}></div>
                   <div className="text-left">
-                    <p className="text-[9px] font-black text-white uppercase tracking-widest">Real-time Stream</p>
-                    <p className="text-[8px] text-gray-400 font-bold uppercase">{realtimeStatus === 'online' ? 'Connected' : 'Offline'}</p>
+                    <p className="text-[9px] font-black text-white uppercase tracking-widest">Always-On Guard</p>
+                    <p className="text-[8px] text-gray-400 font-bold uppercase">{realtimeStatus.toUpperCase()}</p>
                   </div>
                 </div>
-                <button onClick={() => triggerAlert("SYSTEM TEST", 0)} className="w-full bg-white/5 text-gray-400 hover:text-white p-2 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/5 transition">Test Chime</button>
+                <button onClick={() => triggerAlert("SYSTEM CHECK", 0)} className="w-full bg-white/5 text-gray-500 hover:text-white p-2 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/5 transition">Test Alert Loop</button>
              </div>
            )}
         </div>
@@ -269,16 +303,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0 z-50 shadow-sm">
           <div className="flex items-center space-x-4">
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden text-gray-500 p-2"><i className="fas fa-bars"></i></button>
-            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-               CLOUD SYNC: <span className={realtimeStatus === 'online' ? 'text-green-500' : 'text-red-500 animate-pulse'}>{realtimeStatus.toUpperCase()}</span>
+            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
+               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+               CLOUD MONITOR: <span className={realtimeStatus === 'online' ? 'text-green-500' : 'text-red-500'}>{realtimeStatus.toUpperCase()}</span>
             </div>
           </div>
-          {lastAlertTime && (
-            <div className="hidden md:flex items-center space-x-2 bg-blue-50 text-blue-600 px-3 py-1 rounded-full border border-blue-100 animate-fadeIn">
-              <i className="fas fa-bell text-[8px]"></i>
-              <span className="text-[9px] font-black uppercase tracking-widest">Last Activity: {lastAlertTime}</span>
-            </div>
-          )}
+          <div className="flex items-center space-x-4">
+             {Notification.permission !== 'granted' && (
+                <span className="text-[8px] font-black text-red-500 uppercase bg-red-50 px-2 py-1 rounded border border-red-100">Push Blocked</span>
+             )}
+             {lastAlertTime && (
+                <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full animate-fadeIn">
+                  Last: {lastAlertTime}
+                </div>
+             )}
+          </div>
         </header>
 
         <main className="flex-grow overflow-y-auto p-4 md:p-10 animate-fadeIn custom-scrollbar">
@@ -286,8 +325,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="max-w-6xl mx-auto space-y-8">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                  <h2 className="text-3xl font-black tracking-tighter uppercase text-black">Insights</h2>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Store Performance Overview</p>
+                  <h2 className="text-3xl font-black tracking-tighter uppercase text-black">Performance</h2>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Real-time Stream Data</p>
                 </div>
                 <div className="flex bg-white rounded-2xl border border-gray-200 p-1.5 shadow-sm">
                   {(['Today', 'All Time'] as const).map((range) => (
@@ -298,10 +337,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
-                  { label: 'Total Revenue', val: `Rs. ${totalSales.toLocaleString()}`, color: 'text-blue-600' },
+                  { label: 'Revenue Generated', val: `Rs. ${totalSales.toLocaleString()}`, color: 'text-blue-600' },
                   { label: 'Orders Processed', val: filteredOrders.length.toString(), color: 'text-black' },
                   { label: 'Live Status', val: realtimeStatus.toUpperCase(), color: realtimeStatus === 'online' ? 'text-green-500' : 'text-red-500' },
-                  { label: 'Alert Mode', val: isAudioUnlocked ? 'ACTIVE' : 'IDLE', color: isAudioUnlocked ? 'text-blue-500' : 'text-gray-300' },
+                  { label: 'Alert Protocol', val: isAudioUnlocked ? 'ARMED' : 'IDLE', color: isAudioUnlocked ? 'text-blue-600' : 'text-gray-300' },
                 ].map((stat, i) => (
                   <div key={i} className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm hover:border-blue-200 transition-all group">
                     <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-5 group-hover:text-blue-600">{stat.label}</span>
@@ -311,11 +350,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               <div className="bg-white rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/20">
-                   <h3 className="font-black uppercase text-[10px] tracking-widest text-black">Live Order Activity</h3>
+                <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/10">
+                   <h3 className="font-black uppercase text-[10px] tracking-widest text-black italic">Live Feed (Auto-Sync)</h3>
                    <div className="flex items-center space-x-2">
                       <div className={`w-1.5 h-1.5 rounded-full ${realtimeStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Listening for events...</span>
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Active Stream</span>
                    </div>
                 </div>
                 <div className="divide-y divide-gray-50">
@@ -331,7 +370,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
                   ))}
-                  {filteredOrders.length === 0 && <div className="p-32 text-center text-gray-300 uppercase text-[10px] font-black italic tracking-widest">Awaiting Live Feed...</div>}
+                  {filteredOrders.length === 0 && <div className="p-32 text-center text-gray-300 uppercase text-[10px] font-black italic tracking-widest">Waiting for orders...</div>}
                 </div>
               </div>
             </div>
@@ -339,20 +378,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {activeNav === 'Settings' && (
             <div className="max-w-2xl mx-auto space-y-8 pb-12">
-               <h2 className="text-3xl font-black tracking-tighter uppercase text-black">Settings</h2>
+               <h2 className="text-3xl font-black tracking-tighter uppercase text-black">Control Panel</h2>
                <div className="bg-white p-10 rounded-[3rem] border border-gray-200 shadow-xl space-y-10">
                   <div>
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Order Notification Sound</h3>
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Sound & Notification</h3>
                     <div className="space-y-6">
                       <div className="flex items-center justify-between p-6 bg-gray-50 rounded-[2rem] border border-gray-200">
                         <div className="flex items-center gap-5">
-                           <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center shadow-lg"><i className="fas fa-volume-up"></i></div>
+                           <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center shadow-lg"><i className="fas fa-volume-high"></i></div>
                            <div>
-                              <p className="text-xs font-black uppercase">Active Sound</p>
-                              <p className="text-[9px] text-gray-400 font-bold uppercase">{customSound ? 'Custom MP3 Set' : 'System Standard'}</p>
+                              <p className="text-xs font-black uppercase">Order Chime</p>
+                              <p className="text-[9px] text-gray-400 font-bold uppercase">{customSound ? 'Custom MP3 File' : 'System Default'}</p>
                            </div>
                         </div>
-                        <button onClick={() => audioRef.current?.play()} className="bg-white text-black border border-gray-200 px-6 py-3 rounded-xl text-[10px] font-black uppercase hover:bg-black hover:text-white transition shadow-sm">Test</button>
+                        <button onClick={() => audioRef.current?.play()} className="bg-white text-black border border-gray-200 px-6 py-3 rounded-xl text-[10px] font-black uppercase hover:bg-black hover:text-white transition shadow-sm">Test Audio</button>
                       </div>
                       <div className="relative border-2 border-dashed border-gray-200 rounded-[2rem] p-12 text-center bg-gray-50/50 hover:border-blue-600 transition-all cursor-pointer group">
                         <input type="file" accept="audio/*" onChange={(e) => {
@@ -363,18 +402,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               const base64 = event.target?.result as string;
                               setCustomSound(base64);
                               localStorage.setItem('itx_custom_tone', base64);
-                              alert("Order chime updated.");
+                              alert("Alert updated.");
                             };
                             reader.readAsDataURL(file);
                           }
                         }} className="absolute inset-0 opacity-0 cursor-pointer" />
-                        <i className="fas fa-music text-3xl text-gray-300 mb-4 group-hover:text-blue-600 transition"></i>
-                        <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Drop MP3 to Update Sound</p>
+                        <i className="fas fa-upload text-3xl text-gray-300 mb-4 group-hover:text-blue-600 transition"></i>
+                        <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Upload Custom Chime (MP3)</p>
                       </div>
                     </div>
                   </div>
                   <div className="pt-10 border-t border-gray-100">
-                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Security Access</h3>
+                     <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Security Settings</h3>
                      <div className="bg-gray-50 p-6 rounded-[2rem] border border-gray-200">
                         <input type="text" value={systemPassword} onChange={(e) => { setSystemPassword(e.target.value); localStorage.setItem('systemPassword', e.target.value); }} className="w-full bg-white border border-gray-100 rounded-2xl px-6 py-4 text-sm font-black outline-none focus:border-blue-600 shadow-sm" />
                      </div>
@@ -385,15 +424,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           {activeNav === 'Orders' && (
             <div className="max-w-6xl mx-auto space-y-6">
-              <h2 className="text-3xl font-black tracking-tighter uppercase text-black">Log</h2>
+              <h2 className="text-3xl font-black tracking-tighter uppercase text-black">Registry</h2>
               <div className="bg-white rounded-[2rem] border border-gray-200 shadow-sm overflow-hidden">
                 <table className="w-full text-left text-xs min-w-[800px]">
                   <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="px-8 py-5 text-[9px] font-black uppercase text-gray-400 tracking-widest">ID</th>
+                      <th className="px-8 py-5 text-[9px] font-black uppercase text-gray-400 tracking-widest">Ref</th>
                       <th className="px-8 py-5 text-[9px] font-black uppercase text-gray-400 tracking-widest">Customer</th>
-                      <th className="px-8 py-5 text-[9px] font-black uppercase text-gray-400 tracking-widest">Location</th>
-                      <th className="px-8 py-5 text-right text-[9px] font-black uppercase text-gray-400 tracking-widest">Amount</th>
+                      <th className="px-8 py-5 text-[9px] font-black uppercase text-gray-400 tracking-widest">City</th>
+                      <th className="px-8 py-5 text-right text-[9px] font-black uppercase text-gray-400 tracking-widest">Value</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 font-medium">
@@ -413,28 +452,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </main>
       </div>
 
-      {/* Detail Modal */}
+      {/* Order View Modal */}
       {viewingOrder && (
         <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
             <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-              <h2 className="text-sm font-black tracking-widest uppercase text-gray-900">View Order: #{viewingOrder.id}</h2>
+              <h2 className="text-sm font-black tracking-widest uppercase text-gray-900 italic">Order: #{viewingOrder.id}</h2>
               <button onClick={() => setViewingOrder(null)} className="text-gray-400 hover:text-black p-2 transition"><i className="fas fa-times text-xl"></i></button>
             </div>
             <div className="flex-grow overflow-y-auto p-10 space-y-12 custom-scrollbar">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                 <div className="space-y-8">
                   <div className="bg-gray-50 rounded-3xl p-8 border border-gray-100">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Invoice Manifest</h3>
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest italic">Manifest</h3>
                     <div className="space-y-6">
                       {viewingOrder.items.map((item, i) => (
                         <div key={i} className="flex items-center space-x-6 pb-6 border-b border-gray-200 last:border-0 last:pb-0">
                           <img src={item.product.image} className="w-16 h-16 rounded-2xl object-cover border shadow-md shrink-0" />
                           <div className="flex-grow min-w-0">
                             <p className="text-sm font-black uppercase tracking-tight truncate text-gray-900">{item.product.name}</p>
-                            <p className="text-[10px] text-gray-500 font-bold mt-1">Qty: {item.quantity}</p>
+                            <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase">Qty: {item.quantity}</p>
                           </div>
-                          <p className="text-base font-black text-gray-900">Rs. {(item.product.price * item.quantity).toLocaleString()}</p>
+                          <p className="text-base font-black text-gray-900 whitespace-nowrap">Rs. {(item.product.price * item.quantity).toLocaleString()}</p>
                         </div>
                       ))}
                     </div>
@@ -442,7 +481,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 <div className="space-y-8">
                   <div className="bg-white rounded-3xl border border-gray-200 p-8 shadow-sm">
-                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest">Customer Details</h3>
+                    <h3 className="text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest italic">Client Profile</h3>
                     <div className="space-y-6">
                       <div>
                         <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Name</p>
@@ -458,7 +497,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </div>
                     </div>
                     <div className="pt-8 border-t border-gray-100 mt-8">
-                      <p className="text-[9px] font-black text-gray-400 uppercase mb-4 tracking-widest">Action: Set Status</p>
+                      <p className="text-[9px] font-black text-gray-400 uppercase mb-4 tracking-widest">Update Workflow</p>
                       <select 
                         value={viewingOrder.status}
                         onChange={(e) => updateStatusOverride && updateStatusOverride(viewingOrder.id, e.target.value as any)}
