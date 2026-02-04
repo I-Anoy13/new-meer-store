@@ -2,7 +2,19 @@
 {
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/admin.html",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/manifest-admin.json",
+      "destination": "/manifest-admin.json"
+    },
+    {
+      "source": "/((?!admin.html|manifest-admin.json|sw.js|favicon.ico|assets|.*\\..*).*)",
       "destination": "/index.html"
     }
   ]
