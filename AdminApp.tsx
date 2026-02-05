@@ -3,12 +3,11 @@ import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
-// Import the clean dashboard
 import AdminDashboard from './views/AdminDashboard';
 
 /* 
  * ADMIN CORE APPLICATION 
- * Managing order streams and inventory sync with Supabase.
+ * Synchronizes real Supabase data streams for the Dashboard.
  */
 
 const AdminApp: React.FC = () => {
@@ -47,11 +46,15 @@ const AdminApp: React.FC = () => {
   const orders = useMemo(() => {
     return rawOrders.map((row): Order | null => {
       if (!row) return null;
+      // Normalizing Order ID from Supabase row
       const orderId = row.order_id || (row.id ? `ORD-${row.id}` : 'ORD-UNKNOWN');
+      
+      // Normalizing Status
       const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
       const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
       const dbStatus = (capitalized || 'Pending') as Order['status'];
       const finalStatus = statusOverrides[orderId] || dbStatus;
+      
       const totalAmount = row.total_pkr ?? row.subtotal_pkr ?? row.total ?? 0;
 
       return {
@@ -93,8 +96,9 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('orders').select('*')
-        .order('created_at', { ascending: false }).limit(60);
+      const { data, error } = await supabase.from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
       if (!error && data) {
         setRawOrders(data);
       }
@@ -112,12 +116,24 @@ const AdminApp: React.FC = () => {
   }, [fetchProducts, fetchOrders]);
 
   const updateStatusOverride = async (orderId: string, status: Order['status']) => {
+    // Optimistic Update
     setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
     try {
-      await supabase.from('orders').update({ 
-        status: status.toLowerCase() 
-      }).eq('order_id', orderId);
-    } catch (e) { console.error(e); }
+      // Find the db ID if possible or use order_id
+      const { error } = await supabase.from('orders')
+        .update({ status: status.toLowerCase() })
+        .eq('order_id', orderId);
+      
+      if (error) throw error;
+    } catch (e) { 
+      console.error("Status Sync Error:", e);
+      // Revert if error
+      setStatusOverrides(prev => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+    }
   };
 
   const deleteProduct = async (productId: string) => {
@@ -125,23 +141,25 @@ const AdminApp: React.FC = () => {
     if (!error) setProducts(prev => prev.filter(p => p.id !== productId));
   };
 
+  if (loading && rawOrders.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="text-center animate-pulse">
+          <div className="w-12 h-12 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4 mx-auto"></div>
+          <p className="text-[10px] font-black uppercase text-white tracking-widest">Initalizing Core...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <HashRouter>
       <Routes>
         <Route path="/*" element={
           <AdminDashboard 
             products={products} 
-            setProducts={setProducts} 
             deleteProduct={deleteProduct} 
             orders={orders} 
-            setOrders={(newRow: any) => {
-              setRawOrders(prev => {
-                const idToCheck = newRow.order_id || `ORD-${newRow.id}`;
-                const exists = prev.some(o => (o.order_id || `ORD-${o.id}`) === idToCheck);
-                if (exists) return prev;
-                return [newRow, ...prev];
-              });
-            }} 
             user={user} 
             login={(role: UserRole) => { 
               const u = { id: '1', name: 'Master', email: 'itx@me.pk', role }; 
