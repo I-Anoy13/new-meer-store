@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-v30-live';
+const CACHE_NAME = 'itx-v31-live-engine';
 const ASSETS = [
   '/',
   '/index.html',
@@ -20,9 +20,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
+          if (key !== CACHE_NAME) return caches.delete(key);
         })
       );
     })
@@ -37,12 +35,13 @@ self.addEventListener('message', (event) => {
       body: body,
       icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
       badge: 'https://images.unsplash.com/photo-1614164185128-w=96&h=96&auto=format&fit=crop',
-      vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40, 450, 110, 200, 110, 170, 40],
+      vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40],
       tag: `order-${orderId}`,
       renotify: true,
+      requireInteraction: true, // Keeps notification visible until user interacts
       data: { url: '/admin.html' },
       actions: [
-        { action: 'open', title: 'Open Dashboard' }
+        { action: 'open', title: 'View Order' }
       ]
     };
     event.waitUntil(self.registration.showNotification(title, options));
@@ -61,9 +60,7 @@ self.addEventListener('notificationclick', (event) => {
           return client.focus();
         }
       }
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
-      }
+      if (clients.openWindow) return clients.openWindow(urlToOpen);
     })
   );
 });
