@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+
+import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { CartItem, Product, Order, User } from './types';
+import { CartItem, Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
 import Home from './views/Home';
@@ -36,7 +37,6 @@ const MainLayout: React.FC<{
 );
 
 const AppContent: React.FC = () => {
-  // Use cached products for instant initial render
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('itx_cached_products');
     return saved ? JSON.parse(saved) : MOCK_PRODUCTS;
@@ -44,7 +44,6 @@ const AppContent: React.FC = () => {
   
   const [loading, setLoading] = useState(products.length === 0);
   const [isSyncing, setIsSyncing] = useState(false);
-
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('cart');
     return saved ? JSON.parse(saved) : [];
@@ -54,6 +53,46 @@ const AppContent: React.FC = () => {
     const saved = localStorage.getItem('itx_user_session');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // GLOBAL ADMIN LISTENER: Triggers notifications even on the customer-facing side
+  useEffect(() => {
+    if (user?.role === UserRole.ADMIN) {
+      console.log("MASTER ENGINE: Global Admin Listener Primed.");
+      
+      const channel = supabase.channel('global_admin_live')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+          console.log("MASTER ENGINE: Global Order Detected!");
+          
+          // Trigger System Notification
+          if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+              type: 'TRIGGER_NOTIFICATION',
+              title: '🚨 NEW ORDER PLACED!',
+              body: `Total: Rs. ${payload.new.total_pkr || payload.new.total} — ${payload.new.customer_name}`,
+              orderId: payload.new.order_id || payload.new.id
+            });
+          }
+
+          // Trigger Sound (if not on dashboard, we play it here)
+          try {
+            const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(440, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+            g.gain.setValueAtTime(0, ctx.currentTime);
+            g.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 0.05);
+            g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.5);
+            osc.connect(g); g.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime + 1.5);
+          } catch {}
+        })
+        .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
+    }
+  }, [user]);
 
   useEffect(() => {
     localStorage.setItem('cart', JSON.stringify(cart));
