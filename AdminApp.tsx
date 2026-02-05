@@ -7,7 +7,7 @@ import AdminDashboard from './views/AdminDashboard';
 
 /* 
  * ADMIN CORE APPLICATION 
- * Synchronizes real Supabase data streams for the Dashboard.
+ * Synchronizes real Supabase data streams with instant local state updates.
  */
 
 const AdminApp: React.FC = () => {
@@ -43,36 +43,34 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
   }, [products, rawOrders, statusOverrides]);
 
-  const orders = useMemo(() => {
-    return rawOrders.map((row): Order | null => {
-      if (!row) return null;
-      // Normalizing Order ID from Supabase row
-      const orderId = row.order_id || (row.id ? `ORD-${row.id}` : 'ORD-UNKNOWN');
-      
-      // Normalizing Status
-      const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
-      const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
-      const dbStatus = (capitalized || 'Pending') as Order['status'];
-      const finalStatus = statusOverrides[orderId] || dbStatus;
-      
-      const totalAmount = row.total_pkr ?? row.subtotal_pkr ?? row.total ?? 0;
+  const normalizeOrder = (row: any): Order | null => {
+    if (!row) return null;
+    const orderId = row.order_id || (row.id ? `ORD-${row.id}` : 'ORD-UNKNOWN');
+    const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
+    const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
+    const dbStatus = (capitalized || 'Pending') as Order['status'];
+    const finalStatus = statusOverrides[orderId] || dbStatus;
+    const totalAmount = row.total_pkr ?? row.subtotal_pkr ?? row.total ?? 0;
 
-      return {
-        id: orderId,
-        dbId: row.id ? Number(row.id) : undefined,
-        items: Array.isArray(row.items) ? row.items : [],
-        total: Number(totalAmount),
-        status: finalStatus,
-        customer: {
-          name: row.customer_name || 'Anonymous',
-          email: '',
-          phone: row.customer_phone || '',
-          address: row.customer_address || '',
-          city: row.customer_city || ''
-        },
-        date: row.created_at || row.date || new Date().toISOString()
-      };
-    }).filter((o): o is Order => o !== null);
+    return {
+      id: orderId,
+      dbId: row.id ? Number(row.id) : undefined,
+      items: Array.isArray(row.items) ? row.items : [],
+      total: Number(totalAmount),
+      status: finalStatus,
+      customer: {
+        name: row.customer_name || 'Anonymous',
+        email: '',
+        phone: row.customer_phone || '',
+        address: row.customer_address || '',
+        city: row.customer_city || ''
+      },
+      date: row.created_at || row.date || new Date().toISOString()
+    };
+  };
+
+  const orders = useMemo(() => {
+    return rawOrders.map(normalizeOrder).filter((o): o is Order => o !== null);
   }, [rawOrders, statusOverrides]);
 
   const fetchProducts = useCallback(async () => {
@@ -105,6 +103,15 @@ const AdminApp: React.FC = () => {
     } catch (e) { console.error(e); }
   }, []);
 
+  // For instant real-time updates without re-fetching everything
+  const addRealtimeOrder = useCallback((newOrder: any) => {
+    setRawOrders(prev => {
+      // Avoid duplicates if fetchOrders and realtime insert overlap
+      if (prev.find(o => (o.order_id || o.id) === (newOrder.order_id || newOrder.id))) return prev;
+      return [newOrder, ...prev];
+    });
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const init = async () => {
@@ -116,18 +123,14 @@ const AdminApp: React.FC = () => {
   }, [fetchProducts, fetchOrders]);
 
   const updateStatusOverride = async (orderId: string, status: Order['status']) => {
-    // Optimistic Update
     setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
     try {
-      // Find the db ID if possible or use order_id
       const { error } = await supabase.from('orders')
         .update({ status: status.toLowerCase() })
         .eq('order_id', orderId);
-      
       if (error) throw error;
     } catch (e) { 
       console.error("Status Sync Error:", e);
-      // Revert if error
       setStatusOverrides(prev => {
         const next = { ...prev };
         delete next[orderId];
@@ -146,7 +149,7 @@ const AdminApp: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center animate-pulse">
           <div className="w-12 h-12 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase text-white tracking-widest">Initalizing Core...</p>
+          <p className="text-[10px] font-black uppercase text-white tracking-widest">Waking Up Console...</p>
         </div>
       </div>
     );
@@ -168,7 +171,8 @@ const AdminApp: React.FC = () => {
             }}
             systemPassword={systemPassword} 
             setSystemPassword={setSystemPassword}
-            refreshData={() => { fetchOrders(); fetchProducts(); }}
+            refreshData={fetchOrders}
+            addRealtimeOrder={addRealtimeOrder}
             updateStatusOverride={updateStatusOverride}
           />
         } />

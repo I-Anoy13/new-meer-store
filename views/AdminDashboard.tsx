@@ -13,12 +13,8 @@ import { supabase } from '../lib/supabase';
 import { UserRole, Order, Product } from '../types';
 
 /* 
- * ITX MASTER CONSOLE - PRO LIVE EDITION
- * Features:
- * - Persistent Real-time Supabase Listeners
- * - Background PWA Notifications (SW based)
- * - Custom Audio Chime Management
- * - No Manual Sync Required
+ * ITX MASTER CONSOLE - ZERO DELAY EDITION
+ * Focus: Instant delivery of new orders, background persistence, and no manual sync.
  */
 
 const AdminDashboard = (props: any) => {
@@ -28,6 +24,7 @@ const AdminDashboard = (props: any) => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [timeRange, setTimeRange] = useState('6months'); 
   const [isLive, setIsLive] = useState(false);
+  const [wakeLock, setWakeLock] = useState<any>(null);
 
   // Notification & Audio Logic
   const [recentOrderAlert, setRecentOrderAlert] = useState<any>(null);
@@ -35,7 +32,7 @@ const AdminDashboard = (props: any) => {
   const [customAlertBase64, setCustomAlertBase64] = useState<string | null>(() => localStorage.getItem('itx_custom_alert'));
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Analytics calculated from real order data
+  // Analytics calculated from current state
   const analytics = useMemo(() => {
     const now = new Date();
     const rangeMs = timeRange === '7days' ? 7 * 86400000 : timeRange === '30days' ? 30 * 86400000 : 180 * 86400000;
@@ -67,33 +64,38 @@ const AdminDashboard = (props: any) => {
     return { revenue, pendingCount, deliveredCount, total: filteredOrders.length, chartData };
   }, [props.orders, timeRange]);
 
-  const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setCustomAlertBase64(base64);
-        localStorage.setItem('itx_custom_alert', base64);
-        window.alert('Custom notification sound saved.');
-      };
-      reader.readAsDataURL(file);
+  // Request Wake Lock to keep dashboard active in background
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          const lock = await (navigator as any).wakeLock.request('screen');
+          setWakeLock(lock);
+          console.log("Wake Lock Active: Console will not sleep.");
+        }
+      } catch (err) {
+        console.warn("Wake Lock failed:", err);
+      }
+    };
+
+    if (props.user) {
+      requestWakeLock();
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') requestWakeLock();
+      });
     }
-  };
+  }, [props.user]);
 
   const triggerOrderAlert = useCallback((order: any) => {
-    // 1. UI Feedback
+    // 1. Instant Modal Alert
     setRecentOrderAlert(order);
     setTimeout(() => setRecentOrderAlert(null), 15000);
 
-    // 2. Audio Chime
+    // 2. Audible Alert
     if (!muted) {
       if (customAlertBase64 && audioRef.current) {
-        audioRef.current.play().catch(() => {
-          console.log("Auto-play blocked, interaction required.");
-        });
+        audioRef.current.play().catch(() => console.log("Unlock audio by clicking anywhere first."));
       } else {
-        // Fallback synthetic chime
         try {
           const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
           if (AudioCtx) {
@@ -113,64 +115,86 @@ const AdminDashboard = (props: any) => {
       }
     }
 
-    // 3. System Notification
+    // 3. System Push (Works even if minimized)
     if ('serviceWorker' in navigator && Notification.permission === 'granted') {
       navigator.serviceWorker.ready.then((registration) => {
-        registration.showNotification(`NEW ORDER: #${order.order_id || order.id}`, {
-          body: `${order.customer_name} from ${order.customer_city || 'Pakistan'} placed an order worth Rs. ${order.total_pkr || order.total}`,
+        registration.showNotification(`NEW ORDER ALERT`, {
+          body: `Order #${order.order_id || order.id} received from ${order.customer_name}. Worth Rs. ${order.total_pkr || order.total}.`,
           icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
           badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-          tag: 'itx-order-' + order.id,
+          tag: 'itx-order-' + (order.order_id || order.id),
           requireInteraction: true,
-          vibrate: [200, 100, 200]
+          vibrate: [500, 100, 500]
         } as any);
       });
     }
   }, [muted, customAlertBase64]);
 
-  // PRIMARY REAL-TIME SYNC HUB
+  // Fix: Handle custom sound upload for order alerts
+  const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setCustomAlertBase64(base64);
+        localStorage.setItem('itx_custom_alert', base64);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // AGGRESSIVE REAL-TIME SYNC ENGINE
   useEffect(() => {
     if (!props.user) return;
     
-    console.log("Initializing Real-time Sync Channel...");
-    const channel = supabase.channel('order_stream_v1')
+    console.log("Console Sync: Connecting to Real-time Stream...");
+    const channel = supabase.channel('itx_orders_realtime_hub')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-        console.log("Real-time INSERT Detected:", payload.new);
-        props.refreshData(); // Triggers re-fetch in AdminApp.tsx
+        console.log("Console Sync: New Order Prepend Triggered.");
+        // We prepend instantly so the user sees it without waiting for a re-fetch
+        props.addRealtimeOrder(payload.new);
         triggerOrderAlert(payload.new);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
+        // For updates, we do a quick background fetch to sync statuses
+        props.refreshData();
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') setIsLive(true);
-        else setIsLive(false);
+        else if (status === 'CHANNEL_ERROR') {
+          setIsLive(false);
+          // Auto-reconnect logic
+          setTimeout(() => channel.subscribe(), 5000);
+        }
       });
 
     return () => { supabase.removeChannel(channel); };
-  }, [props.user, props.refreshData, triggerOrderAlert]);
+  }, [props.user, props.addRealtimeOrder, props.refreshData, triggerOrderAlert]);
 
-  // Splash/Login Screen
   if (!props.user) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4">
-        <div className="bg-white p-10 md:p-12 rounded-[3rem] shadow-2xl w-full max-w-sm border border-gray-100">
+        <div className="bg-white p-10 md:p-14 rounded-[3.5rem] shadow-2xl w-full max-w-sm border border-gray-100/50">
           <div className="text-center mb-10">
-            <h1 className="text-3xl font-black uppercase tracking-tighter italic text-black">ITX CONSOLE</h1>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2 italic">Secured Management Portal</p>
+            <h1 className="text-3xl font-black uppercase tracking-tighter italic">ITX CONSOLE</h1>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2 italic">Secured Logic Portal</p>
           </div>
           <div className="space-y-4">
             <input 
               type="password" value={authKey}
               onChange={(e) => setAuthKey(e.target.value)}
-              placeholder="Authorization Key"
+              placeholder="Authorization Hash"
               className="w-full p-5 border-2 border-gray-100 rounded-3xl font-black text-center bg-gray-50 outline-none focus:border-blue-600 transition-all text-sm"
             />
             <button 
               onClick={() => {
                 if (authKey === props.systemPassword) props.login(UserRole.ADMIN);
-                else window.alert('Authorization failed.');
+                else window.alert('Invalid credentials.');
               }}
               className="w-full bg-black text-white p-5 rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-blue-600 transition-all shadow-xl active:scale-95"
             >
-              Enter Dashboard
+              Unlock Console
             </button>
           </div>
         </div>
@@ -179,54 +203,57 @@ const AdminDashboard = (props: any) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] text-black font-sans pb-24 md:pb-0 overflow-x-hidden">
+    <div className="min-h-screen bg-[#f8f9fa] text-black font-sans pb-24 md:pb-0">
       <audio ref={audioRef} src={customAlertBase64 || undefined} />
 
-      {/* FLOATING IN-APP NOTIFICATION */}
+      {/* FLOATING TOP ALERTS */}
       {recentOrderAlert && (
         <div className="fixed top-0 left-0 right-0 z-[100] p-4 animate-slideInTop">
-          <div className="bg-black text-white p-4 md:p-6 rounded-2xl md:rounded-full shadow-2xl flex items-center justify-between border border-white/10 max-w-2xl mx-auto ring-4 ring-blue-600/20">
+          <div className="bg-black text-white p-5 md:p-6 rounded-[2rem] md:rounded-full shadow-2xl flex items-center justify-between border border-white/10 max-w-2xl mx-auto ring-4 ring-blue-600/20">
             <div className="flex items-center space-x-4 min-w-0">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center animate-bounce flex-shrink-0">
-                <i className="fas fa-shopping-bag text-xs"></i>
+              <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center animate-bounce flex-shrink-0">
+                <i className="fas fa-shopping-bag text-sm"></i>
               </div>
               <div className="min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-widest opacity-50 italic">New Inbound Order</p>
-                <p className="font-bold text-xs md:text-sm truncate">#{recentOrderAlert.order_id || recentOrderAlert.id} • {recentOrderAlert.customer_name}</p>
+                <p className="text-[9px] font-black uppercase tracking-widest opacity-50 italic">New Real-time Record</p>
+                <p className="font-bold text-sm md:text-base truncate">#{recentOrderAlert.order_id || recentOrderAlert.id} — {recentOrderAlert.customer_name}</p>
               </div>
             </div>
-            <button onClick={() => setRecentOrderAlert(null)} className="ml-4 w-8 h-8 rounded-lg hover:bg-white/10 transition flex-shrink-0">
-              <i className="fas fa-times text-xs"></i>
+            <button onClick={() => setRecentOrderAlert(null)} className="ml-4 w-10 h-10 rounded-xl hover:bg-white/10 transition flex-shrink-0">
+              <i className="fas fa-times"></i>
             </button>
           </div>
         </div>
       )}
 
-      {/* HEADER */}
+      {/* HEADER SECTION */}
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b h-16 md:h-20 flex items-center justify-between px-6 md:px-10">
         <div className="flex items-center space-x-4 md:space-x-12">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <h2 className="text-xs md:text-sm font-black italic tracking-tighter uppercase">ITX MASTER</h2>
-            <div className={`w-2.5 h-2.5 rounded-full ${isLive ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500 shadow-[0_0_8px_#ef4444]'} animate-pulse`}></div>
+            <div className="flex items-center bg-gray-50 px-3 py-1 rounded-full border border-gray-100 gap-2">
+              <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-red-500'} animate-pulse`}></div>
+              <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">{isLive ? 'Live' : 'Syncing'}</span>
+            </div>
           </div>
           <nav className="hidden md:flex space-x-8 text-[11px] font-black uppercase tracking-widest">
-            <button onClick={() => setActiveTab('overview')} className={activeTab === 'overview' ? 'text-blue-600' : 'text-gray-400'}>Analytics</button>
-            <button onClick={() => setActiveTab('orders')} className={activeTab === 'orders' ? 'text-blue-600' : 'text-gray-400'}>Orders</button>
-            <button onClick={() => setActiveTab('inventory')} className={activeTab === 'inventory' ? 'text-blue-600' : 'text-gray-400'}>Stock</button>
-            <button onClick={() => setActiveTab('sys')} className={activeTab === 'sys' ? 'text-blue-600' : 'text-gray-400'}>System</button>
+            <button onClick={() => setActiveTab('overview')} className={activeTab === 'overview' ? 'text-blue-600' : 'text-gray-400 hover:text-black transition'}>Analytics</button>
+            <button onClick={() => setActiveTab('orders')} className={activeTab === 'orders' ? 'text-blue-600' : 'text-gray-400 hover:text-black transition'}>Feed</button>
+            <button onClick={() => setActiveTab('inventory')} className={activeTab === 'inventory' ? 'text-blue-600' : 'text-gray-400 hover:text-black transition'}>Stock</button>
+            <button onClick={() => setActiveTab('sys')} className={activeTab === 'sys' ? 'text-blue-600' : 'text-gray-400 hover:text-black transition'}>System</button>
           </nav>
         </div>
         <div className="flex items-center space-x-3">
-          <button onClick={() => setMuted(!muted)} className={`w-9 h-9 md:w-10 md:h-10 rounded-xl border flex items-center justify-center transition shadow-sm ${muted ? 'bg-red-50 text-red-500 border-red-100' : 'bg-white text-gray-300'}`}>
+          <button onClick={() => setMuted(!muted)} className={`w-10 h-10 rounded-xl border flex items-center justify-center transition shadow-sm ${muted ? 'bg-red-50 text-red-500 border-red-100' : 'bg-white text-gray-300'}`}>
             <i className={`fas ${muted ? 'fa-bell-slash' : 'fa-bell'} text-xs`}></i>
           </button>
-          <button onClick={props.refreshData} className="bg-black text-white px-5 py-2 md:px-7 md:py-2.5 rounded-xl md:rounded-2xl hover:bg-blue-600 transition text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center">
-            <i className="fas fa-sync-alt mr-2"></i> <span className="hidden sm:inline">Refresh</span>
-          </button>
+          <div className="hidden sm:flex bg-zinc-900 text-white px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg items-center gap-2">
+            <i className="fas fa-check-circle text-blue-500"></i> Cloud Stream Active
+          </div>
         </div>
       </header>
 
-      {/* MAIN CONTENT */}
+      {/* DASHBOARD CONTENT */}
       <main className="p-4 md:p-10 max-w-7xl mx-auto space-y-8">
         {activeTab === 'overview' && (
           <div className="animate-fadeIn space-y-8">
@@ -241,22 +268,22 @@ const AdminDashboard = (props: any) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8">
               {[
                 { label: 'Revenue', val: `Rs. ${analytics.revenue.toLocaleString()}`, color: 'text-black' },
                 { label: 'Total Orders', val: analytics.total, color: 'text-black' },
-                { label: 'Unfulfilled', val: analytics.pendingCount, color: 'text-blue-600' },
+                { label: 'New/Pending', val: analytics.pendingCount, color: 'text-blue-600' },
                 { label: 'Success Rate', val: `${analytics.total ? Math.round((analytics.deliveredCount / analytics.total) * 100) : 0}%`, color: 'text-green-600' }
               ].map((s, i) => (
-                <div key={i} className="bg-white border border-gray-100 p-6 md:p-8 rounded-[1.8rem] md:rounded-[2.5rem] shadow-sm relative overflow-hidden group hover:shadow-md transition">
-                  <p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 md:mb-3">{s.label}</p>
+                <div key={i} className="bg-white border border-gray-100 p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] shadow-sm hover:shadow-md transition">
+                  <p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 md:mb-4">{s.label}</p>
                   <p className={`text-xl md:text-3xl font-black tracking-tighter italic ${s.color}`}>{s.val}</p>
                 </div>
               ))}
             </div>
 
-            <div className="bg-white border border-gray-100 p-6 md:p-10 rounded-[2rem] md:rounded-[3.5rem] shadow-sm">
-              <h4 className="text-[10px] font-black uppercase tracking-widest mb-8 text-zinc-300">Revenue Performance Trend</h4>
+            <div className="bg-white border border-gray-100 p-8 md:p-10 rounded-[2.5rem] md:rounded-[3.5rem] shadow-sm">
+              <h4 className="text-[10px] font-black uppercase tracking-widest mb-10 text-zinc-300">Revenue Stream Analysis</h4>
               <div className="h-56 md:h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={analytics.chartData}>
@@ -281,45 +308,51 @@ const AdminDashboard = (props: any) => {
         {activeTab === 'orders' && (
           <div className="animate-fadeIn space-y-4 md:space-y-6">
             <div className="flex justify-between items-center px-2">
-              <h3 className="font-black text-[10px] md:text-xs uppercase tracking-widest text-gray-400 italic">Inbound Feed</h3>
-              <p className="text-[9px] font-black text-gray-300 uppercase">{props.orders.length} Records</p>
+              <h3 className="font-black text-[10px] md:text-xs uppercase tracking-widest text-gray-400 italic">Order Stream Feed</h3>
+              <p className="text-[9px] font-black text-gray-300 uppercase italic">Updating Instantly...</p>
             </div>
-            {props.orders.map((o: Order) => (
-              <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white border border-gray-100 p-5 md:p-8 rounded-[2rem] md:rounded-[3rem] flex flex-col gap-4 md:flex-row md:justify-between md:items-center shadow-sm hover:shadow-xl transition-all cursor-pointer group">
-                <div className="flex items-center space-x-5 md:space-x-8 min-w-0">
-                  <div className={`w-14 h-14 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-3xl flex items-center justify-center font-black text-sm md:text-lg border-2 transition-all duration-300 ${o.status === 'Delivered' ? 'bg-green-50 text-green-500 border-green-100' : 'bg-gray-50 border-gray-50 text-gray-400 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-500'}`}>
-                    {String(o.status).charAt(0)}
-                  </div>
-                  <div className="min-w-0 flex-grow">
-                    <div className="flex items-center gap-2 md:gap-3">
-                      <p className="font-black text-sm md:text-xl tracking-tighter">#{o.id}</p>
-                      <span className={`text-[8px] md:text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${o.status === 'Pending' ? 'border-amber-200 text-amber-600 bg-amber-50 animate-pulse' : 'border-gray-100 text-gray-400 bg-gray-50'}`}>
-                        {o.status}
-                      </span>
-                    </div>
-                    <p className="text-[10px] md:text-[12px] font-bold text-gray-400 uppercase mt-1.5 tracking-wide truncate">{o.customer.name} • {o.customer.city}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between md:justify-end md:space-x-12 border-t md:border-t-0 pt-4 md:pt-0">
-                  <div className="md:text-right">
-                    <p className="hidden md:block text-[9px] font-black text-gray-300 uppercase mb-1 italic">Settlement Total</p>
-                    <p className="text-base md:text-2xl font-black italic tracking-tighter">Rs. {o.total.toLocaleString()}</p>
-                  </div>
-                  <select 
-                    value={o.status} 
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={e => props.updateStatusOverride?.(o.id, e.target.value as any)}
-                    className="border-2 p-3 md:p-4 rounded-xl md:rounded-2xl text-[9px] md:text-[11px] font-black uppercase bg-gray-50 outline-none focus:border-blue-600 transition shadow-sm min-w-[120px] md:min-w-[180px]"
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Confirmed">Confirmed</option>
-                    <option value="Shipped">Shipped</option>
-                    <option value="Delivered">Delivered</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
+            {props.orders.length === 0 ? (
+              <div className="bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-gray-100">
+                <p className="text-[10px] font-black uppercase text-gray-300 tracking-widest">Listening for new orders...</p>
               </div>
-            ))}
+            ) : (
+              props.orders.map((o: Order) => (
+                <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white border border-gray-100 p-5 md:p-8 rounded-[2rem] md:rounded-[3.5rem] flex flex-col gap-4 md:flex-row md:justify-between md:items-center shadow-sm hover:shadow-xl transition-all cursor-pointer group">
+                  <div className="flex items-center space-x-5 md:space-x-8 min-w-0">
+                    <div className={`w-14 h-14 md:w-16 md:h-16 rounded-[1.2rem] md:rounded-[2rem] flex items-center justify-center font-black text-sm md:text-lg border-2 transition-all duration-300 ${o.status === 'Delivered' ? 'bg-green-50 text-green-500 border-green-100' : 'bg-gray-50 border-gray-50 text-gray-400 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-500'}`}>
+                      {String(o.status).charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-grow">
+                      <div className="flex items-center gap-2 md:gap-3">
+                        <p className="font-black text-sm md:text-xl tracking-tighter">#{o.id}</p>
+                        <span className={`text-[8px] md:text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest border ${o.status === 'Pending' ? 'border-amber-200 text-amber-600 bg-amber-50 animate-pulse' : 'border-gray-100 text-gray-400 bg-gray-50'}`}>
+                          {o.status}
+                        </span>
+                      </div>
+                      <p className="text-[10px] md:text-[12px] font-bold text-gray-400 uppercase mt-2 tracking-wide truncate">{o.customer.name} • {o.customer.city}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between md:justify-end md:space-x-12 border-t md:border-t-0 pt-4 md:pt-0">
+                    <div className="md:text-right">
+                      <p className="hidden md:block text-[9px] font-black text-gray-300 uppercase mb-1 italic">Total Settlement</p>
+                      <p className="text-base md:text-2xl font-black italic tracking-tighter">Rs. {o.total.toLocaleString()}</p>
+                    </div>
+                    <select 
+                      value={o.status} 
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={e => props.updateStatusOverride?.(o.id, e.target.value as any)}
+                      className="border-2 p-3 md:p-4 rounded-2xl text-[9px] md:text-[11px] font-black uppercase bg-gray-50 outline-none focus:border-blue-600 transition shadow-sm min-w-[120px] md:min-w-[180px]"
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Confirmed">Confirmed</option>
+                      <option value="Shipped">Shipped</option>
+                      <option value="Delivered">Delivered</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 
@@ -329,23 +362,23 @@ const AdminDashboard = (props: any) => {
               <h3 className="font-black text-[10px] md:text-xs uppercase tracking-widest text-gray-400 italic">Inventory Controller</h3>
               <button 
                 onClick={() => setIsAddProductOpen(true)}
-                className="bg-black text-white px-7 md:px-12 py-3.5 md:py-4.5 rounded-2xl md:rounded-[2.5rem] text-[9px] md:text-[11px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition hover:bg-blue-600"
+                className="bg-black text-white px-7 py-3.5 rounded-3xl text-[9px] md:text-[11px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition hover:bg-blue-600"
               >
-                + Publish Collection
+                + New Record
               </button>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-8">
               {props.products.map((itm: Product) => (
-                <div key={itm.id} className="bg-white border border-gray-100 p-4 md:p-6 rounded-[1.8rem] md:rounded-[3rem] group relative shadow-sm hover:shadow-2xl transition-all">
-                  <div className="aspect-square relative mb-5 overflow-hidden rounded-[1.2rem] md:rounded-[2.2rem]">
+                <div key={itm.id} className="bg-white border border-gray-100 p-5 rounded-[2rem] md:rounded-[3rem] group relative shadow-sm hover:shadow-xl transition-all">
+                  <div className="aspect-square relative mb-5 overflow-hidden rounded-[1.5rem] md:rounded-[2.5rem]">
                     <img src={itm.image} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" alt="" />
-                    <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) props.deleteProduct(itm.id); }} className="absolute top-3 right-3 bg-red-600 text-white w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-xl">
+                    <button onClick={(e) => { e.stopPropagation(); if(confirm('Delete permanently?')) props.deleteProduct(itm.id); }} className="absolute top-3 right-3 bg-red-600 text-white w-9 h-9 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-xl">
                       <i className="fas fa-trash-alt text-[10px]"></i>
                     </button>
                   </div>
-                  <p className="text-[7px] md:text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1.5 italic">{itm.category}</p>
+                  <p className="text-[7px] md:text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1 italic">{itm.category}</p>
                   <p className="text-[11px] md:text-[14px] font-black truncate uppercase tracking-tight text-zinc-800">{itm.name}</p>
-                  <div className="flex justify-between items-center mt-3.5 pt-3.5 border-t border-gray-50">
+                  <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
                     <span className="text-[11px] md:text-[14px] font-black italic">Rs. {itm.price.toLocaleString()}</span>
                   </div>
                 </div>
@@ -355,20 +388,20 @@ const AdminDashboard = (props: any) => {
         )}
 
         {activeTab === 'sys' && (
-          <div className="max-w-2xl bg-white border border-gray-100 p-8 md:p-14 rounded-[3rem] md:rounded-[5rem] shadow-sm animate-fadeIn space-y-12 mx-auto">
+          <div className="max-w-2xl bg-white border border-gray-100 p-8 md:p-14 rounded-[3.5rem] md:rounded-[5rem] shadow-sm animate-fadeIn space-y-12 mx-auto">
             <div className="space-y-8">
-              <p className="text-[10px] md:text-[12px] font-black text-gray-400 uppercase tracking-widest italic">PWA Alert Hub</p>
+              <p className="text-[10px] md:text-[12px] font-black text-gray-400 uppercase tracking-widest italic">PWA Logic Control</p>
               
               <div className="bg-gray-50 p-6 md:p-12 rounded-[2.5rem] md:rounded-[3.5rem] border border-gray-100 shadow-inner space-y-10">
                 <div className="space-y-6">
-                  <label className="block text-[8px] md:text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Custom Order Chime (MP3/WAV)</label>
+                  <label className="block text-[8px] md:text-[10px] font-black uppercase text-gray-400 tracking-widest italic">Order Trigger Sound</label>
                   <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-center">
                     <input type="file" accept="audio/*" onChange={handleSoundUpload} className="hidden" id="sound-upload" />
                     <label htmlFor="sound-upload" className="cursor-pointer bg-white border-2 border-gray-100 px-8 py-3.5 rounded-2xl text-[9px] font-black uppercase tracking-widest hover:border-black transition shadow-sm">
-                      {customAlertBase64 ? 'Update Trigger' : 'Upload Chime'}
+                      {customAlertBase64 ? 'Update Sound' : 'Upload Trigger'}
                     </label>
                     <div className="flex gap-3">
-                      <button onClick={() => triggerOrderAlert({ order_id: 'TEST', customer_name: 'PWA Node', total: 0 })} className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg active:scale-90 transition"><i className="fas fa-play text-xs"></i></button>
+                      <button onClick={() => triggerOrderAlert({ order_id: 'DEBUG', customer_name: 'PWA Test', total: 0 })} className="w-11 h-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg active:scale-90 transition"><i className="fas fa-play text-xs"></i></button>
                       {customAlertBase64 && (
                         <button onClick={() => { localStorage.removeItem('itx_custom_alert'); setCustomAlertBase64(null); }} className="w-11 h-11 rounded-2xl bg-red-50 text-red-500 border border-red-100 flex items-center justify-center"><i className="fas fa-trash text-xs"></i></button>
                       )}
@@ -377,38 +410,35 @@ const AdminDashboard = (props: any) => {
                 </div>
 
                 <div className="pt-8 border-t border-gray-200">
-                  <p className="text-[8px] md:text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest italic">Device Authorization</p>
+                  <p className="text-[8px] md:text-[10px] font-black uppercase text-gray-400 mb-6 tracking-widest italic">Background Authorization</p>
                   <button 
                     onClick={() => {
-                      // Request Permission + Unlock AudioContext (User Gesture)
                       Notification.requestPermission().then(perm => {
                         const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
                         if (AudioCtx) {
                           const ctx = new AudioCtx();
-                          ctx.resume().then(() => {
-                            window.alert(`System Warm-up Complete. Status: ${perm}`);
-                          });
+                          ctx.resume().then(() => alert(`Warm-up Success. Status: ${perm}`));
                         }
                       });
                     }} 
-                    className="w-full bg-black text-white px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl"
+                    className="w-full bg-black text-white px-6 py-4 rounded-3xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-xl"
                   >
-                    Authorize Notifications & Audio
+                    Activate Alerts & Background Mode
                   </button>
                 </div>
               </div>
             </div>
 
             <div className="pt-10 border-t border-gray-100">
-              <p className="text-[10px] md:text-[12px] font-black text-gray-400 mb-8 uppercase tracking-widest italic">Security Configuration</p>
+              <p className="text-[10px] md:text-[12px] font-black text-gray-400 mb-8 uppercase tracking-widest italic">Console Security</p>
               <div className="flex gap-4">
                 <input 
                   value={props.systemPassword} 
                   onChange={e => props.setSystemPassword(e.target.value)} 
-                  className="border-2 border-gray-50 p-5 rounded-2xl md:rounded-3xl w-full text-xs font-bold bg-gray-50 outline-none focus:border-blue-500 shadow-inner" 
+                  className="border-2 border-gray-50 p-5 rounded-3xl w-full text-xs font-bold bg-gray-50 outline-none focus:border-blue-500 shadow-inner" 
                   placeholder="Master Passkey"
                 />
-                <button onClick={() => { localStorage.setItem('systemPassword', props.systemPassword); window.alert('Security Hash Updated.'); }} className="bg-black text-white px-10 rounded-2xl md:rounded-3xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition shadow-lg">Save</button>
+                <button onClick={() => { localStorage.setItem('systemPassword', props.systemPassword); window.alert('Security Hash Updated.'); }} className="bg-black text-white px-10 rounded-3xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition shadow-lg">Save</button>
               </div>
             </div>
           </div>
@@ -421,7 +451,7 @@ const AdminDashboard = (props: any) => {
           { id: 'overview', icon: 'fa-chart-line', label: 'Dash' },
           { id: 'orders', icon: 'fa-shopping-cart', label: 'Feed' },
           { id: 'inventory', icon: 'fa-box', label: 'Stock' },
-          { id: 'sys', icon: 'fa-cog', label: 'Config' }
+          { id: 'sys', icon: 'fa-cog', label: 'System' }
         ].map(tab => (
           <button 
             key={tab.id}
@@ -436,9 +466,9 @@ const AdminDashboard = (props: any) => {
         ))}
       </nav>
 
-      {/* MODAL: Order Details */}
+      {/* MODAL: Record View */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[90] flex items-center justify-center p-0 md:p-6 animate-fadeIn">
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[150] flex items-center justify-center p-0 md:p-6 animate-fadeIn">
           <div className="bg-white p-6 md:p-14 w-full h-full md:h-auto md:max-w-3xl md:rounded-[4rem] shadow-2xl relative overflow-y-auto custom-scrollbar">
             <button onClick={() => setSelectedOrder(null)} className="absolute top-8 right-8 text-gray-400 hover:text-black text-2xl transition"><i className="fas fa-times"></i></button>
             <div className="flex items-center space-x-6 mb-12">
@@ -448,21 +478,21 @@ const AdminDashboard = (props: any) => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
               <div className="space-y-8">
-                <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-300 border-b pb-3 italic">Client Dossier</h4>
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-300 border-b pb-3 italic">Client Profile</h4>
                 <div>
-                  <p className="text-[8px] md:text-[9px] font-black uppercase text-gray-400 mb-1.5 tracking-widest">Legal Name</p>
+                  <p className="text-[8px] md:text-[9px] font-black uppercase text-gray-400 mb-1.5 tracking-widest">Full Name</p>
                   <p className="font-bold text-lg md:text-xl tracking-tight text-zinc-800">{selectedOrder.customer.name}</p>
                 </div>
                 <div>
-                  <p className="text-[8px] md:text-[9px] font-black uppercase text-gray-400 mb-1.5 tracking-widest">Mobile Contact</p>
+                  <p className="text-[8px] md:text-[9px] font-black uppercase text-gray-400 mb-1.5 tracking-widest">Mobile Point</p>
                   <p className="font-black text-lg md:text-xl text-blue-600 italic underline underline-offset-8 decoration-blue-100">{selectedOrder.customer.phone}</p>
                 </div>
                 <div>
-                  <p className="text-[8px] md:text-[9px] font-black uppercase text-gray-400 mb-1.5 tracking-widest">Fulfillment Point</p>
+                  <p className="text-[8px] md:text-[9px] font-black uppercase text-gray-400 mb-1.5 tracking-widest">Destination</p>
                   <p className="font-bold text-sm leading-relaxed text-gray-600 italic">{selectedOrder.customer.address}, {selectedOrder.customer.city}</p>
                 </div>
               </div>
-              <div className="bg-zinc-50 p-8 rounded-[2.5rem] md:rounded-[4rem] border border-zinc-100 shadow-inner">
+              <div className="bg-zinc-50 p-8 rounded-[3rem] border border-zinc-100 shadow-inner">
                 <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-200 pb-3 mb-8">Order Manifest</h4>
                 <div className="space-y-5">
                   {selectedOrder.items.map((itm, i) => (
@@ -482,8 +512,8 @@ const AdminDashboard = (props: any) => {
             
             <div className="flex flex-col md:flex-row justify-between items-center pt-10 border-t border-gray-100 gap-10">
               <div className="flex items-center space-x-5 w-full md:w-auto">
-                <a href={`tel:${selectedOrder.customer.phone}`} className="bg-green-500 text-white w-14 h-14 rounded-[1.8rem] flex items-center justify-center hover:bg-green-600 transition shadow-xl shadow-green-100 flex-shrink-0 active:scale-90"><i className="fas fa-phone text-lg"></i></a>
-                <p className="text-[10px] font-black uppercase tracking-widest italic text-zinc-400">Direct Comms Hub</p>
+                <a href={`tel:${selectedOrder.customer.phone}`} className="bg-green-500 text-white w-14 h-14 rounded-[2rem] flex items-center justify-center hover:bg-green-600 transition shadow-xl shadow-green-100 flex-shrink-0 active:scale-90"><i className="fas fa-phone text-lg"></i></a>
+                <p className="text-[10px] font-black uppercase tracking-widest italic text-zinc-400">Direct Comms</p>
               </div>
               <div className="text-right w-full md:w-auto">
                 <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1.5 italic">Total Settlement</p>
