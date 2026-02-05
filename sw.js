@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-v40-ultimate-live';
+const CACHE_NAME = 'itx-v50-live-broadcast';
 const ASSETS = [
   '/',
   '/index.html',
@@ -35,13 +35,14 @@ self.addEventListener('message', (event) => {
       body: body,
       icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
       badge: 'https://images.unsplash.com/photo-1614164185128-w=96&h=96&auto=format&fit=crop',
-      vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40],
+      vibrate: [200, 100, 200, 100, 500, 100, 200], // Native-like vibration pattern
       tag: `order-${orderId}`,
       renotify: true,
-      requireInteraction: true, // Crucial: Keeps the notification on screen until cleared
+      requireInteraction: true, // Keeps notification on lock screen until user clears it
+      priority: 2, // High priority
       data: { url: '/admin.html' },
       actions: [
-        { action: 'open', title: '🚀 View Order' }
+        { action: 'open', title: '🚀 VIEW ORDER' }
       ]
     };
     event.waitUntil(self.registration.showNotification(title, options));
@@ -54,14 +55,14 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If the dashboard is already open, focus it
+      // Focus if tab exists
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
         if (client.url === urlToOpen && 'focus' in client) {
           return client.focus();
         }
       }
-      // Otherwise open a new tab
+      // Or open new
       if (clients.openWindow) return clients.openWindow(urlToOpen);
     })
   );
