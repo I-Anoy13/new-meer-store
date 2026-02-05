@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-v31-live-engine';
+const CACHE_NAME = 'itx-v40-ultimate-live';
 const ASSETS = [
   '/',
   '/index.html',
@@ -27,7 +27,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Listener for messages from the main thread to trigger system notifications
+// Listener for messages from the Admin UI to trigger system-level alerts
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
     const { title, body, orderId } = event.data;
@@ -38,10 +38,10 @@ self.addEventListener('message', (event) => {
       vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40],
       tag: `order-${orderId}`,
       renotify: true,
-      requireInteraction: true, // Keeps notification visible until user interacts
+      requireInteraction: true, // Crucial: Keeps the notification on screen until cleared
       data: { url: '/admin.html' },
       actions: [
-        { action: 'open', title: 'View Order' }
+        { action: 'open', title: '🚀 View Order' }
       ]
     };
     event.waitUntil(self.registration.showNotification(title, options));
@@ -54,12 +54,14 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // If the dashboard is already open, focus it
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
         if (client.url === urlToOpen && 'focus' in client) {
           return client.focus();
         }
       }
+      // Otherwise open a new tab
       if (clients.openWindow) return clients.openWindow(urlToOpen);
     })
   );
