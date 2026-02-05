@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'itx-v25-infinity';
+const CACHE_NAME = 'itx-v30-live';
 const ASSETS = [
   '/',
   '/index.html',
@@ -29,21 +29,24 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Handle push notifications or manual triggers
-self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : {};
-  const title = data.title || 'New Order Received';
-  const options = {
-    body: data.body || 'Open the dashboard to view details.',
-    icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-    badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-    vibrate: [200, 100, 200],
-    data: { url: '/admin.html' },
-    actions: [
-      { action: 'open', title: 'View Dashboard' }
-    ]
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
+// Listener for messages from the main thread to trigger system notifications
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
+    const { title, body, orderId } = event.data;
+    const options = {
+      body: body,
+      icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
+      badge: 'https://images.unsplash.com/photo-1614164185128-w=96&h=96&auto=format&fit=crop',
+      vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40, 450, 110, 200, 110, 170, 40],
+      tag: `order-${orderId}`,
+      renotify: true,
+      data: { url: '/admin.html' },
+      actions: [
+        { action: 'open', title: 'Open Dashboard' }
+      ]
+    };
+    event.waitUntil(self.registration.showNotification(title, options));
+  }
 });
 
 self.addEventListener('notificationclick', (event) => {
