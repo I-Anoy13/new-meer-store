@@ -6,47 +6,37 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 let channel = null;
-let reconnectInterval = null;
 
 function setupBackgroundListener() {
-  if (channel) {
-    channel.unsubscribe();
-  }
+  if (channel) channel.unsubscribe();
 
-  channel = supabase.channel('itx-immortal-sw-v50')
+  channel = supabase.channel('itx-immortal-sw-final')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
       
       const notificationOptions = {
         body: `New Order: Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
         icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-        vibrate: [500, 100, 500],
-        tag: 'order-' + (order.id || Date.now()),
+        badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
+        vibrate: [200, 100, 200, 100, 400],
+        tag: 'order-alert-' + (order.order_id || order.id),
         requireInteraction: true,
         data: { url: '/admin' }
       };
 
-      self.registration.showNotification('🚨 ITX ORDER ALERT', notificationOptions);
+      self.registration.showNotification('🚨 ITX ORDER RECEIVED', notificationOptions);
 
-      self.clients.matchAll({ type: 'window' }).then(clients => {
+      // Notify all open tabs
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
         clients.forEach(client => {
           client.postMessage({ type: 'NEW_ORDER_DETECTED', order: order });
         });
       });
     })
     .subscribe((status) => {
-      if (status !== 'SUBSCRIBED') {
-        // Force reconnect logic
-        if (!reconnectInterval) {
-          reconnectInterval = setInterval(() => {
-            setupBackgroundListener();
-          }, 10000);
-        }
-      } else {
-        if (reconnectInterval) {
-          clearInterval(reconnectInterval);
-          reconnectInterval = null;
-        }
+      console.log('SW Supabase Status:', status);
+      if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+        setTimeout(setupBackgroundListener, 10000);
       }
     });
 }
