@@ -89,11 +89,11 @@ const AdminApp: React.FC = () => {
     setRawOrders(prev => [newOrder, ...prev]);
   }, []);
 
-  // HYPER-SYNC ENGINE: Catch broadcast signals for instant UI updates
+  // HYPER-SYNC ENGINE: Catch broadcast signals from the main site
   useEffect(() => {
     if (user?.role !== UserRole.ADMIN) return;
 
-    const channel = supabase.channel('itx_hyper_sync')
+    const channel = supabase.channel('itx_master_link')
       .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
         console.log("ADMIN: Instant UI Pulse Received.");
         addRealtimeOrder(payload.payload);
@@ -137,7 +137,7 @@ const AdminApp: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center animate-pulse">
           <div className="w-12 h-12 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase text-white tracking-widest">Priming Terminal...</p>
+          <p className="text-[10px] font-black uppercase text-white tracking-widest">Master Terminal Active...</p>
         </div>
       </div>
     );

@@ -30,13 +30,13 @@ const MainLayout: React.FC<{
     {user?.role === UserRole.ADMIN && (
       <div className="fixed top-20 left-6 z-[1000] flex items-center space-x-2 bg-white/90 backdrop-blur shadow-sm border border-gray-100 px-3 py-1.5 rounded-full scale-90 md:scale-100 origin-left">
         <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">{isLive ? 'Zero-Latency Link Active' : 'Connecting...'}</span>
+        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">{isLive ? 'Master Link Active' : 'Connecting...'}</span>
       </div>
     )}
 
     {isSyncing && (
       <div className="fixed top-20 right-6 z-[1000] animate-pulse">
-        <div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg italic">Instant Syncing...</div>
+        <div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg italic">Processing...</div>
       </div>
     )}
     <main className="flex-grow">{children}</main>
@@ -64,34 +64,34 @@ const AppContent: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const audioContextRef = useRef<AudioContext | null>(null);
   const channelRef = useRef<any>(null);
+  const broadcastChannelRef = useRef<any>(null);
   const processedOrders = useRef<Set<string>>(new Set());
 
-  // GLOBAL SPEED ENGINE: Handles both high-speed broadcast and reliable DB changes
+  // PRE-WARM BROADCAST CHANNEL (Used for sending pulses)
+  useEffect(() => {
+    const bc = supabase.channel('itx_master_link');
+    bc.subscribe();
+    broadcastChannelRef.current = bc;
+    return () => { supabase.removeChannel(bc); };
+  }, []);
+
+  // GLOBAL ADMIN MONITOR: Listens for incoming pulses and DB changes
   const setupGlobalListener = useCallback(() => {
     if (user?.role !== UserRole.ADMIN) return;
-
     if (channelRef.current) supabase.removeChannel(channelRef.current);
 
-    console.log("ENGINE: Initializing Zero-Latency Global Watcher...");
-    const channel = supabase.channel('itx_hyper_sync')
-      // 1. FAST PATH: Direct Broadcast (Instant, skips DB wait)
+    const channel = supabase.channel('itx_master_link')
       .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
         const orderId = payload.payload.order_id;
         if (processedOrders.current.has(orderId)) return;
         processedOrders.current.add(orderId);
-        
-        console.log("ENGINE: High-Speed Signal Captured!", payload.payload);
         triggerInstantAlert(payload.payload);
       })
-      // 2. RELIABLE PATH: Postgres Changes (Ensures nothing is missed)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
         const orderId = payload.new.order_id || payload.new.id;
         if (processedOrders.current.has(orderId)) return;
         processedOrders.current.add(orderId);
-        
-        console.log("ENGINE: DB-Replicated Signal Captured.");
         triggerInstantAlert(payload.new);
       })
       .subscribe((status) => {
@@ -102,7 +102,6 @@ const AppContent: React.FC = () => {
   }, [user]);
 
   const triggerInstantAlert = (order: any) => {
-    // Sound Alert
     try {
       const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
       const osc = ctx.createOscillator();
@@ -117,12 +116,11 @@ const AppContent: React.FC = () => {
       osc.start(); osc.stop(ctx.currentTime + 2.5);
     } catch {}
 
-    // OS Notification
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: 'TRIGGER_NOTIFICATION',
-        title: '🔥 INSTANT ORDER RECEIVED!',
-        body: `Total: Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
+        title: '🚨 NEW ORDER!',
+        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
         orderId: order.order_id || order.id
       });
     }
@@ -133,7 +131,6 @@ const AppContent: React.FC = () => {
     const handleReSync = () => {
       if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) {
         setupGlobalListener();
-        if (audioContextRef.current) audioContextRef.current.resume();
       }
     };
     window.addEventListener('focus', handleReSync);
@@ -200,31 +197,27 @@ const AppContent: React.FC = () => {
       total_pkr: Math.round(Number(order.total) || 0),
       status: 'pending',
       items: order.items,
-      source: 'Direct Web Pulse'
+      source: 'Direct Master Signal'
     };
 
     try {
-      // 1. SEND ZERO-LATENCY BROADCAST IMMEDIATELY
-      const pulseChannel = supabase.channel('itx_hyper_sync');
-      pulseChannel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await pulseChannel.send({
-            type: 'broadcast',
-            event: 'new_order_pulse',
-            payload: payload
-          });
-          console.log("PULSE: Direct Signal Sent.");
-        }
-      });
+      // 1. DISPATCH PULSE (Non-blocking)
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.send({
+          type: 'broadcast',
+          event: 'new_order_pulse',
+          payload: payload
+        }).catch(() => {}); // Fire and forget
+      }
 
-      // 2. INSERT INTO DATABASE (Reliable Path)
+      // 2. PRIMARY DB SAVE
       const { error } = await supabase.from('orders').insert([payload]);
       if (error) throw error;
       
       setCart([]);
       return true;
     } catch (e: any) {
-      console.error("Order Pulse Error:", e);
+      console.error("Order Transmission Error:", e);
       return false;
     } finally {
       setIsSyncing(false);
