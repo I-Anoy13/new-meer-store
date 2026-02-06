@@ -24,7 +24,7 @@ const AdminApp: React.FC = () => {
   const processedRef = useRef<Set<string>>(new Set());
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const keepAliveAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -42,36 +42,22 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_total_count', totalDbCount.toString());
   }, [rawOrders, statusOverrides, totalDbCount]);
 
-  // Request Notification Permissions explicitly
-  const requestNotifications = useCallback(async () => {
-    if (!("Notification" in window)) return false;
-    if (Notification.permission === "granted") return true;
-    const permission = await Notification.requestPermission();
-    return permission === "granted";
-  }, []);
-
-  // Use a silent video loop to keep the browser process alive when minimized
   const setupPersistence = useCallback(() => {
-    if (videoRef.current) return;
+    // Standard iOS persistence hack: Silent looping audio
+    if (!keepAliveAudioRef.current) {
+      const audio = new Audio();
+      // Very short silent base64 wav loop
+      audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+      audio.loop = true;
+      audio.muted = false; // Must be false to count as "active" audio on some iOS versions
+      audio.volume = 0.01; // Effectively silent
+      keepAliveAudioRef.current = audio;
+    }
     
-    const video = document.createElement('video');
-    video.muted = true;
-    video.playsInline = true;
-    video.loop = true;
-    video.style.position = 'fixed';
-    video.style.opacity = '0';
-    video.style.pointerEvents = 'none';
-    video.style.width = '1px';
-    video.style.height = '1px';
-    
-    // Tiny silent video (1 frame) to trick browser into keeping tab active
-    video.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQyAAAACHV1aWRreG1sAAAAAGFiaWxpdHkgeG1sbm...'; // This is a placeholder, any small valid video file works
-    
-    // Better approach: use a small video blob or just play the audio context
-    document.body.appendChild(video);
-    videoRef.current = video;
-    
-    video.play().catch(e => console.log("Persistence video needs interaction"));
+    keepAliveAudioRef.current.play().catch(() => {
+      console.log("Audio block: Needs user gesture");
+      setAudioReady(false);
+    });
   }, []);
 
   const initAudio = useCallback(async () => {
@@ -82,8 +68,12 @@ const AdminApp: React.FC = () => {
       if (audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
       }
+      
       setupPersistence();
-      await requestNotifications();
+      
+      if ("Notification" in window && Notification.permission !== "granted") {
+        await Notification.requestPermission();
+      }
       
       if (navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'START_BACKGROUND_SYNC' });
@@ -92,7 +82,7 @@ const AdminApp: React.FC = () => {
     } catch (e) {
       setAudioReady(false);
     }
-  }, [setupPersistence, requestNotifications]);
+  }, [setupPersistence]);
 
   const triggerAlert = useCallback(async (order?: any) => {
     try {
@@ -101,28 +91,33 @@ const AdminApp: React.FC = () => {
       if (ctx.state === 'suspended') await ctx.resume();
 
       const now = ctx.currentTime;
-      [523, 659, 783, 1046].forEach((freq, i) => {
+      // High-pitch alert sequence
+      [880, 1108, 1318, 1760].forEach((freq, i) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(freq, now + (i * 0.1));
-        g.gain.setValueAtTime(0, now + (i * 0.1));
-        g.gain.linearRampToValueAtTime(0.5, now + (i * 0.1) + 0.05);
-        g.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.1) + 2.0);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + (i * 0.15));
+        g.gain.setValueAtTime(0, now + (i * 0.15));
+        g.gain.linearRampToValueAtTime(0.6, now + (i * 0.15) + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.15) + 1.0);
         osc.connect(g);
         g.connect(ctx.destination);
-        osc.start(now + (i * 0.1));
-        osc.stop(now + (i * 0.1) + 2.0);
+        osc.start(now + (i * 0.15));
+        osc.stop(now + (i * 0.15) + 1.0);
       });
 
+      // UI Notifications (if permitted)
       if (order && Notification.permission === "granted") {
-        new Notification('🔥 NEW ORDER!', {
+        const notif = new Notification('🚨 ITX NEW ORDER!', {
           body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
-          icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop'
+          icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
+          tag: 'itx-alert',
+          silent: false
         });
+        notif.onclick = () => window.focus();
       }
     } catch (e) {
-      console.warn("Alert failed", e);
+      console.warn("Alert trigger failed:", e);
     }
   }, []);
 
@@ -131,7 +126,11 @@ const AdminApp: React.FC = () => {
     if (processedRef.current.has(id)) return;
     processedRef.current.add(id);
     
-    setRawOrders(prev => [newOrder, ...prev]);
+    setRawOrders(prev => {
+      const isDuplicate = prev.some(o => String(o.order_id || o.id) === id);
+      if (isDuplicate) return prev;
+      return [newOrder, ...prev];
+    });
     setTotalDbCount(prev => prev + 1);
     setLastSyncTime(new Date());
     triggerAlert(newOrder);
@@ -150,28 +149,39 @@ const AdminApp: React.FC = () => {
         data.forEach(o => processedRef.current.add(String(o.order_id || o.id)));
         setLastSyncTime(new Date());
       }
-    } catch (e) {}
+    } catch (e) { console.error("Fetch Error:", e); }
   }, []);
 
   const setupMasterSync = useCallback(() => {
     if (user?.role !== UserRole.ADMIN) return;
-    if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
+    if (masterChannelRef.current) {
+      supabase.removeChannel(masterChannelRef.current);
+    }
 
-    const channel = supabase.channel('itx_master_v5')
+    const channel = supabase.channel('itx_terminal_v10')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
         addRealtimeOrder(payload.new);
       })
-      .subscribe(status => setIsLive(status === 'SUBSCRIBED'));
+      .subscribe(status => {
+        setIsLive(status === 'SUBSCRIBED');
+        if (status === 'SUBSCRIBED') setLastSyncTime(new Date());
+      });
 
     masterChannelRef.current = channel;
   }, [user, addRealtimeOrder]);
 
   const purgeDatabase = async () => {
-    if (!window.confirm("CRITICAL: Wipe ALL database records forever?")) return;
+    if (!window.confirm("⚠️ IRREVERSIBLE: Delete ALL orders from Database?")) return;
+    
     try {
-      // Deleting with a filter that matches all items reliably (created_at exists for all)
-      const { error } = await supabase.from('orders').delete().neq('customer_name', 'RESERVED_SYSTEM_KEY_NONE');
-      if (error) throw error;
+      // Use a filter that is guaranteed to match all rows in Supabase
+      const { error } = await supabase.from('orders').delete().gt('id', -1);
+      
+      if (error) {
+        // Fallback for non-integer ID tables
+        const { error: error2 } = await supabase.from('orders').delete().neq('customer_name', '!!!EMPTY_FILTER_HACK!!!');
+        if (error2) throw error2;
+      }
       
       setRawOrders([]);
       setTotalDbCount(0);
@@ -179,16 +189,16 @@ const AdminApp: React.FC = () => {
       localStorage.removeItem('itx_cached_orders');
       localStorage.removeItem('itx_total_count');
       setLastSyncTime(new Date());
-      window.alert("Success: Database Wiped.");
+      window.alert("Database Wiped Successfully.");
     } catch (e) {
-      console.error(e);
-      window.alert("Error: Database wipe failed. Check connection.");
+      console.error("Purge Error:", e);
+      window.alert("Failed to wipe database. Check Supabase permissions.");
     }
   };
 
   useEffect(() => {
     const handleWorkerMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'NEW_ORDER_DETECTED') {
+      if (event.data?.type === 'NEW_ORDER_DETECTED') {
         addRealtimeOrder(event.data.order);
       }
     };
@@ -198,22 +208,23 @@ const AdminApp: React.FC = () => {
 
   useEffect(() => {
     setupMasterSync();
-    const recover = () => {
+    const handleReactivation = () => {
       if (document.visibilityState === 'visible') {
-        initAudio();
         setupMasterSync();
         fetchOrders();
       }
     };
-    window.addEventListener('focus', recover);
-    document.addEventListener('visibilitychange', recover);
+    window.addEventListener('focus', handleReactivation);
+    document.addEventListener('visibilitychange', handleReactivation);
     return () => {
-      window.removeEventListener('focus', recover);
-      document.removeEventListener('visibilitychange', recover);
+      window.removeEventListener('focus', handleReactivation);
+      document.removeEventListener('visibilitychange', handleReactivation);
     };
-  }, [setupMasterSync, fetchOrders, initAudio]);
+  }, [setupMasterSync, fetchOrders]);
 
-  useEffect(() => { fetchOrders().finally(() => setLoading(false)); }, [fetchOrders]);
+  useEffect(() => {
+    fetchOrders().finally(() => setLoading(false));
+  }, [fetchOrders]);
 
   const formattedOrders = useMemo((): Order[] => {
     return rawOrders.map(o => ({
@@ -226,7 +237,12 @@ const AdminApp: React.FC = () => {
     }));
   }, [rawOrders, statusOverrides]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-black"><div className="w-8 h-8 border-2 border-white/10 border-t-white rounded-full animate-spin"></div></div>;
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a]">
+      <div className="w-10 h-10 border-2 border-white/5 border-t-white rounded-full animate-spin mb-4"></div>
+      <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] italic">System Booting...</p>
+    </div>
+  );
 
   return (
     <HashRouter>
@@ -243,7 +259,7 @@ const AdminApp: React.FC = () => {
               const u: User = { id: 'master', email: 'admin@itx.com', role, name: 'Master' };
               setUser(u);
               localStorage.setItem('itx_user_session', JSON.stringify(u));
-              initAudio();
+              initAudio(); // Initialize audio loop on login (user gesture)
             }}
             logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }}
             systemPassword={localStorage.getItem('systemPassword') || 'admin123'}
@@ -254,7 +270,7 @@ const AdminApp: React.FC = () => {
               await supabase.from('orders').update({ status: status.toLowerCase() }).match({ order_id: id });
               setStatusOverrides(prev => ({ ...prev, [id]: status }));
             }}
-            testAlert={() => triggerAlert({ total: 0, customer_name: 'SYSTEM TEST' })}
+            testAlert={() => triggerAlert({ total: 0, customer_name: 'TEST ALERT' })}
           />
         } />
       </Routes>
