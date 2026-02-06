@@ -28,6 +28,7 @@ const AdminApp: React.FC = () => {
   const processedRef = useRef<Set<string>>(new Set());
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const heartbeatIntervalRef = useRef<number | null>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -50,17 +51,35 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_total_count', totalDbCount.toString());
   }, [products, rawOrders, statusOverrides, totalDbCount]);
 
+  // Audio Engine with Persistence Heartbeat
   const initAudio = useCallback(async () => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
+      
       if (audioContextRef.current.state === 'suspended') {
         await audioContextRef.current.resume();
       }
+
+      // Start a silent heartbeat to keep the engine from sleeping
+      if (!heartbeatIntervalRef.current) {
+        heartbeatIntervalRef.current = window.setInterval(() => {
+          if (audioContextRef.current?.state === 'running') {
+            const osc = audioContextRef.current.createOscillator();
+            const g = audioContextRef.current.createGain();
+            g.gain.value = 0.000001; // Silent but registered
+            osc.connect(g);
+            g.connect(audioContextRef.current.destination);
+            osc.start();
+            osc.stop(audioContextRef.current.currentTime + 0.1);
+          }
+        }, 25000);
+      }
+
       setAudioReady(audioContextRef.current.state === 'running');
     } catch (e) {
-      console.warn("Audio init failed:", e);
+      console.warn("Audio Context setup failed:", e);
       setAudioReady(false);
     }
   }, []);
@@ -68,89 +87,52 @@ const AdminApp: React.FC = () => {
   const triggerInstantAlert = useCallback(async (order: any) => {
     if (user?.role !== UserRole.ADMIN) return;
 
-    // Pulse Sound with aggressive resumption
     try {
       const ctx = audioContextRef.current || new (window.AudioContext || (window as any).webkitAudioContext)();
       if (!audioContextRef.current) audioContextRef.current = ctx;
       
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
+      if (ctx.state === 'suspended') await ctx.resume();
 
-      const playSiren = () => {
+      const playLoudAlert = () => {
         const now = ctx.currentTime;
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        
-        osc.type = 'square';
-        // Double-tone alert (siren effect)
-        osc.frequency.setValueAtTime(880, now);
-        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
-        osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
-        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
-        
-        g.gain.setValueAtTime(0, now);
-        g.gain.linearRampToValueAtTime(0.5, now + 0.05);
-        g.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
-        
-        osc.connect(g);
-        g.connect(ctx.destination);
-        
-        osc.start(now);
-        osc.stop(now + 1.5);
+        // Two oscillators for a richer, more piercing sound
+        [880, 1100].forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = idx === 0 ? 'square' : 'sawtooth';
+          osc.frequency.setValueAtTime(freq, now);
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + 0.2);
+          osc.frequency.exponentialRampToValueAtTime(freq, now + 0.4);
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + 0.6);
+          
+          g.gain.setValueAtTime(0, now);
+          g.gain.linearRampToValueAtTime(0.6, now + 0.05);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+          
+          osc.connect(g);
+          g.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 2.0);
+        });
       };
 
-      playSiren();
+      playLoudAlert();
       setAudioReady(true);
     } catch (e) {
       setAudioReady(false);
-      console.error("Audio Alert Blocked:", e);
+      console.error("Alert failed:", e);
     }
 
-    // PWA Notification & Vibration
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: 'TRIGGER_NOTIFICATION',
         title: '🔥 NEW ORDER RECEIVED!',
-        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
+        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name} from ${order.customer_city || 'City'}`,
         orderId: order.order_id || order.id
       });
     }
-    
-    if (navigator.vibrate) {
-      navigator.vibrate([500, 200, 500]);
-    }
+    if (navigator.vibrate) navigator.vibrate([1000, 500, 1000]);
   }, [user]);
-
-  const normalizeOrder = (row: any): Order | null => {
-    if (!row) return null;
-    const orderId = row.order_id || (row.id ? `ORD-${row.id}` : 'ORD-UNKNOWN');
-    const dbStatusRaw = String(row.status || 'Pending').toLowerCase();
-    const capitalized = dbStatusRaw.charAt(0).toUpperCase() + dbStatusRaw.slice(1);
-    const dbStatus = (capitalized || 'Pending') as Order['status'];
-    const finalStatus = statusOverrides[orderId] || dbStatus;
-    const totalAmount = row.total_pkr ?? row.subtotal_pkr ?? row.total ?? 0;
-
-    return {
-      id: orderId,
-      dbId: row.id ? Number(row.id) : undefined,
-      items: Array.isArray(row.items) ? row.items : [],
-      total: Number(totalAmount),
-      status: finalStatus,
-      customer: {
-        name: row.customer_name || 'Anonymous',
-        email: '',
-        phone: row.customer_phone || '',
-        address: row.customer_address || '',
-        city: row.customer_city || ''
-      },
-      date: row.created_at || row.date || new Date().toISOString()
-    };
-  };
-
-  const orders = useMemo(() => {
-    return rawOrders.map(normalizeOrder).filter((o): o is Order => o !== null);
-  }, [rawOrders, statusOverrides]);
 
   const addRealtimeOrder = useCallback((newOrder: any) => {
     const id = newOrder.order_id || String(newOrder.id);
@@ -168,38 +150,25 @@ const AdminApp: React.FC = () => {
       supabase.removeChannel(masterChannelRef.current);
     }
 
-    const channel = supabase.channel('itx_master_link')
-      .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
-        addRealtimeOrder(payload.payload);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-        addRealtimeOrder(payload.new);
-      })
-      .subscribe((status) => {
-        setIsLive(status === 'SUBSCRIBED');
-      });
+    // High priority broadcast channel
+    const channel = supabase.channel('itx_master_link', {
+      config: { broadcast: { self: true, ack: true } }
+    })
+    .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
+      addRealtimeOrder(payload.payload);
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+      addRealtimeOrder(payload.new);
+    })
+    .subscribe((status) => {
+      setIsLive(status === 'SUBSCRIBED');
+    });
 
     masterChannelRef.current = channel;
   }, [user, addRealtimeOrder]);
 
-  useEffect(() => {
-    setupMasterSync();
-    const handleFocus = () => {
-      if (document.visibilityState === 'visible') {
-        setupMasterSync();
-        initAudio();
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
-    };
-  }, [setupMasterSync, initAudio]);
-
   const fetchOrders = useCallback(async () => {
     try {
-      // By default Supabase caps at 100. We explicitly set a high limit and use count.
       const { data, error, count } = await supabase.from('orders')
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
@@ -208,10 +177,49 @@ const AdminApp: React.FC = () => {
       if (!error && data) {
         setRawOrders(data);
         setTotalDbCount(count || data.length);
+        processedRef.current.clear();
         data.forEach(o => processedRef.current.add(o.order_id || String(o.id)));
       }
     } catch (e) { console.error(e); }
   }, []);
+
+  const purgeDatabase = async () => {
+    if (!window.confirm("CRITICAL: This will wipe ALL order history from the database. Proceed?")) return;
+    try {
+      const { error } = await supabase.from('orders').delete().neq('id', 0);
+      if (error) throw error;
+      setRawOrders([]);
+      setTotalDbCount(0);
+      processedRef.current.clear();
+      localStorage.removeItem('itx_cached_orders');
+      localStorage.removeItem('itx_total_count');
+      window.alert("Database Purged Successfully.");
+    } catch (e) {
+      window.alert("Purge Failed: " + (e as Error).message);
+    }
+  };
+
+  useEffect(() => {
+    setupMasterSync();
+    const handleReSync = () => {
+      if (document.visibilityState === 'visible') {
+        setupMasterSync();
+        fetchOrders(); // Refresh data on return
+        initAudio();   // Re-prime audio engine
+      }
+    };
+    window.addEventListener('focus', handleReSync);
+    window.addEventListener('online', handleReSync);
+    document.addEventListener('visibilitychange', handleReSync);
+    
+    return () => {
+      window.removeEventListener('focus', handleReSync);
+      window.removeEventListener('online', handleReSync);
+      document.removeEventListener('visibilitychange', handleReSync);
+      if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
+      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+    };
+  }, [setupMasterSync, fetchOrders, initAudio]);
 
   useEffect(() => {
     let mounted = true;
@@ -256,7 +264,14 @@ const AdminApp: React.FC = () => {
         <Route path="/*" element={
           <AdminDashboard 
             products={products} 
-            orders={orders} 
+            orders={rawOrders.map(o => ({
+              id: o.order_id || `ORD-${o.id}`,
+              items: Array.isArray(o.items) ? o.items : [],
+              total: Number(o.total_pkr || o.total || 0),
+              status: statusOverrides[o.order_id || `ORD-${o.id}`] || (o.status?.charAt(0).toUpperCase() + o.status?.slice(1)) || 'Pending',
+              customer: { name: o.customer_name, phone: o.customer_phone, city: o.customer_city, address: o.customer_address },
+              date: o.created_at
+            }))} 
             totalDbCount={totalDbCount}
             user={user} 
             isLive={isLive}
@@ -268,11 +283,11 @@ const AdminApp: React.FC = () => {
               initAudio();
             }}
             initAudio={initAudio}
-            testAlert={() => triggerInstantAlert({total: 0, customer_name: 'TEST ALERT', customer_city: 'SYSTEM'})}
+            testAlert={() => triggerInstantAlert({total: 0, customer_name: 'TEST', customer_city: 'SYSTEM'})}
+            purgeDatabase={purgeDatabase}
             systemPassword={systemPassword} 
             setSystemPassword={setSystemPassword}
             refreshData={fetchOrders}
-            addRealtimeOrder={addRealtimeOrder}
             updateStatusOverride={updateStatusOverride}
           />
         } />

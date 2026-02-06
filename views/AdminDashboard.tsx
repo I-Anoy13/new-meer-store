@@ -45,7 +45,6 @@ const AdminDashboard = (props: any) => {
       chartData.push({ name: mLabel, revenue: mOrders.reduce((sum: number, o: Order) => sum + o.total, 0) });
     }
     
-    // Explicitly use totalDbCount passed from App to reflect counts above 100
     return { revenue, pendingCount, deliveredCount, total: props.totalDbCount || 0, chartData };
   }, [props.orders, props.totalDbCount, timeRange]);
 
@@ -88,19 +87,21 @@ const AdminDashboard = (props: any) => {
             <div className="flex items-center gap-3 mt-2">
               <div className="flex items-center gap-1.5">
                 <div className={`w-2 h-2 rounded-full ${props.isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Socket</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+                  {props.isLive ? 'Connected' : 'Offline'}
+                </span>
               </div>
               <div 
-                className={`flex items-center gap-1.5 cursor-pointer px-2 py-0.5 rounded-full border ${props.audioReady ? 'bg-green-50 border-green-100 text-green-600' : 'bg-red-50 border-red-100 text-red-600 animate-pulse'}`}
+                className={`flex items-center gap-1.5 cursor-pointer px-2 py-0.5 rounded-full border transition-colors ${props.audioReady ? 'bg-green-50 border-green-100 text-green-600' : 'bg-red-50 border-red-100 text-red-600 animate-pulse'}`}
                 onClick={() => props.initAudio?.()}
               >
                 <i className={`fas ${props.audioReady ? 'fa-volume-up' : 'fa-volume-mute'} text-[9px]`}></i>
-                <span className="text-[9px] font-black uppercase tracking-widest">{props.audioReady ? 'Audio Active' : 'Audio Muted'}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest">{props.audioReady ? 'Ready' : 'Wake Audio'}</span>
               </div>
             </div>
           </div>
           <nav className="hidden lg:flex space-x-10 text-[11px] font-black uppercase tracking-widest">
-            {['overview', 'orders', 'inventory', 'sys'].map(t => (
+            {['overview', 'orders', 'sys'].map(t => (
               <button key={t} onClick={() => setActiveTab(t)} className={activeTab === t ? 'text-blue-600' : 'text-gray-400 hover:text-black transition'}>
                 {t}
               </button>
@@ -108,8 +109,8 @@ const AdminDashboard = (props: any) => {
           </nav>
         </div>
         <div className="flex items-center space-x-4">
-           <div className="hidden md:flex bg-zinc-900 text-white px-8 py-3.5 rounded-[1.8rem] text-[10px] font-black uppercase tracking-widest shadow-xl items-center gap-3 cursor-pointer" onClick={() => props.refreshData?.()}>
-             <i className="fas fa-sync-alt text-blue-400"></i> REFRESH FEED
+           <div className="hidden md:flex bg-zinc-900 text-white px-8 py-3.5 rounded-[1.8rem] text-[10px] font-black uppercase tracking-widest shadow-xl items-center gap-3 cursor-pointer hover:bg-black transition" onClick={() => props.refreshData?.()}>
+             <i className="fas fa-sync-alt text-blue-400"></i> REFRESH
           </div>
         </div>
       </header>
@@ -117,22 +118,12 @@ const AdminDashboard = (props: any) => {
       <main className="p-6 md:p-12 max-w-7xl mx-auto space-y-12">
         {activeTab === 'overview' && (
           <div className="animate-fadeIn space-y-12">
-            <div className="flex justify-between items-center px-2">
-              <h3 className="font-black text-[10px] md:text-xs uppercase tracking-widest text-gray-400 italic">Financials</h3>
-              <div className="flex bg-gray-200/50 p-1 rounded-2xl border border-gray-200">
-                {['7days', '30days', '6months'].map(r => (
-                  <button key={r} onClick={() => setTimeRange(r)} className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${timeRange === r ? 'bg-white shadow-md text-blue-600' : 'text-gray-400'}`}>
-                    {r.replace('days', 'd').replace('months', 'm')}
-                  </button>
-                ))}
-              </div>
-            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-10">
               {[
                 { label: 'Revenue', val: `Rs. ${analytics.revenue.toLocaleString()}`, color: 'text-black' },
                 { label: 'Total Orders', val: analytics.total, color: 'text-black' },
                 { label: 'Active Pending', val: analytics.pendingCount, color: 'text-blue-600' },
-                { label: 'Success Rate', val: `${analytics.total ? Math.round((analytics.deliveredCount / (analytics.total || 1)) * 100) : 0}%`, color: 'text-green-600' }
+                { label: 'Delivery %', val: `${analytics.total ? Math.round((analytics.deliveredCount / (analytics.total || 1)) * 100) : 0}%`, color: 'text-green-600' }
               ].map((s, i) => (
                 <div key={i} className="bg-white border border-gray-200 p-8 md:p-10 rounded-[2.5rem] md:rounded-[3rem] shadow-sm hover:shadow-xl transition-all duration-500 group">
                   <p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 group-hover:text-blue-500 transition">{s.label}</p>
@@ -149,8 +140,9 @@ const AdminDashboard = (props: any) => {
               <h3 className="font-black text-[10px] md:text-xs uppercase tracking-widest text-gray-400 italic">Dispatch Feed ({props.orders.length})</h3>
             </div>
             {props.orders.length === 0 ? (
-              <div className="text-center py-20 bg-white rounded-[4rem] border border-dashed border-gray-200">
-                <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Waiting for incoming pulses...</p>
+              <div className="text-center py-32 bg-white rounded-[4rem] border border-dashed border-gray-200">
+                <i className="fas fa-box-open text-4xl text-gray-100 mb-6"></i>
+                <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Waiting for incoming signals...</p>
               </div>
             ) : (
               props.orders.map((o: Order) => (
@@ -189,7 +181,7 @@ const AdminDashboard = (props: any) => {
           <div className="max-w-3xl bg-white border border-gray-200 p-10 md:p-20 rounded-[4rem] md:rounded-[6rem] shadow-sm animate-fadeIn space-y-16 mx-auto">
              <div className="space-y-8">
                 <p className="text-[11px] font-black uppercase text-gray-400 tracking-widest italic border-b pb-4">Background Persistence Engine</p>
-                <div className="bg-gray-50 p-10 rounded-[3rem] border border-gray-100 space-y-8">
+                <div className="bg-gray-50 p-10 rounded-[3rem] border border-gray-100 space-y-10">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <button 
                       onClick={() => {
@@ -201,19 +193,26 @@ const AdminDashboard = (props: any) => {
                       <i className="fas fa-volume-up mr-2"></i> Test Siren Alert
                     </button>
                     <button 
-                      onClick={() => {
-                        Notification.requestPermission().then(perm => {
-                          window.alert(`Notification Permission: ${perm}`);
-                        });
-                      }}
-                      className="w-full bg-black text-white py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-2xl"
+                      onClick={() => props.refreshData?.()}
+                      className="w-full bg-black text-white py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-zinc-800 transition shadow-2xl"
                     >
-                      <i className="fas fa-bell mr-2"></i> Auth Notifications
+                      <i className="fas fa-sync mr-2"></i> Hard Sync Feed
                     </button>
                   </div>
+
+                  <div className="pt-10 border-t border-gray-200">
+                    <p className="text-[10px] font-black uppercase text-red-500 tracking-widest mb-4 italic">Danger Zone</p>
+                    <button 
+                      onClick={() => props.purgeDatabase?.()}
+                      className="w-full bg-red-50 text-red-600 border border-red-100 py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition shadow-sm"
+                    >
+                      <i className="fas fa-trash-alt mr-2"></i> Purge All Order Data
+                    </button>
+                  </div>
+
                   <p className="text-[10px] text-gray-400 text-center font-bold uppercase italic leading-relaxed">
-                    <i className="fas fa-exclamation-triangle mr-2 text-yellow-500"></i>
-                    Browsers force sound to be muted if you don't interact with the dashboard. If the "Socket" icon in the header is green but "Audio" is red, click it to enable instant sound alerts.
+                    <i className="fas fa-info-circle mr-2 text-blue-500"></i>
+                    Browsers kill background audio if not "waked". Use "Wake Audio" in the header or the test button above if alerts stop playing.
                   </p>
                 </div>
              </div>
