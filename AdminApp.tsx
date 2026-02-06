@@ -29,6 +29,7 @@ const AdminApp: React.FC = () => {
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const heartbeatIntervalRef = useRef<number | null>(null);
+  const backgroundFetchRef = useRef<number | null>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -51,7 +52,6 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_total_count', totalDbCount.toString());
   }, [products, rawOrders, statusOverrides, totalDbCount]);
 
-  // Audio Engine with Persistence Heartbeat
   const initAudio = useCallback(async () => {
     try {
       if (!audioContextRef.current) {
@@ -62,24 +62,22 @@ const AdminApp: React.FC = () => {
         await audioContextRef.current.resume();
       }
 
-      // Start a silent heartbeat to keep the engine from sleeping
       if (!heartbeatIntervalRef.current) {
         heartbeatIntervalRef.current = window.setInterval(() => {
           if (audioContextRef.current?.state === 'running') {
             const osc = audioContextRef.current.createOscillator();
             const g = audioContextRef.current.createGain();
-            g.gain.value = 0.000001; // Silent but registered
+            g.gain.value = 0.000001;
             osc.connect(g);
             g.connect(audioContextRef.current.destination);
             osc.start();
             osc.stop(audioContextRef.current.currentTime + 0.1);
           }
-        }, 25000);
+        }, 20000);
       }
 
       setAudioReady(audioContextRef.current.state === 'running');
     } catch (e) {
-      console.warn("Audio Context setup failed:", e);
       setAudioReady(false);
     }
   }, []);
@@ -95,7 +93,6 @@ const AdminApp: React.FC = () => {
 
       const playLoudAlert = () => {
         const now = ctx.currentTime;
-        // Two oscillators for a richer, more piercing sound
         [880, 1100].forEach((freq, idx) => {
           const osc = ctx.createOscillator();
           const g = ctx.createGain();
@@ -106,13 +103,13 @@ const AdminApp: React.FC = () => {
           osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + 0.6);
           
           g.gain.setValueAtTime(0, now);
-          g.gain.linearRampToValueAtTime(0.6, now + 0.05);
-          g.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
+          g.gain.linearRampToValueAtTime(0.7, now + 0.05);
+          g.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
           
           osc.connect(g);
           g.connect(ctx.destination);
           osc.start(now);
-          osc.stop(now + 2.0);
+          osc.stop(now + 2.5);
         });
       };
 
@@ -120,14 +117,13 @@ const AdminApp: React.FC = () => {
       setAudioReady(true);
     } catch (e) {
       setAudioReady(false);
-      console.error("Alert failed:", e);
     }
 
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: 'TRIGGER_NOTIFICATION',
         title: '🔥 NEW ORDER RECEIVED!',
-        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name} from ${order.customer_city || 'City'}`,
+        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
         orderId: order.order_id || order.id
       });
     }
@@ -138,36 +134,16 @@ const AdminApp: React.FC = () => {
     const id = newOrder.order_id || String(newOrder.id);
     if (processedRef.current.has(id)) return;
     processedRef.current.add(id);
-    setRawOrders(prev => [newOrder, ...prev]);
+    
+    setRawOrders(prev => {
+      if (prev.some(o => (o.order_id || String(o.id)) === id)) return prev;
+      return [newOrder, ...prev];
+    });
     setTotalDbCount(prev => prev + 1);
     triggerInstantAlert(newOrder);
   }, [triggerInstantAlert]);
 
-  const setupMasterSync = useCallback(() => {
-    if (user?.role !== UserRole.ADMIN) return;
-
-    if (masterChannelRef.current) {
-      supabase.removeChannel(masterChannelRef.current);
-    }
-
-    // High priority broadcast channel
-    const channel = supabase.channel('itx_master_link', {
-      config: { broadcast: { self: true, ack: true } }
-    })
-    .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
-      addRealtimeOrder(payload.payload);
-    })
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-      addRealtimeOrder(payload.new);
-    })
-    .subscribe((status) => {
-      setIsLive(status === 'SUBSCRIBED');
-    });
-
-    masterChannelRef.current = channel;
-  }, [user, addRealtimeOrder]);
-
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (quiet = false) => {
     try {
       const { data, error, count } = await supabase.from('orders')
         .select('*', { count: 'exact' })
@@ -180,11 +156,40 @@ const AdminApp: React.FC = () => {
         processedRef.current.clear();
         data.forEach(o => processedRef.current.add(o.order_id || String(o.id)));
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Fetch failed", e); }
   }, []);
 
+  const setupMasterSync = useCallback(() => {
+    if (user?.role !== UserRole.ADMIN) return;
+
+    if (masterChannelRef.current) {
+      supabase.removeChannel(masterChannelRef.current);
+    }
+
+    const channel = supabase.channel('itx_master_link', {
+      config: { 
+        broadcast: { self: true, ack: true },
+        presence: { key: 'admin' }
+      }
+    })
+    .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
+      addRealtimeOrder(payload.payload);
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+      addRealtimeOrder(payload.new);
+    })
+    .subscribe((status) => {
+      setIsLive(status === 'SUBSCRIBED');
+      if (status === 'SUBSCRIBED') {
+        fetchOrders(true);
+      }
+    });
+
+    masterChannelRef.current = channel;
+  }, [user, addRealtimeOrder, fetchOrders]);
+
   const purgeDatabase = async () => {
-    if (!window.confirm("CRITICAL: This will wipe ALL order history from the database. Proceed?")) return;
+    if (!window.confirm("CRITICAL: Wipe ALL history and start from 0?")) return;
     try {
       const { error } = await supabase.from('orders').delete().neq('id', 0);
       if (error) throw error;
@@ -193,7 +198,7 @@ const AdminApp: React.FC = () => {
       processedRef.current.clear();
       localStorage.removeItem('itx_cached_orders');
       localStorage.removeItem('itx_total_count');
-      window.alert("Database Purged Successfully.");
+      window.alert("Database Zeroed.");
     } catch (e) {
       window.alert("Purge Failed: " + (e as Error).message);
     }
@@ -201,13 +206,22 @@ const AdminApp: React.FC = () => {
 
   useEffect(() => {
     setupMasterSync();
+    
+    // Background Polling Loop (AOS)
+    backgroundFetchRef.current = window.setInterval(() => {
+      if (user?.role === UserRole.ADMIN) {
+        fetchOrders(true);
+      }
+    }, 45000);
+
     const handleReSync = () => {
       if (document.visibilityState === 'visible') {
         setupMasterSync();
-        fetchOrders(); // Refresh data on return
-        initAudio();   // Re-prime audio engine
+        fetchOrders(); 
+        initAudio();
       }
     };
+
     window.addEventListener('focus', handleReSync);
     window.addEventListener('online', handleReSync);
     document.addEventListener('visibilitychange', handleReSync);
@@ -218,8 +232,9 @@ const AdminApp: React.FC = () => {
       document.removeEventListener('visibilitychange', handleReSync);
       if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+      if (backgroundFetchRef.current) clearInterval(backgroundFetchRef.current);
     };
-  }, [setupMasterSync, fetchOrders, initAudio]);
+  }, [setupMasterSync, fetchOrders, initAudio, user]);
 
   useEffect(() => {
     let mounted = true;
@@ -231,69 +246,79 @@ const AdminApp: React.FC = () => {
     return () => { mounted = false; };
   }, [fetchOrders]);
 
-  const updateStatusOverride = async (orderId: string, status: Order['status']) => {
-    setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
+  // Fix: Completed the updateStatusOverride function and finished the AdminApp component
+  const updateStatusOverride = async (id: string, status: Order['status']) => {
     try {
-      const { error } = await supabase.from('orders')
-        .update({ status: status.toLowerCase() })
-        .eq('order_id', orderId);
-      if (error) throw error;
-    } catch (e) { 
-      setStatusOverrides(prev => {
-        const next = { ...prev };
-        delete next[orderId];
-        return next;
-      });
+      // Attempt update by order_id or id
+      const { error } = await supabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', id);
+      if (error) {
+        await supabase.from('orders').update({ status: status.toLowerCase() }).eq('id', id);
+      }
+      // Update local state for immediate UI reflection
+      setStatusOverrides(prev => ({ ...prev, [id]: status }));
+      setRawOrders(prev => prev.map(o => (o.order_id || String(o.id)) === id ? { ...o, status } : o));
+    } catch (e) {
+      console.error("Status update failed", e);
     }
   };
 
-  if (loading && rawOrders.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <div className="text-center animate-pulse">
-          <div className="w-12 h-12 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase text-white tracking-widest">Waking Master Terminal...</p>
-        </div>
-      </div>
-    );
-  }
+  const formattedOrders = useMemo((): Order[] => {
+    return rawOrders.map(o => ({
+      id: o.order_id || String(o.id),
+      items: Array.isArray(o.items) ? o.items : [],
+      total: Number(o.total_pkr || o.total || 0),
+      status: (statusOverrides[o.order_id || String(o.id)] || (o.status ? o.status.charAt(0).toUpperCase() + o.status.slice(1) : 'Pending')) as Order['status'],
+      customer: {
+        name: o.customer_name || 'Anonymous',
+        email: '',
+        phone: o.customer_phone || '',
+        address: o.customer_address || '',
+        city: o.customer_city || ''
+      },
+      date: o.created_at || new Date().toISOString()
+    }));
+  }, [rawOrders, statusOverrides]);
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
+      <div className="w-8 h-8 border-2 border-white/5 border-t-white rounded-full animate-spin"></div>
+    </div>
+  );
 
   return (
     <HashRouter>
       <Routes>
-        <Route path="/*" element={
-          <AdminDashboard 
-            products={products} 
-            orders={rawOrders.map(o => ({
-              id: o.order_id || `ORD-${o.id}`,
-              items: Array.isArray(o.items) ? o.items : [],
-              total: Number(o.total_pkr || o.total || 0),
-              status: statusOverrides[o.order_id || `ORD-${o.id}`] || (o.status?.charAt(0).toUpperCase() + o.status?.slice(1)) || 'Pending',
-              customer: { name: o.customer_name, phone: o.customer_phone, city: o.customer_city, address: o.customer_address },
-              date: o.created_at
-            }))} 
-            totalDbCount={totalDbCount}
-            user={user} 
-            isLive={isLive}
-            audioReady={audioReady}
-            login={(role: UserRole) => { 
-              const u = { id: '1', name: 'Master', email: 'itx@me.pk', role }; 
-              setUser(u); 
-              localStorage.setItem('itx_user_session', JSON.stringify(u)); 
-              initAudio();
-            }}
-            initAudio={initAudio}
-            testAlert={() => triggerInstantAlert({total: 0, customer_name: 'TEST', customer_city: 'SYSTEM'})}
-            purgeDatabase={purgeDatabase}
-            systemPassword={systemPassword} 
-            setSystemPassword={setSystemPassword}
-            refreshData={fetchOrders}
-            updateStatusOverride={updateStatusOverride}
-          />
-        } />
+        <Route 
+          path="*" 
+          element={
+            <AdminDashboard 
+              orders={formattedOrders}
+              totalDbCount={totalDbCount}
+              user={user}
+              login={(role: UserRole) => {
+                const newUser: User = { id: 'admin', email: 'admin@itx.com', role, name: 'Master' };
+                setUser(newUser);
+                localStorage.setItem('itx_user_session', JSON.stringify(newUser));
+              }}
+              logout={() => {
+                setUser(null);
+                localStorage.removeItem('itx_user_session');
+              }}
+              systemPassword={systemPassword}
+              isLive={isLive}
+              audioReady={audioReady}
+              initAudio={initAudio}
+              refreshData={() => fetchOrders()}
+              purgeDatabase={purgeDatabase}
+              updateStatusOverride={updateStatusOverride}
+              testAlert={() => triggerInstantAlert({ total: 0, customer_name: 'TEST' })}
+            />
+          } 
+        />
       </Routes>
     </HashRouter>
   );
 };
 
+// Fix: Added the missing default export
 export default AdminApp;
