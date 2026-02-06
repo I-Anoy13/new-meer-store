@@ -84,8 +84,10 @@ const AdminDashboard = (props: any) => {
           <div className="flex flex-col">
             <h2 className="text-sm md:text-lg font-black italic tracking-tighter uppercase leading-none">ITX MASTER</h2>
             <div className="flex items-center gap-2 mt-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Socket Connected</span>
+              <div className={`w-2 h-2 rounded-full ${props.isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+              <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">
+                {props.isLive ? 'Socket Live' : 'Connecting...'}
+              </span>
             </div>
           </div>
           <nav className="hidden lg:flex space-x-10 text-[11px] font-black uppercase tracking-widest">
@@ -98,7 +100,7 @@ const AdminDashboard = (props: any) => {
         </div>
         <div className="flex items-center space-x-4">
            <div className="hidden md:flex bg-zinc-900 text-white px-8 py-3.5 rounded-[1.8rem] text-[10px] font-black uppercase tracking-widest shadow-xl items-center gap-3">
-             <i className="fas fa-satellite-dish text-blue-400"></i> PRO MODE
+             <i className="fas fa-satellite-dish text-blue-400"></i> MASTER MODE
           </div>
         </div>
       </header>
@@ -137,34 +139,40 @@ const AdminDashboard = (props: any) => {
             <div className="flex justify-between items-center px-4">
               <h3 className="font-black text-[10px] md:text-xs uppercase tracking-widest text-gray-400 italic">Dispatch Feed</h3>
             </div>
-            {props.orders.map((o: Order) => (
-              <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white border border-gray-200 p-6 md:p-10 rounded-[2.5rem] md:rounded-[4rem] flex flex-col gap-6 md:flex-row md:justify-between md:items-center shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer group">
-                <div className="flex items-center space-x-6 md:space-x-10 min-w-0">
-                  <div className={`w-16 h-16 md:w-20 md:h-20 rounded-[1.5rem] md:rounded-[2.5rem] flex items-center justify-center font-black text-lg md:text-2xl border-4 transition-all duration-500 ${o.status === 'Delivered' ? 'bg-green-50 text-green-500 border-green-100' : 'bg-gray-50 border-gray-50 text-gray-400 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-500'}`}>
-                    {String(o.status).charAt(0)}
-                  </div>
-                  <div className="min-w-0 flex-grow">
-                    <p className="font-black text-lg md:text-2xl tracking-tighter italic">#{o.id}</p>
-                    <p className="text-[11px] md:text-[14px] font-bold text-gray-400 uppercase mt-2 tracking-wide truncate">{o.customer.name} • {o.customer.city}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between md:justify-end md:space-x-16 border-t md:border-t-0 pt-6 md:pt-0 border-gray-100">
-                  <p className="text-xl md:text-3xl font-black italic tracking-tighter">Rs. {o.total.toLocaleString()}</p>
-                  <select 
-                    value={o.status} 
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={e => props.updateStatusOverride?.(o.id, e.target.value as any)}
-                    className="border-2 border-gray-100 p-4 md:p-5 rounded-[1.5rem] md:rounded-[2rem] text-[10px] md:text-[12px] font-black uppercase bg-gray-50 focus:border-blue-600 outline-none transition shadow-sm"
-                  >
-                    <option value="Pending">Pending</option>
-                    <option value="Confirmed">Confirmed</option>
-                    <option value="Shipped">Shipped</option>
-                    <option value="Delivered">Delivered</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
+            {props.orders.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-[4rem] border border-dashed border-gray-200">
+                <p className="text-gray-400 font-black uppercase text-[10px] tracking-widest">Waiting for incoming pulses...</p>
               </div>
-            ))}
+            ) : (
+              props.orders.map((o: Order) => (
+                <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white border border-gray-200 p-6 md:p-10 rounded-[2.5rem] md:rounded-[4rem] flex flex-col gap-6 md:flex-row md:justify-between md:items-center shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer group">
+                  <div className="flex items-center space-x-6 md:space-x-10 min-w-0">
+                    <div className={`w-16 h-16 md:w-20 md:h-20 rounded-[1.5rem] md:rounded-[2.5rem] flex items-center justify-center font-black text-lg md:text-2xl border-4 transition-all duration-500 ${o.status === 'Delivered' ? 'bg-green-50 text-green-500 border-green-100' : 'bg-gray-50 border-gray-50 text-gray-400 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-500'}`}>
+                      {String(o.status).charAt(0)}
+                    </div>
+                    <div className="min-w-0 flex-grow">
+                      <p className="font-black text-lg md:text-2xl tracking-tighter italic">#{o.id}</p>
+                      <p className="text-[11px] md:text-[14px] font-bold text-gray-400 uppercase mt-2 tracking-wide truncate">{o.customer.name} • {o.customer.city}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between md:justify-end md:space-x-16 border-t md:border-t-0 pt-6 md:pt-0 border-gray-100">
+                    <p className="text-xl md:text-3xl font-black italic tracking-tighter">Rs. {o.total.toLocaleString()}</p>
+                    <select 
+                      value={o.status} 
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={e => props.updateStatusOverride?.(o.id, e.target.value as any)}
+                      className="border-2 border-gray-100 p-4 md:p-5 rounded-[1.5rem] md:rounded-[2rem] text-[10px] md:text-[12px] font-black uppercase bg-gray-50 focus:border-blue-600 outline-none transition shadow-sm"
+                    >
+                      <option value="Pending">Pending</option>
+                      <option value="Confirmed">Confirmed</option>
+                      <option value="Shipped">Shipped</option>
+                      <option value="Delivered">Delivered</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 
@@ -183,7 +191,7 @@ const AdminDashboard = (props: any) => {
                   >
                     Authorize Notifications
                   </button>
-                  <p className="text-[10px] text-gray-400 text-center font-bold uppercase italic">Important: To receive instant notifications, keep at least one tab of this shop open in your browser.</p>
+                  <p className="text-[10px] text-gray-400 text-center font-bold uppercase italic">Important: To receive instant notifications, keep this dashboard tab open in your browser.</p>
                 </div>
              </div>
           </div>

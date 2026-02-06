@@ -18,7 +18,9 @@ const AdminApp: React.FC = () => {
   });
   
   const [loading, setLoading] = useState(rawOrders.length === 0);
+  const [isLive, setIsLive] = useState(false);
   const processedRef = useRef<Set<string>>(new Set());
+  const masterChannelRef = useRef<any>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -39,6 +41,36 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_cached_orders', JSON.stringify(rawOrders));
     localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
   }, [products, rawOrders, statusOverrides]);
+
+  const triggerInstantAlert = useCallback((order: any) => {
+    // Only play sound if this is the active Admin console
+    if (user?.role !== UserRole.ADMIN) return;
+
+    try {
+      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(523, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1046, ctx.currentTime + 0.1);
+      g.gain.setValueAtTime(0, ctx.currentTime);
+      g.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
+      osc.connect(g); g.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 2.5);
+    } catch (e) {
+      console.warn("Audio Alert failed - interaction required.");
+    }
+
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'TRIGGER_NOTIFICATION',
+        title: '🚨 NEW ORDER RECEIVED!',
+        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
+        orderId: order.order_id || order.id
+      });
+    }
+  }, [user]);
 
   const normalizeOrder = (row: any): Order | null => {
     if (!row) return null;
@@ -70,6 +102,49 @@ const AdminApp: React.FC = () => {
     return rawOrders.map(normalizeOrder).filter((o): o is Order => o !== null);
   }, [rawOrders, statusOverrides]);
 
+  const addRealtimeOrder = useCallback((newOrder: any) => {
+    const id = newOrder.order_id || String(newOrder.id);
+    if (processedRef.current.has(id)) return;
+    processedRef.current.add(id);
+    setRawOrders(prev => [newOrder, ...prev]);
+    triggerInstantAlert(newOrder);
+  }, [triggerInstantAlert]);
+
+  const setupMasterSync = useCallback(() => {
+    if (user?.role !== UserRole.ADMIN) return;
+
+    if (masterChannelRef.current) {
+      supabase.removeChannel(masterChannelRef.current);
+    }
+
+    const channel = supabase.channel('itx_master_link')
+      .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
+        addRealtimeOrder(payload.payload);
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        addRealtimeOrder(payload.new);
+      })
+      .subscribe((status) => {
+        setIsLive(status === 'SUBSCRIBED');
+      });
+
+    masterChannelRef.current = channel;
+  }, [user, addRealtimeOrder]);
+
+  useEffect(() => {
+    setupMasterSync();
+    
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') setupMasterSync();
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
+    };
+  }, [setupMasterSync]);
+
   const fetchOrders = useCallback(async () => {
     try {
       const { data, error } = await supabase.from('orders')
@@ -81,30 +156,6 @@ const AdminApp: React.FC = () => {
       }
     } catch (e) { console.error(e); }
   }, []);
-
-  const addRealtimeOrder = useCallback((newOrder: any) => {
-    const id = newOrder.order_id || String(newOrder.id);
-    if (processedRef.current.has(id)) return;
-    processedRef.current.add(id);
-    setRawOrders(prev => [newOrder, ...prev]);
-  }, []);
-
-  // HYPER-SYNC ENGINE: Catch broadcast signals from the main site
-  useEffect(() => {
-    if (user?.role !== UserRole.ADMIN) return;
-
-    const channel = supabase.channel('itx_master_link')
-      .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
-        console.log("ADMIN: Instant UI Pulse Received.");
-        addRealtimeOrder(payload.payload);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-        addRealtimeOrder(payload.new);
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [user, addRealtimeOrder]);
 
   useEffect(() => {
     let mounted = true;
@@ -137,7 +188,7 @@ const AdminApp: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center animate-pulse">
           <div className="w-12 h-12 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase text-white tracking-widest">Master Terminal Active...</p>
+          <p className="text-[10px] font-black uppercase text-white tracking-widest">Waking Master Terminal...</p>
         </div>
       </div>
     );
@@ -151,6 +202,7 @@ const AdminApp: React.FC = () => {
             products={products} 
             orders={orders} 
             user={user} 
+            isLive={isLive}
             login={(role: UserRole) => { 
               const u = { id: '1', name: 'Master', email: 'itx@me.pk', role }; 
               setUser(u); 
