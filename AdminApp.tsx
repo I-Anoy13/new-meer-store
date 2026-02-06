@@ -5,8 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Product, Order, User, UserRole } from './types';
 import AdminDashboard from './views/AdminDashboard';
 
-// CRITICAL ISOLATION: Dedicated Admin Client with NO Session Persistence
-// This prevents the browser from sharing a socket with the customer site.
+// CRITICAL ISOLATION: A unique client instance that shares NO state with lib/supabase.ts
 const ADMIN_SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
 const ADMIN_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
 
@@ -105,14 +104,13 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      // THE 98 LIMIT FIX: Use a hard ID select to bypass metadata count caching
-      const { data: idList, error: countErr } = await adminSupabase
+      // THE 98 LIMIT FIX: Use HEAD select for exact count to bypass data limits
+      const { count, error: countErr } = await adminSupabase
         .from('orders')
-        .select('id')
-        .limit(10000);
+        .select('*', { count: 'exact', head: true });
       
-      if (!countErr && idList) {
-        setTotalDbCount(idList.length);
+      if (!countErr && count !== null) {
+        setTotalDbCount(count);
       }
 
       const { data, error: dataErr } = await adminSupabase.from('orders')
@@ -146,8 +144,8 @@ const AdminApp: React.FC = () => {
       adminSupabase.removeChannel(masterChannelRef.current);
     }
 
-    // UNIQUE CHANNEL: High-entropy name specifically for the Terminal instance
-    const channel = adminSupabase.channel('itx_terminal_dedicated_private_v1')
+    // UNIQUE CHANNEL: HIGH-ENTROPY NAME TO ENSURE ZERO CONFLICT WITH CUSTOMER SITE
+    const channel = adminSupabase.channel('itx_terminal_prime_relay_x99')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
         addRealtimeOrder(payload.new);
       })

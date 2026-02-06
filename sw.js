@@ -10,8 +10,8 @@ let channel = null;
 function setupBackgroundListener() {
   if (channel) channel.unsubscribe();
 
-  // SW listens to the dedicated terminal channel for global order consistency
-  channel = supabase.channel('itx_terminal_dedicated_private_v1')
+  // SW listens specifically to the terminal prime relay
+  channel = supabase.channel('itx_terminal_prime_relay_x99')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
       

@@ -31,7 +31,7 @@ const MainLayout: React.FC<{
       <div className="fixed top-20 left-6 z-[1000] flex items-center space-x-2 bg-white/90 backdrop-blur shadow-sm border border-gray-100 px-3 py-1.5 rounded-full scale-90 md:scale-100 origin-left transition-all duration-500">
         <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
         <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-          {isLive ? 'Master Link Active' : 'Relay Disconnected'}
+          {isLive ? 'Relay Active' : 'Relay Disconnected'}
         </span>
       </div>
     )}
@@ -68,14 +68,14 @@ const AppContent: React.FC = () => {
 
   const broadcastChannelRef = useRef<any>(null);
 
-  const setupCustomerRelay = useCallback(() => {
+  const setupLightweightRelay = useCallback(() => {
     if (broadcastChannelRef.current) {
       supabase.removeChannel(broadcastChannelRef.current);
     }
 
-    // LIGHTWEIGHT BROADCAST ONLY: Does not subscribe to Postgres changes.
-    // This prevents kicking the Admin socket.
-    const channel = supabase.channel('itx_customer_signal_v1', {
+    // THE FIX: Use a unique channel for the main site that does NOT listen to Postgres changes.
+    // This allows the Admin App to be the sole master of the database socket.
+    const channel = supabase.channel('itx_site_broadcast_v2', {
       config: { broadcast: { self: true } }
     });
 
@@ -87,11 +87,11 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    setupCustomerRelay();
+    setupLightweightRelay();
     return () => {
       if (broadcastChannelRef.current) supabase.removeChannel(broadcastChannelRef.current);
     };
-  }, [setupCustomerRelay]);
+  }, [setupLightweightRelay]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -146,19 +146,19 @@ const AppContent: React.FC = () => {
       total_pkr: Math.round(Number(order.total) || 0),
       status: 'pending',
       items: order.items,
-      source: 'ITX_PULSE_GEN_5'
+      source: 'ITX_PULSE_SIGNAL_V2'
     };
 
-    // BROADCAST SIGNAL
+    // SIGNAL BROADCAST
     if (broadcastChannelRef.current) {
       broadcastChannelRef.current.send({
         type: 'broadcast',
-        event: 'new_order',
+        event: 'new_order_signal',
         payload: payload
       });
     }
 
-    // PERSIST TO DB (The Admin App will see this via Postgres Changes)
+    // PERSISTENCE (Admin will catch this via its dedicated DB listener)
     await supabase.from('orders').insert([payload]);
 
     setCart([]);
