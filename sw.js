@@ -10,14 +10,15 @@ let channel = null;
 function setupBackgroundListener() {
   if (channel) channel.unsubscribe();
 
-  channel = supabase.channel('itx_admin_terminal_omega_99')
+  // SW listens to the omega terminal channel for new orders
+  channel = supabase.channel('itx_admin_terminal_omega_v9')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
       
       const notificationOptions = {
         body: `New Order: Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
         icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-        vibrate: [200, 100, 200],
+        vibrate: [200, 100, 200, 100, 400],
         tag: 'order-alert-' + (order.order_id || order.id),
         requireInteraction: true,
         data: { url: '/admin' }

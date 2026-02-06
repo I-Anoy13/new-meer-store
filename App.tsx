@@ -29,9 +29,9 @@ const MainLayout: React.FC<{
     
     {user?.role === UserRole.ADMIN && (
       <div className="fixed top-20 left-6 z-[1000] flex items-center space-x-2 bg-white/90 backdrop-blur shadow-sm border border-gray-100 px-3 py-1.5 rounded-full scale-90 md:scale-100 origin-left transition-all duration-500">
-        <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+        <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-50'}`}></div>
         <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-          {isLive ? 'Master Link Active' : 'Connecting...'}
+          {isLive ? 'Master Link Active' : 'Relay Active'}
         </span>
       </div>
     )}
@@ -70,7 +70,6 @@ const AppContent: React.FC = () => {
   const processedOrders = useRef<Set<string>>(new Set());
 
   const triggerInstantAlert = useCallback((order: any) => {
-    // SECURITY: Strictly Admin-Only sound and notification
     if (user?.role !== UserRole.ADMIN) return;
 
     try {
@@ -85,82 +84,44 @@ const AppContent: React.FC = () => {
       g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
       osc.connect(g); g.connect(ctx.destination);
       osc.start(); osc.stop(ctx.currentTime + 2.5);
-    } catch (e) {
-      console.warn("Audio Context failed to start (interaction required).");
-    }
-
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'TRIGGER_NOTIFICATION',
-        title: '🚨 NEW ORDER RECEIVED!',
-        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
-        orderId: order.order_id || order.id
-      });
-    }
+    } catch (e) {}
   }, [user]);
 
-  const setupMasterLink = useCallback(() => {
-    // If a channel already exists, kill it to prevent "ghost" subscriptions hanging the connection
+  const setupCustomerRelay = useCallback(() => {
     if (masterChannelRef.current) {
       supabase.removeChannel(masterChannelRef.current);
-      masterChannelRef.current = null;
     }
 
-    // Create a new master channel for both Broadcasting (sending) and Listening
-    const channel = supabase.channel('itx_master_link')
-      .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
-        // Pulse received from a customer order
-        const orderId = payload.payload.order_id;
-        if (processedOrders.current.has(orderId)) return;
-        processedOrders.current.add(orderId);
-        triggerInstantAlert(payload.payload);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-        // DB insertion fallback
+    // CUSTOMER RELAY: Uses a completely different channel name to avoid Admin conflict
+    const channelName = user?.role === UserRole.ADMIN ? 'itx_admin_terminal_omega_v9' : 'itx_customer_signal_relay_v5';
+    
+    const channel = supabase.channel(channelName);
+    
+    if (user?.role === UserRole.ADMIN) {
+      channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
         const orderId = payload.new.order_id || payload.new.id;
         if (processedOrders.current.has(orderId)) return;
         processedOrders.current.add(orderId);
         triggerInstantAlert(payload.new);
-      })
-      .subscribe((status) => {
-        const connected = status === 'SUBSCRIBED';
-        setIsLive(connected);
-        console.log(`Master Link Status: ${status}`);
       });
-
-    masterChannelRef.current = channel;
-  }, [triggerInstantAlert]);
-
-  // Handle connection lifecycle
-  useEffect(() => {
-    // Only establish the full listener link if the user is an Admin
-    if (user?.role === UserRole.ADMIN) {
-      setupMasterLink();
-    } else {
-      // For normal customers, we still need a minimal channel to SEND pulses
-      const guestChannel = supabase.channel('itx_master_link').subscribe();
-      masterChannelRef.current = guestChannel;
     }
 
-    const handleReSync = () => {
-      if (document.visibilityState === 'visible') {
-        setupMasterLink();
-      }
-    };
+    channel.subscribe((status) => {
+      setIsLive(status === 'SUBSCRIBED');
+    });
 
+    masterChannelRef.current = channel;
+  }, [user, triggerInstantAlert]);
+
+  useEffect(() => {
+    setupCustomerRelay();
+    const handleReSync = () => { if (document.visibilityState === 'visible') setupCustomerRelay(); };
     window.addEventListener('focus', handleReSync);
-    window.addEventListener('online', handleReSync);
-    document.addEventListener('visibilitychange', handleReSync);
-
     return () => {
       window.removeEventListener('focus', handleReSync);
-      window.removeEventListener('online', handleReSync);
-      document.removeEventListener('visibilitychange', handleReSync);
-      if (masterChannelRef.current) {
-        supabase.removeChannel(masterChannelRef.current);
-      }
+      if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
     };
-  }, [user, setupMasterLink]);
+  }, [setupCustomerRelay]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -215,24 +176,21 @@ const AppContent: React.FC = () => {
       total_pkr: Math.round(Number(order.total) || 0),
       status: 'pending',
       items: order.items,
-      source: 'Optimistic Master Signal'
+      source: 'ITX_PULSE_GEN_5'
     };
 
-    // 1. ATOMIC PULSE: Using the shared Master Channel
+    // 1. BROADCAST SIGNAL (Main Site Only Sends)
     if (masterChannelRef.current) {
       masterChannelRef.current.send({
         type: 'broadcast',
-        event: 'new_order_pulse',
+        event: 'new_order',
         payload: payload
       });
     }
 
-    // 2. BACKGROUND DB SYNC: Fire and forget
-    supabase.from('orders').insert([payload]).then(({ error }) => {
-      if (error) console.error("Async DB Save Error:", error);
-    });
+    // 2. PERSIST TO DB
+    await supabase.from('orders').insert([payload]);
 
-    // 3. UI RESPONSE: Instant success
     setCart([]);
     await new Promise(r => setTimeout(r, 600));
     setIsSyncing(false);
