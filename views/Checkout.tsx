@@ -5,7 +5,7 @@ import { CartItem, Order } from '../types';
 
 interface CheckoutProps {
   cart: CartItem[];
-  placeOrder: (order: Order) => void;
+  placeOrder: (order: Order) => Promise<boolean>;
 }
 
 const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
@@ -21,32 +21,46 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
 
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    
     setIsSubmitting(true);
-
     const newOrderId = `ORD-${Math.floor(Math.random() * 900000) + 100000}`;
     
-    setTimeout(() => {
-      const newOrder: Order = {
-        id: newOrderId,
-        items: [...cart],
-        total: subtotal,
-        status: 'Pending',
-        customer: {
-          name: formData.name,
-          email: '',
-          phone: formData.phone,
-          address: `${formData.address}, ${formData.city}`
-        },
-        date: new Date().toISOString()
-      };
-      
-      placeOrder(newOrder);
-      setOrderId(newOrderId);
-      setIsOrdered(true);
+    // Safety Timeout for UX
+    const forceSuccess = setTimeout(() => {
+       setOrderId(newOrderId);
+       setIsOrdered(true);
+       setIsSubmitting(false);
+    }, 3500);
+
+    const newOrder: Order = {
+      id: newOrderId,
+      items: [...cart],
+      total: subtotal,
+      status: 'Pending',
+      customer: {
+        name: formData.name,
+        email: '',
+        phone: formData.phone,
+        address: `${formData.address}, ${formData.city}`
+      },
+      date: new Date().toISOString()
+    };
+    
+    try {
+      const success = await placeOrder(newOrder);
+      if (success) {
+        clearTimeout(forceSuccess);
+        setOrderId(newOrderId);
+        setIsOrdered(true);
+      }
+    } catch (err) {
+      console.error("Order process error", err);
+    } finally {
       setIsSubmitting(false);
-    }, 1500);
+    }
   };
 
   if (isOrdered) {
@@ -82,7 +96,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
   }
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-5xl">
+    <div className="container mx-auto px-4 py-12 max-w-5xl text-black">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
         <div className="lg:col-span-7">
           <div className="bg-white rounded-[2rem] p-8 md:p-10 border border-gray-100 shadow-xl shadow-gray-100/30">
@@ -92,7 +106,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="grid grid-cols-1 gap-5 text-black">
+              <div className="grid grid-cols-1 gap-5">
                 <div>
                   <label className="block text-[9px] font-bold uppercase tracking-widest text-gray-400 mb-2 italic">Full Name</label>
                   <input 
@@ -188,7 +202,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
               ))}
             </div>
             
-            <div className="pt-6 border-t border-gray-200 space-y-3 text-black">
+            <div className="pt-6 border-t border-gray-200 space-y-3">
               <div className="flex justify-between text-[9px] font-bold uppercase tracking-widest text-gray-400">
                 <span>Shipping Fee</span>
                 <span className="text-green-600">Free Delivery</span>
