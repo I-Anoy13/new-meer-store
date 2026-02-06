@@ -10,15 +10,14 @@ let channel = null;
 function setupBackgroundListener() {
   if (channel) channel.unsubscribe();
 
-  channel = supabase.channel('itx-immortal-sw-final')
+  channel = supabase.channel('itx_admin_terminal_omega_99')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
       
       const notificationOptions = {
         body: `New Order: Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
         icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-        badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-        vibrate: [200, 100, 200, 100, 400],
+        vibrate: [200, 100, 200],
         tag: 'order-alert-' + (order.order_id || order.id),
         requireInteraction: true,
         data: { url: '/admin' }
@@ -26,7 +25,6 @@ function setupBackgroundListener() {
 
       self.registration.showNotification('🚨 ITX ORDER RECEIVED', notificationOptions);
 
-      // Notify all open tabs
       self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
         clients.forEach(client => {
           client.postMessage({ type: 'NEW_ORDER_DETECTED', order: order });
@@ -34,8 +32,7 @@ function setupBackgroundListener() {
       });
     })
     .subscribe((status) => {
-      console.log('SW Supabase Status:', status);
-      if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+      if (status !== 'SUBSCRIBED') {
         setTimeout(setupBackgroundListener, 10000);
       }
     });

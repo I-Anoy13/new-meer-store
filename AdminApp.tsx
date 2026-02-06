@@ -1,10 +1,14 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
+import { createClient } from '@supabase/supabase-js';
 import { Product, Order, User, UserRole } from './types';
-import { MOCK_PRODUCTS } from './constants';
-import { supabase } from './lib/supabase';
 import AdminDashboard from './views/AdminDashboard';
+
+// Isolated Admin Client to prevent conflict with main site session
+const ADMIN_SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
+const ADMIN_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
+const adminSupabase = createClient(ADMIN_SUPABASE_URL, ADMIN_SUPABASE_KEY);
 
 const AdminApp: React.FC = () => {
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
@@ -24,8 +28,8 @@ const AdminApp: React.FC = () => {
   const processedRef = useRef<Set<string>>(new Set());
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const videoPersistenceRef = useRef<HTMLVideoElement | null>(null);
   const heartbeatIntervalRef = useRef<any>(null);
-  const reconnectTimeoutRef = useRef<any>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -43,19 +47,25 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_total_count', totalDbCount.toString());
   }, [rawOrders, totalDbCount, statusOverrides]);
 
-  // IMMORTAL HEARTBEAT: Uses Web Audio to keep the JS thread alive on iOS background
-  const playPulse = useCallback(() => {
-    if (!audioContextRef.current || audioContextRef.current.state === 'suspended') return;
+  // THE PERSISTENCE HACK: Silent 1x1 looping video to keep iOS JS alive
+  const startPersistenceMedia = useCallback(() => {
+    if (videoPersistenceRef.current) return;
     try {
-      const osc = audioContextRef.current.createOscillator();
-      const gain = audioContextRef.current.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1, audioContextRef.current.currentTime);
-      gain.gain.setValueAtTime(0.001, audioContextRef.current.currentTime);
-      osc.connect(gain);
-      gain.connect(audioContextRef.current.destination);
-      osc.start();
-      osc.stop(audioContextRef.current.currentTime + 0.1);
+      const v = document.createElement('video');
+      v.setAttribute('playsinline', '');
+      v.setAttribute('muted', '');
+      v.setAttribute('loop', '');
+      v.style.position = 'fixed';
+      v.style.bottom = '0';
+      v.style.right = '0';
+      v.style.width = '1px';
+      v.style.height = '1px';
+      v.style.opacity = '0.01';
+      v.style.pointerEvents = 'none';
+      v.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQyAAAACHV1aWRreG1sAAAAAGFiaWxpdHkgeG1sbnM9Imh0dHA6Ly9ucy5hZG9iZS5jb20vYWJpbGl0eS8iPjxhYmlsaXR5OnN5c3RlbT48YWJpbGl0eTpkZXZpY2U+PG9zPnVuaXg8L29zPjwvYWJpbGl0eTpkZXZpY2U+PC9hYmlsaXR5OnN5c3RlbT48L2FiaWxpdHk+AAAAbG1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAPoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhazAAAAHkdGtoZAAAAAMAAAAAAAAAAAAAA+gAAAPoAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABkbWRpYQAALW1kaGQAAAAAAAAAAAAAAAAAAD6AAAA+gAFVx9v/AAAAAAAALWhkbHIAAAAAAAAAAHZpZGVvAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAAVxtZGlhAAAALW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAU9zdGJsAAAAp3N0c2QAAAAAAAAAAQAAAJZhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAHgAeABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAM/+EAFWdCwAwU9mAsX+AAB9AAAfQAAAgAAAH0AAAgAAYhB9mP4wAAABhzdHRzAAAAAAAAAAEAAAABAAAD6AAAAFpzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAAAAAAAAAgAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYXVkcmEAAABhdWRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAD9zZ3BkAAAAAAAAAHRyb2wAAAABAAAALXRyb2wAAAAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYW1lZXRyYWsAAA==';
+      document.body.appendChild(v);
+      v.play().catch(() => console.log("Media Play Interrupted"));
+      videoPersistenceRef.current = v;
     } catch (e) {}
   }, []);
 
@@ -66,25 +76,25 @@ const AdminApp: React.FC = () => {
       if (ctx.state === 'suspended') await ctx.resume();
 
       const now = ctx.currentTime;
-      // Loud Attention Chime
-      [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+      // High-Frequency Alarm for wake-up
+      [880, 1046, 1318].forEach((f, i) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, now + (i * 0.1));
-        g.gain.setValueAtTime(0, now + (i * 0.1));
-        g.gain.linearRampToValueAtTime(0.8, now + (i * 0.1) + 0.05);
-        g.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.1) + 1.2);
+        osc.frequency.setValueAtTime(f, now + (i * 0.15));
+        g.gain.setValueAtTime(0, now + (i * 0.15));
+        g.gain.linearRampToValueAtTime(0.5, now + (i * 0.15) + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.15) + 2.0);
         osc.connect(g); g.connect(ctx.destination);
-        osc.start(now + (i * 0.1)); osc.stop(now + (i * 0.1) + 1.2);
+        osc.start(now + (i * 0.15)); osc.stop(now + (i * 0.15) + 2.0);
       });
 
       if (order && Notification.permission === "granted") {
-        new Notification('🚨 NEW ORDER', {
+        new Notification('🚨 NEW ORDER DETECTED', {
           body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
           icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-          tag: 'itx-' + (order.order_id || order.id),
-          requireInteraction: true
+          requireInteraction: true,
+          tag: 'itx-alert'
         });
       }
     } catch (e) {}
@@ -92,22 +102,18 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      // THE DEFINITIVE FIX FOR '98': Fetch IDs with no limit to get the actual count
-      // Supabase count property is most reliable when head is true
-      const { count, error: countErr } = await supabase
+      // THE DEFINITIVE FIX FOR '98': Direct ID fetch bypassing count metadata
+      const { data: idList, error: countErr } = await adminSupabase
         .from('orders')
-        .select('*', { count: 'exact', head: true });
+        .select('id')
+        .limit(10000);
       
-      if (!countErr && count !== null) {
-        setTotalDbCount(count);
-      } else {
-        // Fallback: If metadata count fails, fetch all IDs (up to 1000)
-        const { data: allIds } = await supabase.from('orders').select('id').limit(1000);
-        if (allIds) setTotalDbCount(allIds.length);
+      if (!countErr && idList) {
+        setTotalDbCount(idList.length);
       }
 
       // Fetch visible feed
-      const { data, error: dataErr } = await supabase.from('orders')
+      const { data, error: dataErr } = await adminSupabase.from('orders')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
@@ -134,26 +140,21 @@ const AdminApp: React.FC = () => {
   const setupMasterSync = useCallback(() => {
     if (user?.role !== UserRole.ADMIN) return;
     
-    // Clear existing
     if (masterChannelRef.current) {
-      supabase.removeChannel(masterChannelRef.current);
+      adminSupabase.removeChannel(masterChannelRef.current);
     }
 
-    const channel = supabase.channel('itx_terminal_final_v1')
+    // New unique channel name to avoid collision with main site
+    const channel = adminSupabase.channel('itx_admin_terminal_omega_99')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
         addRealtimeOrder(payload.new);
       })
       .subscribe(status => {
         const connected = status === 'SUBSCRIBED';
         setIsLive(connected);
-        if (connected) {
-          setLastSyncTime(new Date());
-          if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-        } else {
-          // Auto-reconnect loop
-          reconnectTimeoutRef.current = setTimeout(() => {
-            setupMasterSync();
-          }, 5000);
+        if (connected) setLastSyncTime(new Date());
+        else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            setTimeout(setupMasterSync, 3000);
         }
       });
 
@@ -169,9 +170,7 @@ const AdminApp: React.FC = () => {
         await audioContextRef.current.resume();
       }
       
-      // Start the heartbeat pulse
-      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
-      heartbeatIntervalRef.current = setInterval(playPulse, 15000);
+      startPersistenceMedia();
       
       if (Notification.permission !== "granted") {
         await Notification.requestPermission();
@@ -182,35 +181,23 @@ const AdminApp: React.FC = () => {
     } catch (e) {
       setAudioReady(false);
     }
-  }, [playPulse, fetchOrders]);
+  }, [startPersistenceMedia, fetchOrders]);
 
   useEffect(() => {
-    // Listen for Service Worker discoveries
-    const handleSWMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'NEW_ORDER_DETECTED') {
-        addRealtimeOrder(event.data.order);
-      }
-    };
-    navigator.serviceWorker?.addEventListener('message', handleSWMessage);
-
-    // Visibility Handling
-    const handleVisibility = () => {
+    const handleReSync = () => {
       if (document.visibilityState === 'visible') {
         if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
         setupMasterSync();
         fetchOrders();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('focus', handleVisibility);
-
+    window.addEventListener('focus', handleReSync);
+    document.addEventListener('visibilitychange', handleReSync);
     return () => {
-      navigator.serviceWorker?.removeEventListener('message', handleSWMessage);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('focus', handleVisibility);
-      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+      window.removeEventListener('focus', handleReSync);
+      document.removeEventListener('visibilitychange', handleReSync);
     };
-  }, [addRealtimeOrder, setupMasterSync, fetchOrders]);
+  }, [setupMasterSync, fetchOrders]);
 
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
@@ -261,18 +248,18 @@ const AdminApp: React.FC = () => {
             initAudio={initAudio}
             refreshData={fetchOrders}
             purgeDatabase={async () => {
-              if (window.confirm("IRREVERSIBLE: Wipe all order records?")) {
-                await supabase.from('orders').delete().gt('id', 0);
+              if (window.confirm("IRREVERSIBLE: Wipe all history?")) {
+                await adminSupabase.from('orders').delete().neq('customer_name', 'SECRET_PROTECTION_KEY');
                 setRawOrders([]);
                 setTotalDbCount(0);
                 fetchOrders();
               }
             }}
             updateStatusOverride={async (id: string, status: Order['status']) => {
-              await supabase.from('orders').update({ status: status.toLowerCase() }).match({ order_id: id });
+              await adminSupabase.from('orders').update({ status: status.toLowerCase() }).match({ order_id: id });
               setStatusOverrides(prev => ({ ...prev, [id]: status }));
             }}
-            testAlert={() => triggerAlert({ total: 9999, customer_name: 'TEST CONNECTION' })}
+            testAlert={() => triggerAlert({ total: 0, customer_name: 'TEST' })}
           />
         } />
       </Routes>
