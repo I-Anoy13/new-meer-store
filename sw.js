@@ -12,26 +12,25 @@ function setupBackgroundListener() {
     channel.unsubscribe();
   }
 
-  // Use a unique channel name to avoid collisions
-  channel = supabase.channel('itx-system-critical-alert-v10')
+  // Use a unique channel for v20 high-reliability alerts
+  channel = supabase.channel('itx-critical-priority-v20')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
       
-      // High-priority notification for iOS
       const notificationOptions = {
-        body: `Order for Rs. ${order.total_pkr || order.total} from ${order.customer_name}`,
+        body: `Order for Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
         icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
         badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-        vibrate: [200, 100, 200, 100, 200, 100, 400],
-        tag: 'new-order-alert-' + (order.id || Date.now()),
+        vibrate: [500, 100, 500, 100, 500],
+        tag: 'order-alert-' + (order.id || Date.now()),
         renotify: true,
         requireInteraction: true,
         data: { url: '/admin' }
       };
 
-      self.registration.showNotification('🚨 NEW ORDER RECEIVED!', notificationOptions);
+      self.registration.showNotification('🚨 ITX NEW ORDER!', notificationOptions);
 
-      // Notify any open admin windows
+      // Push to all active tabs
       self.clients.matchAll({ type: 'window' }).then(clients => {
         clients.forEach(client => {
           client.postMessage({
@@ -41,9 +40,7 @@ function setupBackgroundListener() {
         });
       });
     })
-    .subscribe((status) => {
-      console.log('Background Sync Status:', status);
-    });
+    .subscribe();
 }
 
 self.addEventListener('install', (event) => {
