@@ -44,12 +44,13 @@ const AdminDashboard = (props: any) => {
       });
       chartData.push({ name: mLabel, revenue: mOrders.reduce((sum: number, o: Order) => sum + o.total, 0) });
     }
-    return { revenue, pendingCount, deliveredCount, total: filteredOrders.length, chartData };
-  }, [props.orders, timeRange]);
+    // Use props.totalDbCount for the true total to avoid the "stuck at 98" limit issue
+    return { revenue, pendingCount, deliveredCount, total: props.totalDbCount || filteredOrders.length, chartData };
+  }, [props.orders, props.totalDbCount, timeRange]);
 
   if (!props.user) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6">
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-6 text-black">
         <div className="bg-white p-10 md:p-16 rounded-[4rem] shadow-2xl w-full max-w-sm">
           <div className="text-center mb-12">
             <h1 className="text-3xl font-black uppercase tracking-tighter italic">ITX CONSOLE</h1>
@@ -99,8 +100,8 @@ const AdminDashboard = (props: any) => {
           </nav>
         </div>
         <div className="flex items-center space-x-4">
-           <div className="hidden md:flex bg-zinc-900 text-white px-8 py-3.5 rounded-[1.8rem] text-[10px] font-black uppercase tracking-widest shadow-xl items-center gap-3">
-             <i className="fas fa-satellite-dish text-blue-400"></i> MASTER MODE
+           <div className="hidden md:flex bg-zinc-900 text-white px-8 py-3.5 rounded-[1.8rem] text-[10px] font-black uppercase tracking-widest shadow-xl items-center gap-3 cursor-pointer" onClick={() => props.refreshData?.()}>
+             <i className="fas fa-sync-alt text-blue-400 animate-spin-slow"></i> REFRESH FEED
           </div>
         </div>
       </header>
@@ -121,9 +122,9 @@ const AdminDashboard = (props: any) => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-10">
               {[
                 { label: 'Revenue', val: `Rs. ${analytics.revenue.toLocaleString()}`, color: 'text-black' },
-                { label: 'Orders', val: analytics.total, color: 'text-black' },
-                { label: 'Pending', val: analytics.pendingCount, color: 'text-blue-600' },
-                { label: 'Growth', val: `${analytics.total ? Math.round((analytics.deliveredCount / analytics.total) * 100) : 0}%`, color: 'text-green-600' }
+                { label: 'Total Orders', val: analytics.total, color: 'text-black' },
+                { label: 'Active Pending', val: analytics.pendingCount, color: 'text-blue-600' },
+                { label: 'Success Rate', val: `${analytics.total ? Math.round((analytics.deliveredCount / analytics.total) * 100) : 0}%`, color: 'text-green-600' }
               ].map((s, i) => (
                 <div key={i} className="bg-white border border-gray-200 p-8 md:p-10 rounded-[2.5rem] md:rounded-[3rem] shadow-sm hover:shadow-xl transition-all duration-500 group">
                   <p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 group-hover:text-blue-500 transition">{s.label}</p>
@@ -137,7 +138,7 @@ const AdminDashboard = (props: any) => {
         {activeTab === 'orders' && (
           <div className="animate-fadeIn space-y-6 md:space-y-8">
             <div className="flex justify-between items-center px-4">
-              <h3 className="font-black text-[10px] md:text-xs uppercase tracking-widest text-gray-400 italic">Dispatch Feed</h3>
+              <h3 className="font-black text-[10px] md:text-xs uppercase tracking-widest text-gray-400 italic">Dispatch Feed ({props.orders.length})</h3>
             </div>
             {props.orders.length === 0 ? (
               <div className="text-center py-20 bg-white rounded-[4rem] border border-dashed border-gray-200">
@@ -181,17 +182,31 @@ const AdminDashboard = (props: any) => {
              <div className="space-y-8">
                 <p className="text-[11px] font-black uppercase text-gray-400 tracking-widest italic border-b pb-4">Background Persistence Engine</p>
                 <div className="bg-gray-50 p-10 rounded-[3rem] border border-gray-100 space-y-8">
-                  <button 
-                    onClick={() => {
-                      Notification.requestPermission().then(perm => {
-                        window.alert(`Notification Permission: ${perm}`);
-                      });
-                    }}
-                    className="w-full bg-black text-white py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-2xl"
-                  >
-                    Authorize Notifications
-                  </button>
-                  <p className="text-[10px] text-gray-400 text-center font-bold uppercase italic">Important: To receive instant notifications, keep this dashboard tab open in your browser.</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button 
+                      onClick={() => {
+                        props.initAudio?.();
+                        props.testAlert?.();
+                      }}
+                      className="w-full bg-blue-600 text-white py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-black transition shadow-2xl"
+                    >
+                      <i className="fas fa-volume-up mr-2"></i> Test Sound Alert
+                    </button>
+                    <button 
+                      onClick={() => {
+                        Notification.requestPermission().then(perm => {
+                          window.alert(`Notification Permission: ${perm}`);
+                        });
+                      }}
+                      className="w-full bg-black text-white py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 transition shadow-2xl"
+                    >
+                      <i className="fas fa-bell mr-2"></i> Auth Notifications
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-gray-400 text-center font-bold uppercase italic">
+                    <i className="fas fa-exclamation-triangle mr-2 text-yellow-500"></i>
+                    Browsers block sound alerts unless you interact with the page. Use "Test Sound" to ensure your speakers are enabled.
+                  </p>
                 </div>
              </div>
           </div>
@@ -238,7 +253,7 @@ const AdminDashboard = (props: any) => {
                   <p className="font-bold text-sm md:text-base leading-relaxed text-gray-600 italic">{selectedOrder.customer.address}, {selectedOrder.customer.city || 'N/A'}</p>
                 </div>
               </div>
-              <div className="bg-zinc-50 p-10 rounded-[4rem] border border-zinc-100 shadow-inner">
+              <div className="bg-zinc-50 p-10 rounded-[4rem] border border-zinc-100 shadow-inner text-black">
                 <h4 className="text-[11px] font-black uppercase tracking-widest text-zinc-400 border-b border-zinc-200 pb-4 mb-10 italic">Items</h4>
                 <div className="space-y-6">
                   {selectedOrder.items.map((itm, i) => (

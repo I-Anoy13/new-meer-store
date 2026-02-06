@@ -17,10 +17,12 @@ const AdminApp: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
   
+  const [totalDbCount, setTotalDbCount] = useState<number>(0);
   const [loading, setLoading] = useState(rawOrders.length === 0);
   const [isLive, setIsLive] = useState(false);
   const processedRef = useRef<Set<string>>(new Set());
   const masterChannelRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -42,31 +44,53 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
   }, [products, rawOrders, statusOverrides]);
 
+  const initAudio = useCallback(async () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (audioContextRef.current.state === 'suspended') {
+      await audioContextRef.current.resume();
+    }
+    console.log("Audio Engine Waked: ", audioContextRef.current.state);
+  }, []);
+
   const triggerInstantAlert = useCallback((order: any) => {
-    // Only play sound if this is the active Admin console
     if (user?.role !== UserRole.ADMIN) return;
 
+    // Pulse Sound
     try {
-      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(523, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1046, ctx.currentTime + 0.1);
-      g.gain.setValueAtTime(0, ctx.currentTime);
-      g.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
-      osc.connect(g); g.connect(ctx.destination);
-      osc.start(); osc.stop(ctx.currentTime + 2.5);
+      const ctx = audioContextRef.current || new (window.AudioContext || (window as any).webkitAudioContext)();
+      if (!audioContextRef.current) audioContextRef.current = ctx;
+      
+      const playPulse = () => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'sawtooth';
+        // Higher frequency for better visibility in noisy rooms
+        osc.frequency.setValueAtTime(880, ctx.currentTime); 
+        osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.15);
+        g.gain.setValueAtTime(0, ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+        osc.connect(g); g.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 1.2);
+      };
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(playPulse);
+      } else {
+        playPulse();
+      }
     } catch (e) {
-      console.warn("Audio Alert failed - interaction required.");
+      console.error("Sonic Pulse Failed:", e);
     }
 
+    // PWA Notification
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: 'TRIGGER_NOTIFICATION',
-        title: '🚨 NEW ORDER RECEIVED!',
-        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
+        title: '🚨 ORDER ALERT: ITX SHOP',
+        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name} from ${order.customer_city || 'Pakistan'}`,
         orderId: order.order_id || order.id
       });
     }
@@ -107,6 +131,7 @@ const AdminApp: React.FC = () => {
     if (processedRef.current.has(id)) return;
     processedRef.current.add(id);
     setRawOrders(prev => [newOrder, ...prev]);
+    setTotalDbCount(prev => prev + 1); // Increment accurate total
     triggerInstantAlert(newOrder);
   }, [triggerInstantAlert]);
 
@@ -135,7 +160,10 @@ const AdminApp: React.FC = () => {
     setupMasterSync();
     
     const handleFocus = () => {
-      if (document.visibilityState === 'visible') setupMasterSync();
+      if (document.visibilityState === 'visible') {
+        setupMasterSync();
+        initAudio(); // Re-wake audio on focus
+      }
     };
     
     window.addEventListener('focus', handleFocus);
@@ -143,15 +171,19 @@ const AdminApp: React.FC = () => {
       window.removeEventListener('focus', handleFocus);
       if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
     };
-  }, [setupMasterSync]);
+  }, [setupMasterSync, initAudio]);
 
   const fetchOrders = useCallback(async () => {
     try {
-      const { data, error } = await supabase.from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // FIX: By default Supabase caps at 100. We use count: exact and a larger limit.
+      const { data, error, count } = await supabase.from('orders')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .limit(1000); // Fetch more than the 100 limit
+
       if (!error && data) {
         setRawOrders(data);
+        setTotalDbCount(count || data.length);
         data.forEach(o => processedRef.current.add(o.order_id || String(o.id)));
       }
     } catch (e) { console.error(e); }
@@ -201,13 +233,17 @@ const AdminApp: React.FC = () => {
           <AdminDashboard 
             products={products} 
             orders={orders} 
+            totalDbCount={totalDbCount}
             user={user} 
             isLive={isLive}
             login={(role: UserRole) => { 
               const u = { id: '1', name: 'Master', email: 'itx@me.pk', role }; 
               setUser(u); 
               localStorage.setItem('itx_user_session', JSON.stringify(u)); 
+              initAudio(); // Initialize audio on login interaction
             }}
+            initAudio={initAudio}
+            testAlert={() => triggerInstantAlert({total: 0, customer_name: 'TEST ALERT', customer_city: 'SYSTEM'})}
             systemPassword={systemPassword} 
             setSystemPassword={setSystemPassword}
             refreshData={fetchOrders}
