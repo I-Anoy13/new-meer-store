@@ -1,14 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
 import { supabase } from './lib/supabase';
 import AdminDashboard from './views/AdminDashboard';
-
-/* 
- * ADMIN CORE APPLICATION 
- * Synchronizes real Supabase data streams with instant local state updates.
- */
 
 const AdminApp: React.FC = () => {
   const [products, setProducts] = useState<Product[]>(() => {
@@ -22,7 +18,8 @@ const AdminApp: React.FC = () => {
   });
   
   const [loading, setLoading] = useState(rawOrders.length === 0);
-  
+  const processedRef = useRef<Set<string>>(new Set());
+
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
     return saved ? JSON.parse(saved) : {};
@@ -73,25 +70,6 @@ const AdminApp: React.FC = () => {
     return rawOrders.map(normalizeOrder).filter((o): o is Order => o !== null);
   }, [rawOrders, statusOverrides]);
 
-  const fetchProducts = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.from('products').select('*');
-      if (!error && data) {
-        setProducts(data.map(row => ({
-          id: String(row.id),
-          name: row.name || 'Untitled Item',
-          description: row.description || '',
-          price: Number(row.price_pkr || row.price || 0),
-          image: row.image || row.image_url || 'https://via.placeholder.com/800x1000',
-          category: row.category || 'Luxury',
-          inventory: Number(row.inventory || 0),
-          rating: Number(row.rating || 5),
-          reviews: []
-        })));
-      }
-    } catch (e) { console.error(e); }
-  }, []);
-
   const fetchOrders = useCallback(async () => {
     try {
       const { data, error } = await supabase.from('orders')
@@ -99,28 +77,44 @@ const AdminApp: React.FC = () => {
         .order('created_at', { ascending: false });
       if (!error && data) {
         setRawOrders(data);
+        data.forEach(o => processedRef.current.add(o.order_id || String(o.id)));
       }
     } catch (e) { console.error(e); }
   }, []);
 
-  // For instant real-time updates without re-fetching everything
   const addRealtimeOrder = useCallback((newOrder: any) => {
-    setRawOrders(prev => {
-      // Avoid duplicates if fetchOrders and realtime insert overlap
-      if (prev.find(o => (o.order_id || o.id) === (newOrder.order_id || newOrder.id))) return prev;
-      return [newOrder, ...prev];
-    });
+    const id = newOrder.order_id || String(newOrder.id);
+    if (processedRef.current.has(id)) return;
+    processedRef.current.add(id);
+    setRawOrders(prev => [newOrder, ...prev]);
   }, []);
+
+  // HYPER-SYNC ENGINE: Catch broadcast signals for instant UI updates
+  useEffect(() => {
+    if (user?.role !== UserRole.ADMIN) return;
+
+    const channel = supabase.channel('itx_hyper_sync')
+      .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
+        console.log("ADMIN: Instant UI Pulse Received.");
+        addRealtimeOrder(payload.payload);
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        addRealtimeOrder(payload.new);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user, addRealtimeOrder]);
 
   useEffect(() => {
     let mounted = true;
     const init = async () => {
-      await Promise.allSettled([fetchProducts(), fetchOrders()]);
+      await fetchOrders();
       if (mounted) setLoading(false);
     };
     init();
     return () => { mounted = false; };
-  }, [fetchProducts, fetchOrders]);
+  }, [fetchOrders]);
 
   const updateStatusOverride = async (orderId: string, status: Order['status']) => {
     setStatusOverrides(prev => ({ ...prev, [orderId]: status }));
@@ -130,7 +124,6 @@ const AdminApp: React.FC = () => {
         .eq('order_id', orderId);
       if (error) throw error;
     } catch (e) { 
-      console.error("Status Sync Error:", e);
       setStatusOverrides(prev => {
         const next = { ...prev };
         delete next[orderId];
@@ -139,17 +132,12 @@ const AdminApp: React.FC = () => {
     }
   };
 
-  const deleteProduct = async (productId: string) => {
-    const { error } = await supabase.from('products').delete().eq('id', productId);
-    if (!error) setProducts(prev => prev.filter(p => p.id !== productId));
-  };
-
   if (loading && rawOrders.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="text-center animate-pulse">
           <div className="w-12 h-12 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-[10px] font-black uppercase text-white tracking-widest">Waking Up Console...</p>
+          <p className="text-[10px] font-black uppercase text-white tracking-widest">Priming Terminal...</p>
         </div>
       </div>
     );
@@ -161,7 +149,6 @@ const AdminApp: React.FC = () => {
         <Route path="/*" element={
           <AdminDashboard 
             products={products} 
-            deleteProduct={deleteProduct} 
             orders={orders} 
             user={user} 
             login={(role: UserRole) => { 
