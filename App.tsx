@@ -28,9 +28,11 @@ const MainLayout: React.FC<{
     <Header cartCount={cartCount} user={user} logout={logout} />
     
     {user?.role === UserRole.ADMIN && (
-      <div className="fixed top-20 left-6 z-[1000] flex items-center space-x-2 bg-white/90 backdrop-blur shadow-sm border border-gray-100 px-3 py-1.5 rounded-full scale-90 md:scale-100 origin-left">
-        <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">{isLive ? 'Master Link Active' : 'Connecting...'}</span>
+      <div className="fixed top-20 left-6 z-[1000] flex items-center space-x-2 bg-white/90 backdrop-blur shadow-sm border border-gray-100 px-3 py-1.5 rounded-full scale-90 md:scale-100 origin-left transition-all duration-500">
+        <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
+          {isLive ? 'Master Link Active' : 'Connecting...'}
+        </span>
       </div>
     )}
 
@@ -64,17 +66,8 @@ const AppContent: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const channelRef = useRef<any>(null);
-  const broadcastChannelRef = useRef<any>(null);
+  const masterChannelRef = useRef<any>(null);
   const processedOrders = useRef<Set<string>>(new Set());
-
-  // Initialize persistent broadcast channel
-  useEffect(() => {
-    const bc = supabase.channel('itx_master_link');
-    bc.subscribe();
-    broadcastChannelRef.current = bc;
-    return () => { supabase.removeChannel(bc); };
-  }, []);
 
   const triggerInstantAlert = useCallback((order: any) => {
     // SECURITY: Strictly Admin-Only sound and notification
@@ -106,51 +99,68 @@ const AppContent: React.FC = () => {
     }
   }, [user]);
 
-  const setupGlobalListener = useCallback(() => {
-    if (user?.role !== UserRole.ADMIN) {
-      setIsLive(false);
-      return;
+  const setupMasterLink = useCallback(() => {
+    // If a channel already exists, kill it to prevent "ghost" subscriptions hanging the connection
+    if (masterChannelRef.current) {
+      supabase.removeChannel(masterChannelRef.current);
+      masterChannelRef.current = null;
     }
-    
-    if (channelRef.current) supabase.removeChannel(channelRef.current);
 
+    // Create a new master channel for both Broadcasting (sending) and Listening
     const channel = supabase.channel('itx_master_link')
       .on('broadcast', { event: 'new_order_pulse' }, (payload) => {
+        // Pulse received from a customer order
         const orderId = payload.payload.order_id;
         if (processedOrders.current.has(orderId)) return;
         processedOrders.current.add(orderId);
         triggerInstantAlert(payload.payload);
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        // DB insertion fallback
         const orderId = payload.new.order_id || payload.new.id;
         if (processedOrders.current.has(orderId)) return;
         processedOrders.current.add(orderId);
         triggerInstantAlert(payload.new);
       })
       .subscribe((status) => {
-        setIsLive(status === 'SUBSCRIBED');
+        const connected = status === 'SUBSCRIBED';
+        setIsLive(connected);
+        console.log(`Master Link Status: ${status}`);
       });
 
-    channelRef.current = channel;
-  }, [user, triggerInstantAlert]);
+    masterChannelRef.current = channel;
+  }, [triggerInstantAlert]);
 
+  // Handle connection lifecycle
   useEffect(() => {
-    setupGlobalListener();
+    // Only establish the full listener link if the user is an Admin
+    if (user?.role === UserRole.ADMIN) {
+      setupMasterLink();
+    } else {
+      // For normal customers, we still need a minimal channel to SEND pulses
+      const guestChannel = supabase.channel('itx_master_link').subscribe();
+      masterChannelRef.current = guestChannel;
+    }
+
     const handleReSync = () => {
-      if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) {
-        setupGlobalListener();
+      if (document.visibilityState === 'visible') {
+        setupMasterLink();
       }
     };
+
     window.addEventListener('focus', handleReSync);
     window.addEventListener('online', handleReSync);
     document.addEventListener('visibilitychange', handleReSync);
+
     return () => {
       window.removeEventListener('focus', handleReSync);
       window.removeEventListener('online', handleReSync);
       document.removeEventListener('visibilitychange', handleReSync);
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (masterChannelRef.current) {
+        supabase.removeChannel(masterChannelRef.current);
+      }
     };
-  }, [user, setupGlobalListener]);
+  }, [user, setupMasterLink]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -208,24 +218,22 @@ const AppContent: React.FC = () => {
       source: 'Optimistic Master Signal'
     };
 
-    // 1. DISPATCH PULSE (Admin alert path)
-    if (broadcastChannelRef.current) {
-      broadcastChannelRef.current.send({
+    // 1. ATOMIC PULSE: Using the shared Master Channel
+    if (masterChannelRef.current) {
+      masterChannelRef.current.send({
         type: 'broadcast',
         event: 'new_order_pulse',
         payload: payload
       });
     }
 
-    // 2. DISPATCH DB INSERT (Reliable storage path)
-    // We do NOT await this to prevent UI blocking for the customer
+    // 2. BACKGROUND DB SYNC: Fire and forget
     supabase.from('orders').insert([payload]).then(({ error }) => {
       if (error) console.error("Async DB Save Error:", error);
     });
 
-    // 3. OPTIMISTIC SUCCESS
+    // 3. UI RESPONSE: Instant success
     setCart([]);
-    // Short delay to show the "Relaying" state briefly
     await new Promise(r => setTimeout(r, 600));
     setIsSyncing(false);
     return true;
