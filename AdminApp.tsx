@@ -24,7 +24,7 @@ const AdminApp: React.FC = () => {
   const processedRef = useRef<Set<string>>(new Set());
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const videoPersistenceRef = useRef<HTMLVideoElement | null>(null);
+  const persistenceMediaRef = useRef<{video?: HTMLVideoElement, audio?: HTMLAudioElement}>({});
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -42,28 +42,28 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_total_count', totalDbCount.toString());
   }, [rawOrders, totalDbCount, statusOverrides]);
 
-  // iOS BACKGROUND HACK: Silent Video Loop
-  // This keeps the JavaScript thread active even when the PWA is minimized
+  // IMMORTAL PERSISTENCE: Keep iOS CPU awake
   const startPersistence = useCallback(() => {
-    if (!videoPersistenceRef.current) {
-      const video = document.createElement('video');
-      video.muted = true;
-      video.playsInline = true;
-      video.loop = true;
-      video.style.position = 'fixed';
-      video.style.top = '-100px';
-      video.style.width = '1px';
-      video.style.height = '1px';
-      video.style.opacity = '0';
-      // Tiny silent mp4 blob
-      video.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQyAAAACHV1aWRreG1sAAAAAGFiaWxpdHkgeG1sbnM9Imh0dHA6Ly9ucy5hZG9iZS5jb20vYWJpbGl0eS8iPjxhYmlsaXR5OnN5c3RlbT48YWJpbGl0eTpkZXZpY2U+PG9zPnVuaXg8L29zPjwvYWJpbGl0eTpkZXZpY2U+PC9hYmlsaXR5OnN5c3RlbT48L2FiaWxpdHk+AAAAbG1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAPoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhazAAAAHkdGtoZAAAAAMAAAAAAAAAAAAAA+gAAAPoAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABkbWRpYQAALW1kaGQAAAAAAAAAAAAAAAAAAD6AAAA+gAFVx9v/AAAAAAAALWhkbHIAAAAAAAAAAHZpZGVvAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAAVxtZGlhAAAALW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAU9zdGJsAAAAp3N0c2QAAAAAAAAAAQAAAJZhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAHgAeABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAM/+EAFWdCwAwU9mAsX+AAB9AAAfQAAAgAAAH0AAAgAAYhB9mP4wAAABhzdHRzAAAAAAAAAAEAAAABAAAD6AAAAFpzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAAAAAAAAAgAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYXVkcmEAAABhdWRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAD9zZ3BkAAAAAAAAAHRyb2wAAAABAAAALXRyb2wAAAAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYW1lZXRyYWsAAA==';
-      document.body.appendChild(video);
-      videoPersistenceRef.current = video;
-    }
-    
-    videoPersistenceRef.current.play().catch(e => {
-      console.log("Persistence pending user gesture...");
-    });
+    try {
+      // 1. Video Layer
+      if (!persistenceMediaRef.current.video) {
+        const v = document.createElement('video');
+        v.muted = true; v.playsInline = true; v.loop = true; v.style.display = 'none';
+        v.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQyAAAACHV1aWRreG1sAAAAAGFiaWxpdHkgeG1sbnM9Imh0dHA6Ly9ucy5hZG9iZS5jb20vYWJpbGl0eS8iPjxhYmlsaXR5OnN5c3RlbT48YWJpbGl0eTpkZXZpY2U+PG9zPnVuaXg8L29zPjwvYWJpbGl0eTpkZXZpY2U+PC9hYmlsaXR5OnN5c3RlbT48L2FiaWxpdHk+AAAAbG1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAPoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhazAAAAHkdGtoZAAAAAMAAAAAAAAAAAAAA+gAAAPoAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABkbWRpYQAALW1kaGQAAAAAAAAAAAAAAAAAAD6AAAA+gAFVx9v/AAAAAAAALWhkbHIAAAAAAAAAAHZpZGVvAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAAVxtZGlhAAAALW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAU9zdGJsAAAAp3N0c2QAAAAAAAAAAQAAAJZhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAHgAeABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAM/+EAFWdCwAwU9mAsX+AAB9AAAfQAAAgAAAH0AAAgAAYhB9mP4wAAABhzdHRzAAAAAAAAAAEAAAABAAAD6AAAAFpzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAAAAAAAAAgAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYXVkcmEAAABhdWRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAD9zZ3BkAAAAAAAAAHRyb2wAAAABAAAALXRyb2wAAAAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYW1lZXRyYWsAAA==';
+        document.body.appendChild(v);
+        persistenceMediaRef.current.video = v;
+      }
+      
+      // 2. Audio Layer (More effective on some iOS versions)
+      if (!persistenceMediaRef.current.audio) {
+        const a = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+        a.loop = true;
+        persistenceMediaRef.current.audio = a;
+      }
+
+      persistenceMediaRef.current.video?.play().catch(() => {});
+      persistenceMediaRef.current.audio?.play().catch(() => {});
+    } catch (e) {}
   }, []);
 
   const initAudio = useCallback(async () => {
@@ -103,26 +103,45 @@ const AdminApp: React.FC = () => {
         osc.type = 'square';
         osc.frequency.setValueAtTime(freq, now + (i * 0.1));
         g.gain.setValueAtTime(0, now + (i * 0.1));
-        g.gain.linearRampToValueAtTime(0.5, now + (i * 0.1) + 0.05);
-        g.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.1) + 1.5);
-        osc.connect(g);
-        g.connect(ctx.destination);
-        osc.start(now + (i * 0.1));
-        osc.stop(now + (i * 0.1) + 1.5);
+        g.gain.linearRampToValueAtTime(0.6, now + (i * 0.1) + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.1) + 1.2);
+        osc.connect(g); g.connect(ctx.destination);
+        osc.start(now + (i * 0.1)); osc.stop(now + (i * 0.1) + 1.2);
       });
 
       if (order && Notification.permission === "granted") {
-        const notif = new Notification('🚨 ITX ORDER!', {
+        new Notification('🚨 NEW ITX ORDER!', {
           body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
           icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-          tag: 'itx-alert',
           requireInteraction: true
         });
-        notif.onclick = () => { window.focus(); notif.close(); };
       }
-    } catch (e) {
-      console.warn("Alert failed", e);
-    }
+    } catch (e) {}
+  }, []);
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      // 1. FORCE SYNC COUNT: Isolated call to get the absolute total
+      const { count, error: countErr } = await supabase
+        .from('orders')
+        .select('id', { count: 'exact', head: true });
+      
+      if (!countErr && count !== null) {
+        setTotalDbCount(count);
+      }
+
+      // 2. FETCH RECENT DATA
+      const { data, error: dataErr } = await supabase.from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(40);
+      
+      if (!dataErr && data) {
+        setRawOrders(data);
+        data.forEach(o => processedRef.current.add(String(o.order_id || o.id)));
+        setLastSyncTime(new Date());
+      }
+    } catch (e) {}
   }, []);
 
   const addRealtimeOrder = useCallback((newOrder: any) => {
@@ -130,50 +149,17 @@ const AdminApp: React.FC = () => {
     if (processedRef.current.has(id)) return;
     processedRef.current.add(id);
     
-    setRawOrders(prev => {
-      const exists = prev.some(o => String(o.order_id || o.id) === id);
-      if (exists) return prev;
-      return [newOrder, ...prev];
-    });
-    
+    setRawOrders(prev => [newOrder, ...prev].slice(0, 100));
     setTotalDbCount(prev => prev + 1);
     setLastSyncTime(new Date());
     triggerAlert(newOrder);
   }, [triggerAlert]);
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      // 1. DIRECT COUNT FETCH: Fix the '98' issue by getting absolute count from DB
-      const { count: dbCount, error: countErr } = await supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true });
-      
-      if (!countErr && dbCount !== null) {
-        setTotalDbCount(dbCount);
-      }
-
-      // 2. DATA LIST FETCH
-      const { data, error: dataErr } = await supabase.from('orders')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      
-      if (!dataErr && data) {
-        setRawOrders(data);
-        data.forEach(o => processedRef.current.add(String(o.order_id || o.id)));
-        setLastSyncTime(new Date());
-      }
-    } catch (e) { console.error("Fetch Error:", e); }
-  }, []);
-
   const setupMasterSync = useCallback(() => {
     if (user?.role !== UserRole.ADMIN) return;
-    if (masterChannelRef.current) {
-      supabase.removeChannel(masterChannelRef.current);
-    }
+    if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
 
-    // High priority socket channel
-    const channel = supabase.channel('itx_immortal_v30')
+    const channel = supabase.channel('itx_terminal_v40')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
         addRealtimeOrder(payload.new);
       })
@@ -186,53 +172,38 @@ const AdminApp: React.FC = () => {
   }, [user, addRealtimeOrder]);
 
   const purgeDatabase = async () => {
-    if (!window.confirm("⚠️ WIPE ENTIRE DATABASE?")) return;
+    if (!window.confirm("⚠️ IRREVERSIBLE: Delete all orders?")) return;
     try {
-      const { error } = await supabase.from('orders').delete().neq('customer_name', 'RESERVED_KEY_X_999');
-      if (!error) {
-        setRawOrders([]);
-        setTotalDbCount(0);
-        processedRef.current.clear();
-        setLastSyncTime(new Date());
-        window.alert("Cleared.");
-      }
-    } catch (e) { window.alert("Failed."); }
+      await supabase.from('orders').delete().gt('id', -1);
+      setRawOrders([]);
+      setTotalDbCount(0);
+      processedRef.current.clear();
+      setLastSyncTime(new Date());
+    } catch (e) {}
   };
 
   useEffect(() => {
     const handleWorkerMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'NEW_ORDER_DETECTED') {
-        addRealtimeOrder(event.data.order);
-      }
+      if (event.data?.type === 'NEW_ORDER_DETECTED') addRealtimeOrder(event.data.order);
     };
     navigator.serviceWorker?.addEventListener('message', handleWorkerMessage);
     return () => navigator.serviceWorker?.removeEventListener('message', handleWorkerMessage);
   }, [addRealtimeOrder]);
 
-  // SELF-HEALING: Every 45 seconds, check if socket is dead. If so, poll.
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!isLive || document.visibilityState === 'hidden') {
-        fetchOrders();
-      }
-    }, 45000);
-    return () => clearInterval(interval);
-  }, [isLive, fetchOrders]);
-
   useEffect(() => {
     setupMasterSync();
-    const handleReactivation = () => {
+    const handleSync = () => {
       if (document.visibilityState === 'visible') {
         initAudio();
         setupMasterSync();
         fetchOrders();
       }
     };
-    window.addEventListener('focus', handleReactivation);
-    document.addEventListener('visibilitychange', handleReactivation);
+    window.addEventListener('focus', handleSync);
+    document.addEventListener('visibilitychange', handleSync);
     return () => {
-      window.removeEventListener('focus', handleReactivation);
-      document.removeEventListener('visibilitychange', handleReactivation);
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleSync);
     };
   }, [setupMasterSync, fetchOrders, initAudio]);
 
@@ -253,8 +224,8 @@ const AdminApp: React.FC = () => {
 
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a]">
-      <div className="w-10 h-10 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4"></div>
-      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic">Signal Search...</p>
+      <div className="w-10 h-10 border-2 border-white/5 border-t-white rounded-full animate-spin mb-4"></div>
+      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic">Syncing Terminal...</p>
     </div>
   );
 
@@ -284,7 +255,7 @@ const AdminApp: React.FC = () => {
               await supabase.from('orders').update({ status: status.toLowerCase() }).match({ order_id: id });
               setStatusOverrides(prev => ({ ...prev, [id]: status }));
             }}
-            testAlert={() => triggerAlert({ total: 999, customer_name: 'TERMINAL TEST' })}
+            testAlert={() => triggerAlert({ total: 0, customer_name: 'AUDIO TEST' })}
           />
         } />
       </Routes>

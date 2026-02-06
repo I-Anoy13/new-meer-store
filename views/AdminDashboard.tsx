@@ -129,9 +129,9 @@ const AdminDashboard = (props: any) => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-10">
               {[
                 { label: 'Revenue', val: `Rs. ${analytics.revenue.toLocaleString()}`, color: 'text-black' },
-                { label: 'Orders Total', val: analytics.total, color: 'text-black' },
+                { label: 'Orders Total', val: props.totalDbCount, color: 'text-black' },
                 { label: 'Active Pending', val: analytics.pendingCount, color: 'text-blue-600' },
-                { label: 'Success Rate', val: `${analytics.total ? Math.round((analytics.deliveredCount / (analytics.total || 1)) * 100) : 0}%`, color: 'text-green-600' }
+                { label: 'Success Rate', val: `${props.totalDbCount ? Math.round((analytics.deliveredCount / (props.totalDbCount || 1)) * 100) : 0}%`, color: 'text-green-600' }
               ].map((s, i) => (
                 <div key={i} className="bg-white border border-gray-200 p-8 md:p-10 rounded-[2.5rem] md:rounded-[3rem] shadow-sm hover:shadow-xl transition-all duration-500 group">
                   <p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 group-hover:text-blue-500 transition">{s.label}</p>
