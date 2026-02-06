@@ -5,83 +5,66 @@ const SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-let backgroundChannel = null;
-let keepAliveInterval = null;
+let channel = null;
 
-// The Background Sentinel: Stays alive as long as the OS allows the worker to run
-function startSentinel() {
-  if (backgroundChannel) {
-    backgroundChannel.unsubscribe();
-  }
+const NOTIFY_ICON = 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop';
 
-  // Use a dedicated high-priority channel for background alerts
-  backgroundChannel = supabase.channel('itx_background_sentinel_v1')
+function initRealtime() {
+  if (channel) channel.unsubscribe();
+
+  channel = supabase.channel('order-sentinel')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
       
-      const notificationOptions = {
-        body: `💰 NEW SALE: Rs. ${order.total_pkr || order.total} from ${order.customer_name}`,
-        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-        badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-        vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40],
-        tag: 'itx-sale-alert',
-        renotify: true,
-        requireInteraction: true,
-        data: { url: '/admin.html' },
-        actions: [
-          { action: 'open', title: 'View Order' }
-        ]
-      };
+      // 1. Trigger OS Notification (The most reliable way to notify)
+      self.registration.showNotification('💰 NEW ORDER RECEIVED', {
+        body: `Order #${order.order_id || order.id} - Rs. ${order.total_pkr || order.total} from ${order.customer_name}`,
+        icon: NOTIFY_ICON,
+        badge: NOTIFY_ICON,
+        vibrate: [200, 100, 200],
+        tag: 'new-order-' + (order.order_id || order.id),
+        data: { url: '/admin.html' }
+      });
 
-      self.registration.showNotification('ITX MASTER: NEW ORDER', notificationOptions);
+      // 2. Broadcast to any open Admin windows for instant UI update
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'NEW_ORDER_DETECTED',
+            order: order
+          });
+        });
+      });
     })
     .subscribe((status) => {
-      console.log('Sentinel Status:', status);
+      console.log('[SW Sentinel] Status:', status);
       if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-        setTimeout(startSentinel, 5000);
+        setTimeout(initRealtime, 5000); // Robust reconnection
       }
     });
-
-  // Keep-alive heartbeat: Pings the worker every 25 seconds to prevent idling
-  if (keepAliveInterval) clearInterval(keepAliveInterval);
-  keepAliveInterval = setInterval(() => {
-    console.log('Background Sentinel Heartbeat...');
-  }, 25000);
 }
 
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-});
-
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    Promise.all([
-      self.clients.claim(),
-      startSentinel()
-    ])
-  );
+  event.waitUntil(self.clients.claim().then(() => initRealtime()));
 });
 
+// Re-init on any interaction or ping from UI
 self.addEventListener('message', (event) => {
-  if (event.data === 'PING_SENTINEL') {
-    startSentinel();
+  if (event.data === 'REQUEST_SENTINEL_STATUS') {
+    if (!channel) initRealtime();
+    event.source.postMessage({ type: 'SENTINEL_ALIVE' });
   }
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = new URL('/admin.html', self.location.origin).href;
-  
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (const client of windowClients) {
-        if (client.url === targetUrl && 'focus' in client) {
-          return client.focus();
-        }
+    self.clients.matchAll({ type: 'window' }).then(clients => {
+      for (const client of clients) {
+        if (client.url.includes('admin') && 'focus' in client) return client.focus();
       }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl);
-      }
+      if (self.clients.openWindow) return self.clients.openWindow('/admin.html');
     })
   );
 });
