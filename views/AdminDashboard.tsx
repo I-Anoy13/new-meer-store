@@ -17,6 +17,7 @@ const AdminDashboard = (props: any) => {
   const [authKey, setAuthKey] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [timeRange, setTimeRange] = useState('6months'); 
+  const [notifPermission, setNotifPermission] = useState(Notification.permission);
   
   const analytics = useMemo(() => {
     const now = new Date();
@@ -228,6 +229,26 @@ const AdminDashboard = (props: any) => {
                     </button>
                   </div>
 
+                  <div className="p-6 bg-white rounded-3xl border border-gray-100">
+                    <p className="text-[10px] font-black uppercase text-gray-400 mb-2">Notification Health</p>
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-bold ${notifPermission === 'granted' ? 'text-green-600' : 'text-red-600'}`}>
+                        {notifPermission.toUpperCase()}
+                      </span>
+                      {notifPermission !== 'granted' && (
+                        <button 
+                          onClick={async () => {
+                            const res = await Notification.requestPermission();
+                            setNotifPermission(res);
+                          }}
+                          className="text-[9px] font-black text-blue-600 underline uppercase"
+                        >
+                          Enable Notifications
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="pt-10 border-t border-gray-200">
                     <p className="text-[10px] font-black uppercase text-red-500 tracking-widest mb-4 italic">Destruction Utility</p>
                     <button 
@@ -240,7 +261,7 @@ const AdminDashboard = (props: any) => {
 
                   <p className="text-[10px] text-gray-400 text-center font-bold uppercase italic leading-relaxed">
                     <i className="fas fa-info-circle mr-2 text-blue-500"></i>
-                    Last Heartbeat: {formattedHeartbeat}. The terminal uses a silent audio stream to keep background sync alive. If the alert icon is red, click it to re-prime the system.
+                    Last Heartbeat: {formattedHeartbeat}. The terminal uses a silent video/audio stream and a Service Worker to keep background sync alive. Ensure notifications are allowed for real-time alerts.
                   </p>
                 </div>
              </div>
