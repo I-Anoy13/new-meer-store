@@ -3,7 +3,7 @@
   "name": "ITX ADMIN CONSOLE",
   "short_name": "ITX ADMIN",
   "description": "Standalone Management for ITX MEER",
-  "start_url": "/admin.html?source=pwa",
+  "start_url": "/admin",
   "display": "standalone",
   "background_color": "#1a1c1d",
   "theme_color": "#1a1c1d",

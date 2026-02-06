@@ -3,6 +3,14 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/sw.js",
+      "destination": "/sw.js"
+    },
+    {
+      "source": "/manifest-admin.json",
+      "destination": "/manifest-admin.json"
+    },
+    {
       "source": "/admin",
       "destination": "/admin.html"
     },
@@ -11,12 +19,8 @@
       "destination": "/admin.html"
     },
     {
-      "source": "/manifest-admin.json",
-      "destination": "/manifest-admin.json"
-    },
-    {
-      "source": "/sw.js",
-      "destination": "/sw.js"
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
     },
     {
       "source": "/((?!admin|manifest-admin|sw.js|favicon|assets|.*\\.).*)",
