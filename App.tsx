@@ -36,7 +36,7 @@ const MainLayout: React.FC<{
 
     {isSyncing && (
       <div className="fixed top-20 right-6 z-[1000] animate-pulse">
-        <div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg italic">Relaying Signal...</div>
+        <div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg italic">Signal Sent!</div>
       </div>
     )}
     <main className="flex-grow">{children}</main>
@@ -68,6 +68,7 @@ const AppContent: React.FC = () => {
   const broadcastChannelRef = useRef<any>(null);
   const processedOrders = useRef<Set<string>>(new Set());
 
+  // Initialize persistent broadcast channel
   useEffect(() => {
     const bc = supabase.channel('itx_master_link');
     bc.subscribe();
@@ -75,8 +76,42 @@ const AppContent: React.FC = () => {
     return () => { supabase.removeChannel(bc); };
   }, []);
 
-  const setupGlobalListener = useCallback(() => {
+  const triggerInstantAlert = useCallback((order: any) => {
+    // SECURITY: Strictly Admin-Only sound and notification
     if (user?.role !== UserRole.ADMIN) return;
+
+    try {
+      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(523, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1046, ctx.currentTime + 0.1);
+      g.gain.setValueAtTime(0, ctx.currentTime);
+      g.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
+      osc.connect(g); g.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 2.5);
+    } catch (e) {
+      console.warn("Audio Context failed to start (interaction required).");
+    }
+
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'TRIGGER_NOTIFICATION',
+        title: '🚨 NEW ORDER RECEIVED!',
+        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
+        orderId: order.order_id || order.id
+      });
+    }
+  }, [user]);
+
+  const setupGlobalListener = useCallback(() => {
+    if (user?.role !== UserRole.ADMIN) {
+      setIsLive(false);
+      return;
+    }
+    
     if (channelRef.current) supabase.removeChannel(channelRef.current);
 
     const channel = supabase.channel('itx_master_link')
@@ -97,32 +132,7 @@ const AppContent: React.FC = () => {
       });
 
     channelRef.current = channel;
-  }, [user]);
-
-  const triggerInstantAlert = (order: any) => {
-    try {
-      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(523, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1046, ctx.currentTime + 0.1);
-      g.gain.setValueAtTime(0, ctx.currentTime);
-      g.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
-      osc.connect(g); g.connect(ctx.destination);
-      osc.start(); osc.stop(ctx.currentTime + 2.5);
-    } catch {}
-
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: 'TRIGGER_NOTIFICATION',
-        title: '🚨 NEW ORDER!',
-        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
-        orderId: order.order_id || order.id
-      });
-    }
-  };
+  }, [user, triggerInstantAlert]);
 
   useEffect(() => {
     setupGlobalListener();
@@ -198,7 +208,7 @@ const AppContent: React.FC = () => {
       source: 'Optimistic Master Signal'
     };
 
-    // ATOMIC DISPATCH: Pulse the admin immediately
+    // 1. DISPATCH PULSE (Admin alert path)
     if (broadcastChannelRef.current) {
       broadcastChannelRef.current.send({
         type: 'broadcast',
@@ -207,14 +217,17 @@ const AppContent: React.FC = () => {
       });
     }
 
-    // BACKGROUND DB SAVE: Don't let the user wait for this
+    // 2. DISPATCH DB INSERT (Reliable storage path)
+    // We do NOT await this to prevent UI blocking for the customer
     supabase.from('orders').insert([payload]).then(({ error }) => {
-      if (error) console.error("Background DB Error:", error);
+      if (error) console.error("Async DB Save Error:", error);
     });
 
-    // Forced Success Path for UX
+    // 3. OPTIMISTIC SUCCESS
     setCart([]);
-    setTimeout(() => setIsSyncing(false), 800);
+    // Short delay to show the "Relaying" state briefly
+    await new Promise(r => setTimeout(r, 600));
+    setIsSyncing(false);
     return true;
   };
 
