@@ -5,7 +5,6 @@ import { createClient } from '@supabase/supabase-js';
 import { Product, Order, User, UserRole } from './types';
 import AdminDashboard from './views/AdminDashboard';
 
-// ISOLATED ADMIN ENGINE
 const ADMIN_SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
 const ADMIN_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
 
@@ -59,8 +58,6 @@ const AdminApp: React.FC = () => {
 
       const now = ctx.currentTime;
       
-      // HIGH-FIDELITY "KA-CHING"
-      // Note 1: Sudden rising frequency (The 'Ka')
       const osc1 = ctx.createOscillator();
       const g1 = ctx.createGain();
       osc1.type = 'triangle';
@@ -72,11 +69,10 @@ const AdminApp: React.FC = () => {
       osc1.connect(g1); g1.connect(ctx.destination);
       osc1.start(now); osc1.stop(now + 0.1);
 
-      // Note 2: Metallic ringing (The 'Ching')
       const osc2 = ctx.createOscillator();
       const g2 = ctx.createGain();
       osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(2489, now + 0.08); // D#7
+      osc2.frequency.setValueAtTime(2489, now + 0.08); 
       g2.gain.setValueAtTime(0, now + 0.08);
       g2.gain.linearRampToValueAtTime(0.4, now + 0.09);
       g2.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
@@ -95,13 +91,11 @@ const AdminApp: React.FC = () => {
 
   const fetchOrdersAndCount = useCallback(async () => {
     try {
-      // 1. ROBUST COUNT: Fetch IDs and calculate length to bypass free-tier metadata limits
       const { data: idData, error: countErr } = await adminSupabase.from('orders').select('id');
       if (!countErr && idData) {
         setTotalDbCount(idData.length);
       }
 
-      // 2. FETCH RECENT
       const { data, error: dataErr } = await adminSupabase.from('orders')
         .select('*')
         .order('created_at', { ascending: false })
@@ -151,6 +145,11 @@ const AdminApp: React.FC = () => {
         setIsLive(status === 'SUBSCRIBED');
         if (status === 'SUBSCRIBED') {
           setLastSyncTime(new Date());
+          
+          // Re-trigger Sentinel
+          if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage('PING_SENTINEL');
+          }
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
           retryTimeoutRef.current = setTimeout(setupMasterRelay, 5000);
         }
@@ -179,15 +178,17 @@ const AdminApp: React.FC = () => {
       setLoading(false);
     }
 
-    const handleFocus = () => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         fetchOrdersAndCount();
+        setupMasterRelay();
         if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
       }
     };
-    window.addEventListener('focus', handleFocus);
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
     };
   }, [user, setupMasterRelay, fetchOrdersAndCount]);

@@ -31,7 +31,7 @@ const MainLayout: React.FC<{
       <div className="fixed top-20 left-6 z-[1000] flex items-center space-x-2 bg-white/90 backdrop-blur shadow-sm border border-gray-100 px-3 py-1.5 rounded-full scale-90 md:scale-100 origin-left transition-all duration-500">
         <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
         <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-          {isLive ? 'Master Link Active' : 'Relay Disconnected'}
+          {isLive ? 'Relay Active' : 'Relay Paused'}
         </span>
       </div>
     )}
@@ -73,7 +73,6 @@ const AppContent: React.FC = () => {
       supabase.removeChannel(presenceChannelRef.current);
     }
 
-    // ACTIVE PRESENCE: Allows the Admin to see exactly who is on the site
     const channel = supabase.channel('itx_active_sessions_v3', {
       config: { presence: { key: 'visitor' } }
     });
@@ -88,6 +87,11 @@ const AppContent: React.FC = () => {
           role: user?.role || 'CUSTOMER',
           last_view: window.location.hash
         });
+        
+        // Notify Service Worker to stay awake
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage('PING_SENTINEL');
+        }
       }
     });
 
@@ -96,10 +100,17 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     setupActivePresence();
-    const handleReSync = () => { if (document.visibilityState === 'visible') setupActivePresence(); };
-    window.addEventListener('focus', handleReSync);
+    
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // App is back! Instantly snap the connection
+        setupActivePresence();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('focus', handleReSync);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current);
     };
   }, [setupActivePresence]);
@@ -160,7 +171,6 @@ const AppContent: React.FC = () => {
       source: 'ITX_ACTIVE_TRANS_V5'
     };
 
-    // Broadcast Activity to Admin
     if (presenceChannelRef.current) {
       presenceChannelRef.current.send({
         type: 'broadcast',
