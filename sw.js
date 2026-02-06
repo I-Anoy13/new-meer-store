@@ -6,41 +6,49 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 let channel = null;
+let reconnectInterval = null;
 
 function setupBackgroundListener() {
   if (channel) {
     channel.unsubscribe();
   }
 
-  // Use a unique channel for v20 high-reliability alerts
-  channel = supabase.channel('itx-critical-priority-v20')
+  channel = supabase.channel('itx-immortal-sw-v50')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
       
       const notificationOptions = {
-        body: `Order for Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
+        body: `New Order: Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
         icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-        badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-        vibrate: [500, 100, 500, 100, 500],
-        tag: 'order-alert-' + (order.id || Date.now()),
-        renotify: true,
+        vibrate: [500, 100, 500],
+        tag: 'order-' + (order.id || Date.now()),
         requireInteraction: true,
         data: { url: '/admin' }
       };
 
-      self.registration.showNotification('🚨 ITX NEW ORDER!', notificationOptions);
+      self.registration.showNotification('🚨 ITX ORDER ALERT', notificationOptions);
 
-      // Push to all active tabs
       self.clients.matchAll({ type: 'window' }).then(clients => {
         clients.forEach(client => {
-          client.postMessage({
-            type: 'NEW_ORDER_DETECTED',
-            order: order
-          });
+          client.postMessage({ type: 'NEW_ORDER_DETECTED', order: order });
         });
       });
     })
-    .subscribe();
+    .subscribe((status) => {
+      if (status !== 'SUBSCRIBED') {
+        // Force reconnect logic
+        if (!reconnectInterval) {
+          reconnectInterval = setInterval(() => {
+            setupBackgroundListener();
+          }, 10000);
+        }
+      } else {
+        if (reconnectInterval) {
+          clearInterval(reconnectInterval);
+          reconnectInterval = null;
+        }
+      }
+    });
 }
 
 self.addEventListener('install', (event) => {
@@ -61,17 +69,12 @@ self.addEventListener('message', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = new URL('/admin', self.location.origin).href;
-  
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
       for (let client of windowClients) {
-        if (client.url === targetUrl && 'focus' in client) {
-          return client.focus();
-        }
+        if (client.url === targetUrl && 'focus' in client) return client.focus();
       }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(targetUrl);
-      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
     })
   );
 });
