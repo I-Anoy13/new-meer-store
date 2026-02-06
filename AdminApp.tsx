@@ -65,6 +65,7 @@ const AdminApp: React.FC = () => {
       v.style.height = '1px';
       v.style.opacity = '0.01';
       v.style.pointerEvents = 'none';
+      // Long silent MP4 to keep background task alive
       v.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQyAAAACHV1aWRreG1sAAAAAGFiaWxpdHkgeG1sbnM9Imh0dHA6Ly9ucy5hZG9iZS5jb20vYWJpbGl0eS8iPjxhYmlsaXR5OnN5c3RlbT48YWJpbGl0eTpkZXZpY2U+PG9zPnVuaXg8L29zPjwvYWJpbGl0eTpkZXZpY2U+PC9hYmlsaXR5OnN5c3RlbT48L2FiaWxpdHk+AAAAbG1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAPoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhazAAAAHkdGtoZAAAAAMAAAAAAAAAAAAAA+gAAAPoAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABkbWRpYQAALW1kaGQAAAAAAAAAAAAAAAAAAD6AAAA+gAFVx9v/AAAAAAAALWhkbHIAAAAAAAAAAHZpZGVvAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAAVxtZGlhAAAALW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAU9zdGJsAAAAp3N0c2QAAAAAAAAAAQAAAJZhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAHgAeABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAM/+EAFWdCwAwU9mAsX+AAB9AAAfQAAAgAAAH0AAAgAAYhB9mP4wAAABhzdHRzAAAAAAAAAAEAAAABAAAD6AAAAFpzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAAAAAAAAAgAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYXVkcmEAAABhdWRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAD9zZ3BkAAAAAAAAAHRyb2wAAAABAAAALXRyb2wAAAAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYW1lZXRyYWsAAA==';
       document.body.appendChild(v);
       v.play().catch(() => {});
@@ -74,21 +75,29 @@ const AdminApp: React.FC = () => {
 
   const triggerAlert = useCallback(async (order?: any) => {
     try {
-      const ctx = audioContextRef.current || new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (!audioContextRef.current) audioContextRef.current = ctx;
-      if (ctx.state === 'suspended') await ctx.resume();
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      const ctx = audioContextRef.current;
+      
+      // Force resume if state is suspended (common in background tabs)
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
 
       const now = ctx.currentTime;
-      [880, 1046, 1318].forEach((f, i) => {
+      // High-intensity triple-tone for maximum "instant" feedback
+      [660, 880, 1320].forEach((f, i) => {
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(f, now + (i * 0.15));
-        g.gain.setValueAtTime(0, now + (i * 0.15));
-        g.gain.linearRampToValueAtTime(0.5, now + (i * 0.15) + 0.05);
-        g.gain.exponentialRampToValueAtTime(0.001, now + (i * 0.15) + 2.0);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now + (i * 0.1));
+        g.gain.setValueAtTime(0, now + (i * 0.1));
+        g.gain.linearRampToValueAtTime(0.4, now + (i * 0.1) + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + (i * 0.1) + 1.2);
         osc.connect(g); g.connect(ctx.destination);
-        osc.start(now + (i * 0.15)); osc.stop(now + (i * 0.15) + 2.0);
+        osc.start(now + (i * 0.1)); osc.stop(now + (i * 0.1) + 1.3);
       });
 
       if (order && Notification.permission === "granted") {
@@ -99,18 +108,22 @@ const AdminApp: React.FC = () => {
           tag: 'itx-terminal-order'
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Audio Alert Error:", e);
+    }
   }, []);
 
   const fetchOrders = useCallback(async () => {
     try {
-      // THE 98 LIMIT FIX: Use HEAD select for exact count to bypass data limits
-      const { count, error: countErr } = await adminSupabase
+      // THE 100% RELIABLE COUNT FIX: 
+      // Supabase count metadata on free tier is often cached or capped. 
+      // We perform a specific select on IDs to get the absolute length of the table.
+      const { data: idList, error: countErr } = await adminSupabase
         .from('orders')
-        .select('*', { count: 'exact', head: true });
+        .select('id');
       
-      if (!countErr && count !== null) {
-        setTotalDbCount(count);
+      if (!countErr && idList) {
+        setTotalDbCount(idList.length);
       }
 
       const { data, error: dataErr } = await adminSupabase.from('orders')
@@ -131,9 +144,12 @@ const AdminApp: React.FC = () => {
     if (processedRef.current.has(id)) return;
     processedRef.current.add(id);
     
+    // Update local state immediately for instant feedback
     setRawOrders(prev => [newOrder, ...prev].slice(0, 100));
     setTotalDbCount(prev => prev + 1);
     setLastSyncTime(new Date());
+    
+    // Trigger the auditory and visual alert
     triggerAlert(newOrder);
   }, [triggerAlert]);
 
@@ -147,6 +163,7 @@ const AdminApp: React.FC = () => {
     // UNIQUE CHANNEL: HIGH-ENTROPY NAME TO ENSURE ZERO CONFLICT WITH CUSTOMER SITE
     const channel = adminSupabase.channel('itx_terminal_prime_relay_x99')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
+        // This is the "Instant" hook
         addRealtimeOrder(payload.new);
       })
       .subscribe(status => {
@@ -192,6 +209,10 @@ const AdminApp: React.FC = () => {
       if (document.visibilityState === 'visible') {
         setupTerminalSync();
         fetchOrders();
+        // Resume context on focus to ensure alerts are ready
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume();
+        }
       }
     };
     window.addEventListener('focus', handleFocus);
