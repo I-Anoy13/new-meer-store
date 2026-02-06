@@ -1,90 +1,59 @@
 
-const CACHE_NAME = 'itx-master-v101';
-const SHELL_ASSETS = [
-  '/',
-  '/index.html',
-  '/admin.html',
-  '/admin',
-  '/manifest.json',
-  '/manifest-admin.json'
-];
+// Import Supabase from ESM
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@^2.93.3';
 
-// Install: Cache the app shell
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_ASSETS);
+const SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
+
+const CACHE_NAME = 'itx-master-v105';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Background Subscription logic
+let channel = null;
+
+function setupBackgroundListener() {
+  if (channel) return;
+
+  channel = supabase.channel('background-orders')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+      const order = payload.new;
+      
+      // 1. Show Notification
+      self.registration.showNotification('🔥 NEW ORDER RECEIVED!', {
+        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name} from ${order.customer_city || 'City'}`,
+        icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
+        vibrate: [500, 100, 500, 100, 500],
+        tag: 'new-order-alert',
+        requireInteraction: true,
+        data: { url: '/admin' }
+      });
+
+      // 2. Broadcast to all open tabs
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'NEW_ORDER_DETECTED',
+            order: order
+          });
+        });
+      });
     })
-  );
+    .subscribe();
+}
+
+self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: Clean up old caches
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      );
-    })
-  );
-  clients.claim();
+  event.waitUntil(clients.claim());
+  setupBackgroundListener();
 });
 
-// Fetch: Network-first falling back to cache
-self.addEventListener('fetch', (event) => {
-  // Skip cross-origin and non-GET requests
-  if (!event.request.url.startsWith(self.location.origin) || event.request.method !== 'GET') {
-    return;
-  }
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // If it's a valid response, clone and cache it
-        if (response && response.status === 200) {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
-        }
-        return response;
-      })
-      .catch(() => {
-        // If network fails, try the cache
-        return caches.match(event.request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
-          
-          // If it's a navigation request and nothing is found, return the appropriate shell
-          if (event.request.mode === 'navigate') {
-            if (event.request.url.includes('/admin')) {
-              return caches.match('/admin.html');
-            }
-            return caches.match('/index.html');
-          }
-        });
-      })
-  );
-});
-
-// Notification handling
+// Re-establish on any wake event
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'TRIGGER_NOTIFICATION') {
-    const { title, body, orderId } = event.data;
-    const options = {
-      body: body,
-      icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-      badge: 'https://images.unsplash.com/photo-1614164185128-w=96&h=96&auto=format&fit=crop',
-      vibrate: [500, 100, 500, 100, 500],
-      tag: 'new-order-alert',
-      renotify: true,
-      requireInteraction: true,
-      data: { url: '/admin' },
-      actions: [
-        { action: 'open', title: '🚀 VIEW ORDER' }
-      ]
-    };
-    event.waitUntil(self.registration.showNotification(title, options));
+  if (event.data && event.data.type === 'START_BACKGROUND_SYNC') {
+    setupBackgroundListener();
   }
 });
 
