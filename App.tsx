@@ -103,7 +103,6 @@ const AppContent: React.FC = () => {
     
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // App is back! Instantly snap the connection
         setupActivePresence();
       }
     };
@@ -153,43 +152,50 @@ const AppContent: React.FC = () => {
 
   const placeOrder = async (order: Order): Promise<boolean> => {
     setIsSyncing(true);
-    const orderId = order.id;
-    const firstItem = order.items[0];
-    const payload = {
-      order_id: orderId,
-      customer_name: order.customer.name,
-      customer_phone: order.customer.phone,
-      customer_city: order.customer.city || 'N/A',
-      customer_address: order.customer.address,
-      product_id: String(firstItem?.product.id || 'N/A'),
-      product_name: firstItem?.product.name || 'N/A',
-      product_price: Number(firstItem?.product.price || 0),
-      product_image: firstItem?.product.image || '',
-      total_pkr: Math.round(Number(order.total) || 0),
-      status: 'pending',
-      items: order.items,
-      source: 'ITX_ACTIVE_TRANS_V5'
-    };
+    try {
+      const orderId = order.id;
+      const firstItem = order.items[0];
+      const payload = {
+        order_id: orderId,
+        customer_name: order.customer.name,
+        customer_phone: order.customer.phone,
+        customer_city: order.customer.city || 'N/A',
+        customer_address: order.customer.address,
+        product_id: String(firstItem?.product.id || 'N/A'),
+        product_name: firstItem?.product.name || 'N/A',
+        product_price: Number(firstItem?.product.price || 0),
+        product_image: firstItem?.product.image || '',
+        total_pkr: Math.round(Number(order.total) || 0),
+        status: 'pending',
+        items: order.items,
+        source: 'ITX_CLEAN_REDUX_V1'
+      };
 
-    if (presenceChannelRef.current) {
-      presenceChannelRef.current.send({
-        type: 'broadcast',
-        event: 'activity',
-        payload: { type: 'ORDER_PLACED', name: order.customer.name }
-      });
+      // Broadcast activity for live updates
+      if (presenceChannelRef.current) {
+        presenceChannelRef.current.send({
+          type: 'broadcast',
+          event: 'activity',
+          payload: { type: 'ORDER_PLACED', name: order.customer.name }
+        });
+      }
+
+      const { error } = await supabase.from('orders').insert([payload]);
+      
+      if (error) {
+        console.error("Order Submission Failed:", error.message);
+        throw error;
+      }
+
+      setCart([]);
+      localStorage.removeItem('cart');
+      return true;
+    } catch (err) {
+      console.error("Order placement exception:", err);
+      return false;
+    } finally {
+      setIsSyncing(false);
     }
-
-    const { error } = await supabase.from('orders').insert([payload]);
-    if (error) {
-       console.error("Order Fail:", error);
-       setIsSyncing(false);
-       return false;
-    }
-
-    setCart([]);
-    await new Promise(r => setTimeout(r, 600));
-    setIsSyncing(false);
-    return true;
   };
 
   if (loading) return (

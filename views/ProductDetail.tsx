@@ -96,6 +96,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
 
   const handleQuickOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+    
     setIsSubmitting(true);
     const timestamp = Date.now().toString().slice(-6);
     const newOrderId = `ORD-${timestamp}`;
@@ -107,9 +109,19 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       customer: { name: formData.name, email: '', phone: formData.phone, address: formData.address, city: formData.city },
       date: new Date().toISOString()
     };
-    const success = await placeOrder(newOrder);
-    if (success) setOrderSuccess({ id: newOrderId });
-    setIsSubmitting(false);
+    
+    try {
+      const success = await placeOrder(newOrder);
+      if (success) {
+        setOrderSuccess({ id: newOrderId });
+      } else {
+        alert("Failed to place order. Please try again.");
+      }
+    } catch (err) {
+      alert("An error occurred. Please try again later.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const scrollToImage = (idx: number) => {

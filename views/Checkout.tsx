@@ -28,13 +28,6 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
     setIsSubmitting(true);
     const newOrderId = `ORD-${Math.floor(Math.random() * 900000) + 100000}`;
     
-    // Safety Timeout for UX
-    const forceSuccess = setTimeout(() => {
-       setOrderId(newOrderId);
-       setIsOrdered(true);
-       setIsSubmitting(false);
-    }, 3500);
-
     const newOrder: Order = {
       id: newOrderId,
       items: [...cart],
@@ -44,7 +37,8 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
         name: formData.name,
         email: '',
         phone: formData.phone,
-        address: `${formData.address}, ${formData.city}`
+        address: `${formData.address}, ${formData.city}`,
+        city: formData.city
       },
       date: new Date().toISOString()
     };
@@ -52,12 +46,14 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
     try {
       const success = await placeOrder(newOrder);
       if (success) {
-        clearTimeout(forceSuccess);
         setOrderId(newOrderId);
         setIsOrdered(true);
+      } else {
+        alert("We encountered an issue placing your order. Please check your connection and try again.");
       }
     } catch (err) {
       console.error("Order process error", err);
+      alert("Something went wrong. Please try again later.");
     } finally {
       setIsSubmitting(false);
     }
