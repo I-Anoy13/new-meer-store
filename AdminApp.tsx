@@ -5,10 +5,15 @@ import { createClient } from '@supabase/supabase-js';
 import { Product, Order, User, UserRole } from './types';
 import AdminDashboard from './views/AdminDashboard';
 
-// ISOLATED ADMIN ENGINE
+// CRITICAL ISOLATION: Dedicated Admin Client with NO Session Persistence
+// This prevents the browser from sharing a socket with the customer site.
 const ADMIN_SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
 const ADMIN_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
-const adminSupabase = createClient(ADMIN_SUPABASE_URL, ADMIN_SUPABASE_KEY);
+
+const adminSupabase = createClient(ADMIN_SUPABASE_URL, ADMIN_SUPABASE_KEY, {
+  auth: { persistSession: false },
+  realtime: { params: { eventsPerSecond: 10 } }
+});
 
 const AdminApp: React.FC = () => {
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
@@ -29,7 +34,7 @@ const AdminApp: React.FC = () => {
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const videoPersistenceRef = useRef<HTMLVideoElement | null>(null);
-  const reconnectInterval = useRef<any>(null);
+  const retryTimeoutRef = useRef<any>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
     const saved = localStorage.getItem('itx_status_overrides');
@@ -100,17 +105,14 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      // FIX FOR 98 LIMIT: Use head:true with exact count which is more reliable on Supabase free tier
-      const { count, error: countErr } = await adminSupabase
+      // THE 98 LIMIT FIX: Use a hard ID select to bypass metadata count caching
+      const { data: idList, error: countErr } = await adminSupabase
         .from('orders')
-        .select('*', { count: 'exact', head: true });
+        .select('id')
+        .limit(10000);
       
-      if (!countErr && count !== null) {
-        setTotalDbCount(count);
-      } else {
-        // Brute fallback: select id list and count length
-        const { data: allIds } = await adminSupabase.from('orders').select('id').limit(1000);
-        if (allIds) setTotalDbCount(allIds.length);
+      if (!countErr && idList) {
+        setTotalDbCount(idList.length);
       }
 
       const { data, error: dataErr } = await adminSupabase.from('orders')
@@ -144,8 +146,8 @@ const AdminApp: React.FC = () => {
       adminSupabase.removeChannel(masterChannelRef.current);
     }
 
-    // UNIQUE CHANNEL: High-entropy name to ensure zero conflict with customer relay
-    const channel = adminSupabase.channel('itx_admin_terminal_omega_v9')
+    // UNIQUE CHANNEL: High-entropy name specifically for the Terminal instance
+    const channel = adminSupabase.channel('itx_terminal_dedicated_private_v1')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
         addRealtimeOrder(payload.new);
       })
@@ -154,12 +156,9 @@ const AdminApp: React.FC = () => {
         setIsLive(active);
         if (active) {
           setLastSyncTime(new Date());
-          if (reconnectInterval.current) clearInterval(reconnectInterval.current);
+          if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          // Robust retry
-          if (!reconnectInterval.current) {
-            reconnectInterval.current = setInterval(setupTerminalSync, 5000);
-          }
+          retryTimeoutRef.current = setTimeout(setupTerminalSync, 5000);
         }
       });
 
@@ -200,7 +199,8 @@ const AdminApp: React.FC = () => {
     window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('focus', handleFocus);
-      if (reconnectInterval.current) clearInterval(reconnectInterval.current);
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+      if (masterChannelRef.current) adminSupabase.removeChannel(masterChannelRef.current);
     };
   }, [user, setupTerminalSync, fetchOrders]);
 
@@ -218,7 +218,7 @@ const AdminApp: React.FC = () => {
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a]">
       <div className="w-10 h-10 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4"></div>
-      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic tracking-tighter">Terminal Booting...</p>
+      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic tracking-tighter">Terminal Active...</p>
     </div>
   );
 

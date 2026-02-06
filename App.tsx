@@ -29,9 +29,9 @@ const MainLayout: React.FC<{
     
     {user?.role === UserRole.ADMIN && (
       <div className="fixed top-20 left-6 z-[1000] flex items-center space-x-2 bg-white/90 backdrop-blur shadow-sm border border-gray-100 px-3 py-1.5 rounded-full scale-90 md:scale-100 origin-left transition-all duration-500">
-        <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-50'}`}></div>
+        <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
         <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-          {isLive ? 'Master Link Active' : 'Relay Active'}
+          {isLive ? 'Master Link Active' : 'Relay Disconnected'}
         </span>
       </div>
     )}
@@ -66,60 +66,30 @@ const AppContent: React.FC = () => {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const masterChannelRef = useRef<any>(null);
-  const processedOrders = useRef<Set<string>>(new Set());
-
-  const triggerInstantAlert = useCallback((order: any) => {
-    if (user?.role !== UserRole.ADMIN) return;
-
-    try {
-      const ctx = new ((window as any).AudioContext || (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(523, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1046, ctx.currentTime + 0.1);
-      g.gain.setValueAtTime(0, ctx.currentTime);
-      g.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 2.5);
-      osc.connect(g); g.connect(ctx.destination);
-      osc.start(); osc.stop(ctx.currentTime + 2.5);
-    } catch (e) {}
-  }, [user]);
+  const broadcastChannelRef = useRef<any>(null);
 
   const setupCustomerRelay = useCallback(() => {
-    if (masterChannelRef.current) {
-      supabase.removeChannel(masterChannelRef.current);
+    if (broadcastChannelRef.current) {
+      supabase.removeChannel(broadcastChannelRef.current);
     }
 
-    // CUSTOMER RELAY: Uses a completely different channel name to avoid Admin conflict
-    const channelName = user?.role === UserRole.ADMIN ? 'itx_admin_terminal_omega_v9' : 'itx_customer_signal_relay_v5';
-    
-    const channel = supabase.channel(channelName);
-    
-    if (user?.role === UserRole.ADMIN) {
-      channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
-        const orderId = payload.new.order_id || payload.new.id;
-        if (processedOrders.current.has(orderId)) return;
-        processedOrders.current.add(orderId);
-        triggerInstantAlert(payload.new);
-      });
-    }
+    // LIGHTWEIGHT BROADCAST ONLY: Does not subscribe to Postgres changes.
+    // This prevents kicking the Admin socket.
+    const channel = supabase.channel('itx_customer_signal_v1', {
+      config: { broadcast: { self: true } }
+    });
 
     channel.subscribe((status) => {
       setIsLive(status === 'SUBSCRIBED');
     });
 
-    masterChannelRef.current = channel;
-  }, [user, triggerInstantAlert]);
+    broadcastChannelRef.current = channel;
+  }, []);
 
   useEffect(() => {
     setupCustomerRelay();
-    const handleReSync = () => { if (document.visibilityState === 'visible') setupCustomerRelay(); };
-    window.addEventListener('focus', handleReSync);
     return () => {
-      window.removeEventListener('focus', handleReSync);
-      if (masterChannelRef.current) supabase.removeChannel(masterChannelRef.current);
+      if (broadcastChannelRef.current) supabase.removeChannel(broadcastChannelRef.current);
     };
   }, [setupCustomerRelay]);
 
@@ -179,16 +149,16 @@ const AppContent: React.FC = () => {
       source: 'ITX_PULSE_GEN_5'
     };
 
-    // 1. BROADCAST SIGNAL (Main Site Only Sends)
-    if (masterChannelRef.current) {
-      masterChannelRef.current.send({
+    // BROADCAST SIGNAL
+    if (broadcastChannelRef.current) {
+      broadcastChannelRef.current.send({
         type: 'broadcast',
         event: 'new_order',
         payload: payload
       });
     }
 
-    // 2. PERSIST TO DB
+    // PERSIST TO DB (The Admin App will see this via Postgres Changes)
     await supabase.from('orders').insert([payload]);
 
     setCart([]);
