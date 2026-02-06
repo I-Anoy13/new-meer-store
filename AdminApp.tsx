@@ -17,9 +17,14 @@ const AdminApp: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
   
-  const [totalDbCount, setTotalDbCount] = useState<number>(0);
+  const [totalDbCount, setTotalDbCount] = useState<number>(() => {
+    return Number(localStorage.getItem('itx_total_count')) || 0;
+  });
+  
   const [loading, setLoading] = useState(rawOrders.length === 0);
   const [isLive, setIsLive] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
+  
   const processedRef = useRef<Set<string>>(new Set());
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -42,57 +47,78 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_cached_products', JSON.stringify(products));
     localStorage.setItem('itx_cached_orders', JSON.stringify(rawOrders));
     localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
-  }, [products, rawOrders, statusOverrides]);
+    localStorage.setItem('itx_total_count', totalDbCount.toString());
+  }, [products, rawOrders, statusOverrides, totalDbCount]);
 
   const initAudio = useCallback(async () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      if (audioContextRef.current.state === 'suspended') {
+        await audioContextRef.current.resume();
+      }
+      setAudioReady(audioContextRef.current.state === 'running');
+    } catch (e) {
+      console.warn("Audio init failed:", e);
+      setAudioReady(false);
     }
-    if (audioContextRef.current.state === 'suspended') {
-      await audioContextRef.current.resume();
-    }
-    console.log("Audio Engine Waked: ", audioContextRef.current.state);
   }, []);
 
-  const triggerInstantAlert = useCallback((order: any) => {
+  const triggerInstantAlert = useCallback(async (order: any) => {
     if (user?.role !== UserRole.ADMIN) return;
 
-    // Pulse Sound
+    // Pulse Sound with aggressive resumption
     try {
       const ctx = audioContextRef.current || new (window.AudioContext || (window as any).webkitAudioContext)();
       if (!audioContextRef.current) audioContextRef.current = ctx;
       
-      const playPulse = () => {
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      const playSiren = () => {
+        const now = ctx.currentTime;
         const osc = ctx.createOscillator();
         const g = ctx.createGain();
-        osc.type = 'sawtooth';
-        // Higher frequency for better visibility in noisy rooms
-        osc.frequency.setValueAtTime(880, ctx.currentTime); 
-        osc.frequency.exponentialRampToValueAtTime(1400, ctx.currentTime + 0.15);
-        g.gain.setValueAtTime(0, ctx.currentTime);
-        g.gain.linearRampToValueAtTime(0.6, ctx.currentTime + 0.05);
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
-        osc.connect(g); g.connect(ctx.destination);
-        osc.start(); osc.stop(ctx.currentTime + 1.2);
+        
+        osc.type = 'square';
+        // Double-tone alert (siren effect)
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
+        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
+        
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(0.5, now + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+        
+        osc.connect(g);
+        g.connect(ctx.destination);
+        
+        osc.start(now);
+        osc.stop(now + 1.5);
       };
 
-      if (ctx.state === 'suspended') {
-        ctx.resume().then(playPulse);
-      } else {
-        playPulse();
-      }
+      playSiren();
+      setAudioReady(true);
     } catch (e) {
-      console.error("Sonic Pulse Failed:", e);
+      setAudioReady(false);
+      console.error("Audio Alert Blocked:", e);
     }
 
-    // PWA Notification
+    // PWA Notification & Vibration
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: 'TRIGGER_NOTIFICATION',
-        title: '🚨 ORDER ALERT: ITX SHOP',
-        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name} from ${order.customer_city || 'Pakistan'}`,
+        title: '🔥 NEW ORDER RECEIVED!',
+        body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
         orderId: order.order_id || order.id
       });
+    }
+    
+    if (navigator.vibrate) {
+      navigator.vibrate([500, 200, 500]);
     }
   }, [user]);
 
@@ -131,7 +157,7 @@ const AdminApp: React.FC = () => {
     if (processedRef.current.has(id)) return;
     processedRef.current.add(id);
     setRawOrders(prev => [newOrder, ...prev]);
-    setTotalDbCount(prev => prev + 1); // Increment accurate total
+    setTotalDbCount(prev => prev + 1);
     triggerInstantAlert(newOrder);
   }, [triggerInstantAlert]);
 
@@ -158,14 +184,12 @@ const AdminApp: React.FC = () => {
 
   useEffect(() => {
     setupMasterSync();
-    
     const handleFocus = () => {
       if (document.visibilityState === 'visible') {
         setupMasterSync();
-        initAudio(); // Re-wake audio on focus
+        initAudio();
       }
     };
-    
     window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -175,11 +199,11 @@ const AdminApp: React.FC = () => {
 
   const fetchOrders = useCallback(async () => {
     try {
-      // FIX: By default Supabase caps at 100. We use count: exact and a larger limit.
+      // By default Supabase caps at 100. We explicitly set a high limit and use count.
       const { data, error, count } = await supabase.from('orders')
         .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
-        .limit(1000); // Fetch more than the 100 limit
+        .limit(5000);
 
       if (!error && data) {
         setRawOrders(data);
@@ -236,11 +260,12 @@ const AdminApp: React.FC = () => {
             totalDbCount={totalDbCount}
             user={user} 
             isLive={isLive}
+            audioReady={audioReady}
             login={(role: UserRole) => { 
               const u = { id: '1', name: 'Master', email: 'itx@me.pk', role }; 
               setUser(u); 
               localStorage.setItem('itx_user_session', JSON.stringify(u)); 
-              initAudio(); // Initialize audio on login interaction
+              initAudio();
             }}
             initAudio={initAudio}
             testAlert={() => triggerInstantAlert({total: 0, customer_name: 'TEST ALERT', customer_city: 'SYSTEM'})}

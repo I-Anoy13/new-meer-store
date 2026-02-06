@@ -44,8 +44,9 @@ const AdminDashboard = (props: any) => {
       });
       chartData.push({ name: mLabel, revenue: mOrders.reduce((sum: number, o: Order) => sum + o.total, 0) });
     }
-    // Use props.totalDbCount for the true total to avoid the "stuck at 98" limit issue
-    return { revenue, pendingCount, deliveredCount, total: props.totalDbCount || filteredOrders.length, chartData };
+    
+    // Explicitly use totalDbCount passed from App to reflect counts above 100
+    return { revenue, pendingCount, deliveredCount, total: props.totalDbCount || 0, chartData };
   }, [props.orders, props.totalDbCount, timeRange]);
 
   if (!props.user) {
@@ -84,11 +85,18 @@ const AdminDashboard = (props: any) => {
         <div className="flex items-center space-x-12">
           <div className="flex flex-col">
             <h2 className="text-sm md:text-lg font-black italic tracking-tighter uppercase leading-none">ITX MASTER</h2>
-            <div className="flex items-center gap-2 mt-2">
-              <div className={`w-2 h-2 rounded-full ${props.isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-              <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">
-                {props.isLive ? 'Socket Live' : 'Connecting...'}
-              </span>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${props.isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Socket</span>
+              </div>
+              <div 
+                className={`flex items-center gap-1.5 cursor-pointer px-2 py-0.5 rounded-full border ${props.audioReady ? 'bg-green-50 border-green-100 text-green-600' : 'bg-red-50 border-red-100 text-red-600 animate-pulse'}`}
+                onClick={() => props.initAudio?.()}
+              >
+                <i className={`fas ${props.audioReady ? 'fa-volume-up' : 'fa-volume-mute'} text-[9px]`}></i>
+                <span className="text-[9px] font-black uppercase tracking-widest">{props.audioReady ? 'Audio Active' : 'Audio Muted'}</span>
+              </div>
             </div>
           </div>
           <nav className="hidden lg:flex space-x-10 text-[11px] font-black uppercase tracking-widest">
@@ -101,7 +109,7 @@ const AdminDashboard = (props: any) => {
         </div>
         <div className="flex items-center space-x-4">
            <div className="hidden md:flex bg-zinc-900 text-white px-8 py-3.5 rounded-[1.8rem] text-[10px] font-black uppercase tracking-widest shadow-xl items-center gap-3 cursor-pointer" onClick={() => props.refreshData?.()}>
-             <i className="fas fa-sync-alt text-blue-400 animate-spin-slow"></i> REFRESH FEED
+             <i className="fas fa-sync-alt text-blue-400"></i> REFRESH FEED
           </div>
         </div>
       </header>
@@ -124,7 +132,7 @@ const AdminDashboard = (props: any) => {
                 { label: 'Revenue', val: `Rs. ${analytics.revenue.toLocaleString()}`, color: 'text-black' },
                 { label: 'Total Orders', val: analytics.total, color: 'text-black' },
                 { label: 'Active Pending', val: analytics.pendingCount, color: 'text-blue-600' },
-                { label: 'Success Rate', val: `${analytics.total ? Math.round((analytics.deliveredCount / analytics.total) * 100) : 0}%`, color: 'text-green-600' }
+                { label: 'Success Rate', val: `${analytics.total ? Math.round((analytics.deliveredCount / (analytics.total || 1)) * 100) : 0}%`, color: 'text-green-600' }
               ].map((s, i) => (
                 <div key={i} className="bg-white border border-gray-200 p-8 md:p-10 rounded-[2.5rem] md:rounded-[3rem] shadow-sm hover:shadow-xl transition-all duration-500 group">
                   <p className="text-[8px] md:text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 group-hover:text-blue-500 transition">{s.label}</p>
@@ -190,7 +198,7 @@ const AdminDashboard = (props: any) => {
                       }}
                       className="w-full bg-blue-600 text-white py-6 rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-black transition shadow-2xl"
                     >
-                      <i className="fas fa-volume-up mr-2"></i> Test Sound Alert
+                      <i className="fas fa-volume-up mr-2"></i> Test Siren Alert
                     </button>
                     <button 
                       onClick={() => {
@@ -203,9 +211,9 @@ const AdminDashboard = (props: any) => {
                       <i className="fas fa-bell mr-2"></i> Auth Notifications
                     </button>
                   </div>
-                  <p className="text-[10px] text-gray-400 text-center font-bold uppercase italic">
+                  <p className="text-[10px] text-gray-400 text-center font-bold uppercase italic leading-relaxed">
                     <i className="fas fa-exclamation-triangle mr-2 text-yellow-500"></i>
-                    Browsers block sound alerts unless you interact with the page. Use "Test Sound" to ensure your speakers are enabled.
+                    Browsers force sound to be muted if you don't interact with the dashboard. If the "Socket" icon in the header is green but "Audio" is red, click it to enable instant sound alerts.
                   </p>
                 </div>
              </div>
@@ -233,7 +241,7 @@ const AdminDashboard = (props: any) => {
         <div className="fixed inset-0 bg-black/95 backdrop-blur-3xl z-[150] flex items-center justify-center p-0 md:p-8 animate-fadeIn">
           <div className="bg-white p-8 md:p-16 w-full h-full md:h-auto md:max-w-4xl md:rounded-[4rem] shadow-2xl relative overflow-y-auto">
             <button onClick={() => setSelectedOrder(null)} className="absolute top-10 right-10 text-gray-400 hover:text-black text-3xl"><i className="fas fa-times"></i></button>
-            <div className="flex items-center space-x-8 mb-16">
+            <div className="flex items-center space-x-8 mb-16 text-black">
               <span className="text-2xl md:text-5xl font-black italic tracking-tighter uppercase text-zinc-900">Order Manifest</span>
               <span className="px-6 py-2.5 bg-blue-600 text-white text-[11px] font-black rounded-full uppercase tracking-widest shadow-2xl">#{selectedOrder.id}</span>
             </div>
