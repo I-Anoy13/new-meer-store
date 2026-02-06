@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Product, Order, User, UserRole } from './types';
 import AdminDashboard from './views/AdminDashboard';
 
-// CRITICAL ISOLATION: A unique client instance that shares NO state with lib/supabase.ts
+// ISOLATED ADMIN ENGINE
 const ADMIN_SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
 const ADMIN_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
 
@@ -20,11 +20,11 @@ const AdminApp: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
   
-  const [totalDbCount, setTotalDbCount] = useState<number>(() => {
-    return Number(localStorage.getItem('itx_total_count')) || 0;
-  });
+  const [totalDbCount, setTotalDbCount] = useState<number>(0);
+  const [activeVisitors, setActiveVisitors] = useState<any[]>([]);
+  const [liveActivities, setLiveActivities] = useState<any[]>([]);
   
-  const [loading, setLoading] = useState(rawOrders.length === 0);
+  const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
@@ -32,7 +32,6 @@ const AdminApp: React.FC = () => {
   const processedRef = useRef<Set<string>>(new Set());
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const videoPersistenceRef = useRef<HTMLVideoElement | null>(null);
   const retryTimeoutRef = useRef<any>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
@@ -48,84 +47,61 @@ const AdminApp: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('itx_cached_orders', JSON.stringify(rawOrders));
     localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
-    localStorage.setItem('itx_total_count', totalDbCount.toString());
-  }, [rawOrders, totalDbCount, statusOverrides]);
+  }, [rawOrders, statusOverrides]);
 
-  const startPersistenceMedia = useCallback(() => {
-    if (videoPersistenceRef.current) return;
-    try {
-      const v = document.createElement('video');
-      v.setAttribute('playsinline', '');
-      v.setAttribute('muted', '');
-      v.setAttribute('loop', '');
-      v.style.position = 'fixed';
-      v.style.bottom = '0';
-      v.style.right = '0';
-      v.style.width = '1px';
-      v.style.height = '1px';
-      v.style.opacity = '0.01';
-      v.style.pointerEvents = 'none';
-      // Long silent MP4 to keep background task alive
-      v.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQyAAAACHV1aWRreG1sAAAAAGFiaWxpdHkgeG1sbnM9Imh0dHA6Ly9ucy5hZG9iZS5jb20vYWJpbGl0eS8iPjxhYmlsaXR5OnN5c3RlbT48YWJpbGl0eTpkZXZpY2U+PG9zPnVuaXg8L29zPjwvYWJpbGl0eTpkZXZpY2U+PC9hYmlsaXR5OnN5c3RlbT48L2FiaWxpdHk+AAAAbG1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAPoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhazAAAAHkdGtoZAAAAAMAAAAAAAAAAAAAA+gAAAPoAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABkbWRpYQAALW1kaGQAAAAAAAAAAAAAAAAAAD6AAAA+gAFVx9v/AAAAAAAALWhkbHIAAAAAAAAAAHZpZGVvAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAAVxtZGlhAAAALW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAU9zdGJsAAAAp3N0c2QAAAAAAAAAAQAAAJZhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAHgAeABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAM/+EAFWdCwAwU9mAsX+AAB9AAAfQAAAgAAAH0AAAgAAYhB9mP4wAAABhzdHRzAAAAAAAAAAEAAAABAAAD6AAAAFpzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAAAAAAAAAgAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYXVkcmEAAABhdWRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAD9zZ3BkAAAAAAAAAHRyb2wAAAABAAAALXRyb2wAAAAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYW1lZXRyYWsAAA==';
-      document.body.appendChild(v);
-      v.play().catch(() => {});
-      videoPersistenceRef.current = v;
-    } catch (e) {}
-  }, []);
-
-  const triggerAlert = useCallback(async (order?: any) => {
+  const triggerShopifyAlert = useCallback(async (order?: any) => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
-      
       const ctx = audioContextRef.current;
-      
-      // Force resume if state is suspended (common in background tabs)
-      if (ctx.state === 'suspended') {
-        await ctx.resume();
-      }
+      if (ctx.state === 'suspended') await ctx.resume();
 
       const now = ctx.currentTime;
-      // High-intensity triple-tone for maximum "instant" feedback
-      [660, 880, 1320].forEach((f, i) => {
-        const osc = ctx.createOscillator();
-        const g = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(f, now + (i * 0.1));
-        g.gain.setValueAtTime(0, now + (i * 0.1));
-        g.gain.linearRampToValueAtTime(0.4, now + (i * 0.1) + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, now + (i * 0.1) + 1.2);
-        osc.connect(g); g.connect(ctx.destination);
-        osc.start(now + (i * 0.1)); osc.stop(now + (i * 0.1) + 1.3);
-      });
+      
+      // HIGH-FIDELITY "KA-CHING"
+      // Note 1: Sudden rising frequency (The 'Ka')
+      const osc1 = ctx.createOscillator();
+      const g1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(800, now);
+      osc1.frequency.exponentialRampToValueAtTime(1400, now + 0.05);
+      g1.gain.setValueAtTime(0, now);
+      g1.gain.linearRampToValueAtTime(0.3, now + 0.01);
+      g1.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+      osc1.connect(g1); g1.connect(ctx.destination);
+      osc1.start(now); osc1.stop(now + 0.1);
+
+      // Note 2: Metallic ringing (The 'Ching')
+      const osc2 = ctx.createOscillator();
+      const g2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(2489, now + 0.08); // D#7
+      g2.gain.setValueAtTime(0, now + 0.08);
+      g2.gain.linearRampToValueAtTime(0.4, now + 0.09);
+      g2.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+      osc2.connect(g2); g2.connect(ctx.destination);
+      osc2.start(now + 0.08); osc2.stop(now + 1.2);
 
       if (order && Notification.permission === "granted") {
-        new Notification('🚨 NEW ITX ORDER', {
+        new Notification('💰 NEW ITX SALE!', {
           body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
           icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-          requireInteraction: true,
-          tag: 'itx-terminal-order'
+          tag: 'itx-sale'
         });
       }
-    } catch (e) {
-      console.error("Audio Alert Error:", e);
-    }
+    } catch (e) {}
   }, []);
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrdersAndCount = useCallback(async () => {
     try {
-      // THE 100% RELIABLE COUNT FIX: 
-      // Supabase count metadata on free tier is often cached or capped. 
-      // We perform a specific select on IDs to get the absolute length of the table.
-      const { data: idList, error: countErr } = await adminSupabase
-        .from('orders')
-        .select('id');
-      
-      if (!countErr && idList) {
-        setTotalDbCount(idList.length);
+      // 1. ROBUST COUNT: Fetch IDs and calculate length to bypass free-tier metadata limits
+      const { data: idData, error: countErr } = await adminSupabase.from('orders').select('id');
+      if (!countErr && idData) {
+        setTotalDbCount(idData.length);
       }
 
+      // 2. FETCH RECENT
       const { data, error: dataErr } = await adminSupabase.from('orders')
         .select('*')
         .order('created_at', { ascending: false })
@@ -136,92 +112,85 @@ const AdminApp: React.FC = () => {
         data.forEach(o => processedRef.current.add(String(o.order_id || o.id)));
         setLastSyncTime(new Date());
       }
-    } catch (e) {}
+    } catch (e) {} finally {
+      setLoading(false);
+    }
   }, []);
 
-  const addRealtimeOrder = useCallback((newOrder: any) => {
+  const handleRealtimeInsert = useCallback((newOrder: any) => {
     const id = String(newOrder.order_id || newOrder.id);
     if (processedRef.current.has(id)) return;
     processedRef.current.add(id);
     
-    // Update local state immediately for instant feedback
     setRawOrders(prev => [newOrder, ...prev].slice(0, 100));
     setTotalDbCount(prev => prev + 1);
     setLastSyncTime(new Date());
-    
-    // Trigger the auditory and visual alert
-    triggerAlert(newOrder);
-  }, [triggerAlert]);
+    triggerShopifyAlert(newOrder);
+  }, [triggerShopifyAlert]);
 
-  const setupTerminalSync = useCallback(() => {
+  const setupMasterRelay = useCallback(() => {
     if (user?.role !== UserRole.ADMIN) return;
     
     if (masterChannelRef.current) {
       adminSupabase.removeChannel(masterChannelRef.current);
     }
 
-    // UNIQUE CHANNEL: HIGH-ENTROPY NAME TO ENSURE ZERO CONFLICT WITH CUSTOMER SITE
-    const channel = adminSupabase.channel('itx_terminal_prime_relay_x99')
+    const channel = adminSupabase.channel('itx_master_command_v5')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => {
-        // This is the "Instant" hook
-        addRealtimeOrder(payload.new);
+        handleRealtimeInsert(payload.new);
+      })
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const visitors = Object.values(state).flat();
+        setActiveVisitors(visitors);
+      })
+      .on('broadcast', { event: 'activity' }, (payload) => {
+        setLiveActivities(prev => [{ ...payload.payload, time: new Date() }, ...prev].slice(0, 5));
       })
       .subscribe(status => {
-        const active = status === 'SUBSCRIBED';
-        setIsLive(active);
-        if (active) {
+        setIsLive(status === 'SUBSCRIBED');
+        if (status === 'SUBSCRIBED') {
           setLastSyncTime(new Date());
-          if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          retryTimeoutRef.current = setTimeout(setupTerminalSync, 5000);
+          retryTimeoutRef.current = setTimeout(setupMasterRelay, 5000);
         }
       });
 
     masterChannelRef.current = channel;
-  }, [user, addRealtimeOrder]);
+  }, [user, handleRealtimeInsert]);
 
   const initAudio = useCallback(async () => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
-      startPersistenceMedia();
+      if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
       if (Notification.permission !== "granted") await Notification.requestPermission();
       setAudioReady(true);
-      fetchOrders();
-    } catch (e) {
-      setAudioReady(false);
-    }
-  }, [startPersistenceMedia, fetchOrders]);
+      fetchOrdersAndCount();
+    } catch (e) {}
+  }, [fetchOrdersAndCount]);
 
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
-      setupTerminalSync();
-      fetchOrders().finally(() => setLoading(false));
+      setupMasterRelay();
+      fetchOrdersAndCount();
     } else {
       setLoading(false);
     }
 
     const handleFocus = () => {
       if (document.visibilityState === 'visible') {
-        setupTerminalSync();
-        fetchOrders();
-        // Resume context on focus to ensure alerts are ready
-        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-          audioContextRef.current.resume();
-        }
+        fetchOrdersAndCount();
+        if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
       }
     };
     window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('focus', handleFocus);
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
-      if (masterChannelRef.current) adminSupabase.removeChannel(masterChannelRef.current);
     };
-  }, [user, setupTerminalSync, fetchOrders]);
+  }, [user, setupMasterRelay, fetchOrdersAndCount]);
 
   const formattedOrders = useMemo((): Order[] => {
     return rawOrders.map(o => ({
@@ -237,7 +206,7 @@ const AdminApp: React.FC = () => {
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0a0a0a]">
       <div className="w-10 h-10 border-2 border-white/10 border-t-white rounded-full animate-spin mb-4"></div>
-      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic tracking-tighter">Terminal Active...</p>
+      <p className="text-[10px] font-black text-white/40 uppercase tracking-widest italic">Activating Master Link...</p>
     </div>
   );
 
@@ -248,6 +217,8 @@ const AdminApp: React.FC = () => {
           <AdminDashboard 
             orders={formattedOrders}
             totalDbCount={totalDbCount}
+            activeVisitors={activeVisitors}
+            liveActivities={liveActivities}
             user={user}
             isLive={isLive}
             audioReady={audioReady}
@@ -261,20 +232,18 @@ const AdminApp: React.FC = () => {
             logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }}
             systemPassword={localStorage.getItem('systemPassword') || 'admin123'}
             initAudio={initAudio}
-            refreshData={fetchOrders}
+            refreshData={fetchOrdersAndCount}
             purgeDatabase={async () => {
-              if (window.confirm("IRREVERSIBLE: Wipe database?")) {
+              if (window.confirm("PURGE ALL DATA?")) {
                 await adminSupabase.from('orders').delete().gt('id', 0);
-                setRawOrders([]);
-                setTotalDbCount(0);
-                fetchOrders();
+                fetchOrdersAndCount();
               }
             }}
             updateStatusOverride={async (id: string, status: Order['status']) => {
               await adminSupabase.from('orders').update({ status: status.toLowerCase() }).match({ order_id: id });
               setStatusOverrides(prev => ({ ...prev, [id]: status }));
             }}
-            testAlert={() => triggerAlert({ total: 0, customer_name: 'TERMINAL TEST' })}
+            testAlert={() => triggerShopifyAlert({ total: 0, customer_name: 'TEST SALE' })}
           />
         } />
       </Routes>
