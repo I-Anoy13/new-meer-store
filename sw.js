@@ -6,6 +6,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 let backgroundChannel = null;
+let keepAliveInterval = null;
 
 // The Background Sentinel: Stays alive as long as the OS allows the worker to run
 function startSentinel() {
@@ -18,12 +19,11 @@ function startSentinel() {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
       
-      // Trigger a system-level notification (Works even if tab is closed)
       const notificationOptions = {
         body: `💰 NEW SALE: Rs. ${order.total_pkr || order.total} from ${order.customer_name}`,
         icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
         badge: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=96&h=96&auto=format&fit=crop',
-        vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40, 450, 110, 200, 110, 170, 40],
+        vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40],
         tag: 'itx-sale-alert',
         renotify: true,
         requireInteraction: true,
@@ -37,11 +37,16 @@ function startSentinel() {
     })
     .subscribe((status) => {
       console.log('Sentinel Status:', status);
-      // Auto-retry if the OS throttles the connection
       if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
         setTimeout(startSentinel, 5000);
       }
     });
+
+  // Keep-alive heartbeat: Pings the worker every 25 seconds to prevent idling
+  if (keepAliveInterval) clearInterval(keepAliveInterval);
+  keepAliveInterval = setInterval(() => {
+    console.log('Background Sentinel Heartbeat...');
+  }, 25000);
 }
 
 self.addEventListener('install', (event) => {
@@ -52,13 +57,11 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // Start the sentinel immediately on activation
       startSentinel()
     ])
   );
 });
 
-// If the app is opened, it can ping the worker to ensure the sentinel is awake
 self.addEventListener('message', (event) => {
   if (event.data === 'PING_SENTINEL') {
     startSentinel();

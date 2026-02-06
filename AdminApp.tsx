@@ -31,6 +31,7 @@ const AdminApp: React.FC = () => {
   const processedRef = useRef<Set<string>>(new Set());
   const masterChannelRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const persistenceVideoRef = useRef<HTMLVideoElement | null>(null);
   const retryTimeoutRef = useRef<any>(null);
 
   const [statusOverrides, setStatusOverrides] = useState<Record<string, Order['status']>>(() => {
@@ -47,6 +48,34 @@ const AdminApp: React.FC = () => {
     localStorage.setItem('itx_cached_orders', JSON.stringify(rawOrders));
     localStorage.setItem('itx_status_overrides', JSON.stringify(statusOverrides));
   }, [rawOrders, statusOverrides]);
+
+  // THE PERSISTENCE HACK: Keeps the browser process alive in the background
+  const startPersistenceLayer = useCallback(() => {
+    if (persistenceVideoRef.current) return;
+
+    const video = document.createElement('video');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('muted', '');
+    video.setAttribute('loop', '');
+    video.style.position = 'fixed';
+    video.style.opacity = '0.001';
+    video.style.pointerEvents = 'none';
+    video.style.width = '1px';
+    video.style.height = '1px';
+    // A silent 1-second MP4 loop to prevent the OS from suspending the tab
+    video.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAAAAGlzb21tcDQyAAAACHV1aWRreG1sAAAAAGFiaWxpdHkgeG1sbnM9Imh0dHA6Ly9ucy5hZG9iZS5jb20vYWJpbGl0eS8iPjxhYmlsaXR5OnN5c3RlbT48YWJpbGl0eTpkZXZpY2U+PG9zPnVuaXg8L29zPjwvYWJpbGl0eTpkZXZpY2U+PC9hYmlsaXR5OnN5c3RlbT48L2FiaWxpdHk+AAAAbG1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAPoAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhazAAAAHkdGtoZAAAAAMAAAAAAAAAAAAAA+gAAAPoAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABkbWRpYQAALW1kaGQAAAAAAAAAAAAAAAAAAD6AAAA+gAFVx9v/AAAAAAAALWhkbHIAAAAAAAAAAHZpZGVvAAAAAAAAAAAAAAAAVmlkZW9IYW5kbGVyAAAAAVxtZGlhAAAALW1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAU9zdGJsAAAAp3N0c2QAAAAAAAAAAQAAAJZhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAHgAeABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAM/+EAFWdCwAwU9mAsX+AAB9AAAfQAAAgAAAH0AAAgAAYhB9mP4wAAABhzdHRzAAAAAAAAAAEAAAABAAAD6AAAAFpzdHNjAAAAAAAAAAEAAAABAAAAAQAAAAEAAAAUc3RzegAAAAAAAAAAAAAAAgAAABRzdGNvAAAAAAAAAAEAAAAwAAAAYXVkcmEAAABhdWRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAD9zZ3BkAAAAAAAAAHRyb2wAAAABAAAALXRyb2wAAAAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYW1lZXRyYWsAAA==';
+    
+    document.body.appendChild(video);
+    video.play().catch(() => {
+      console.log('Persistence video blocked - user interaction required');
+    });
+    persistenceVideoRef.current = video;
+
+    // Wake Lock API (if supported)
+    if ('wakeLock' in navigator) {
+      (navigator as any).wakeLock.request('screen').catch(() => {});
+    }
+  }, []);
 
   const triggerShopifyAlert = useCallback(async (order?: any) => {
     try {
@@ -83,7 +112,8 @@ const AdminApp: React.FC = () => {
         new Notification('💰 NEW ITX SALE!', {
           body: `Rs. ${order.total_pkr || order.total} — ${order.customer_name}`,
           icon: 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?q=80&w=192&h=192&auto=format&fit=crop',
-          tag: 'itx-sale'
+          tag: 'itx-sale',
+          requireInteraction: true
         });
       }
     } catch (e) {}
@@ -146,7 +176,6 @@ const AdminApp: React.FC = () => {
         if (status === 'SUBSCRIBED') {
           setLastSyncTime(new Date());
           
-          // Re-trigger Sentinel
           if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
             navigator.serviceWorker.controller.postMessage('PING_SENTINEL');
           }
@@ -158,22 +187,27 @@ const AdminApp: React.FC = () => {
     masterChannelRef.current = channel;
   }, [user, handleRealtimeInsert]);
 
-  const initAudio = useCallback(async () => {
+  const initAudioAndPersistence = useCallback(async () => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
       if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
+      
+      startPersistenceLayer();
+      
       if (Notification.permission !== "granted") await Notification.requestPermission();
       setAudioReady(true);
       fetchOrdersAndCount();
     } catch (e) {}
-  }, [fetchOrdersAndCount]);
+  }, [fetchOrdersAndCount, startPersistenceLayer]);
 
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
       setupMasterRelay();
       fetchOrdersAndCount();
+      // Auto-init persistence if user session exists
+      startPersistenceLayer();
     } else {
       setLoading(false);
     }
@@ -183,6 +217,7 @@ const AdminApp: React.FC = () => {
         fetchOrdersAndCount();
         setupMasterRelay();
         if (audioContextRef.current?.state === 'suspended') audioContextRef.current.resume();
+        if (persistenceVideoRef.current?.paused) persistenceVideoRef.current.play().catch(() => {});
       }
     };
 
@@ -191,7 +226,7 @@ const AdminApp: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
     };
-  }, [user, setupMasterRelay, fetchOrdersAndCount]);
+  }, [user, setupMasterRelay, fetchOrdersAndCount, startPersistenceLayer]);
 
   const formattedOrders = useMemo((): Order[] => {
     return rawOrders.map(o => ({
@@ -228,11 +263,11 @@ const AdminApp: React.FC = () => {
               const u: User = { id: 'master', email: 'admin@itx.com', role, name: 'Master' };
               setUser(u);
               localStorage.setItem('itx_user_session', JSON.stringify(u));
-              initAudio();
+              initAudioAndPersistence();
             }}
             logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }}
             systemPassword={localStorage.getItem('systemPassword') || 'admin123'}
-            initAudio={initAudio}
+            initAudio={initAudioAndPersistence}
             refreshData={fetchOrdersAndCount}
             purgeDatabase={async () => {
               if (window.confirm("PURGE ALL DATA?")) {
