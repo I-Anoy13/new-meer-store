@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { UserRole, Order, Product } from '../types';
 
@@ -11,6 +11,37 @@ const AdminDashboard = (props: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Helper to get status color classes
+  const getStatusClasses = (status: string) => {
+    switch (status) {
+      case 'Confirmed':
+      case 'Delivered':
+        return 'bg-green-50 text-green-600 border-green-100';
+      case 'Shipped':
+        return 'bg-blue-50 text-blue-600 border-blue-100';
+      case 'Cancelled':
+        return 'bg-red-50 text-red-600 border-red-100';
+      case 'Pending':
+      default:
+        return 'bg-gray-50 text-gray-400 border-gray-100';
+    }
+  };
+
+  const getBadgeClasses = (status: string) => {
+    switch (status) {
+      case 'Confirmed':
+      case 'Delivered':
+        return 'bg-green-100 text-green-700';
+      case 'Shipped':
+        return 'bg-blue-100 text-blue-700';
+      case 'Cancelled':
+        return 'bg-red-100 text-red-700';
+      case 'Pending':
+      default:
+        return 'bg-blue-100 text-blue-700';
+    }
+  };
 
   const analytics = useMemo(() => {
     const valid = props.orders.filter((o: Order) => o.status !== 'Cancelled');
@@ -58,12 +89,14 @@ const AdminDashboard = (props: any) => {
     if (isUpdatingStatus) return;
     setIsUpdatingStatus(true);
     try {
-      await props.updateStatus(orderId, newStatus, dbId);
-      if (selectedOrder && (selectedOrder.id === orderId || selectedOrder.dbId === dbId)) {
+      // First update the local state for immediate feedback
+      if (selectedOrder) {
         setSelectedOrder({ ...selectedOrder, status: newStatus as any });
       }
+      // Then trigger the async update in the parent
+      await props.updateStatus(orderId, newStatus, dbId);
     } catch (e) {
-      alert("Failed to update status.");
+      alert("Failed to update status on server. Please try again.");
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -138,11 +171,11 @@ const AdminDashboard = (props: any) => {
               <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group">
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                   <div className="flex items-center space-x-4 md:space-x-6">
-                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center font-black text-xs md:text-sm border-2 ${o.status === 'Delivered' ? 'bg-green-50 text-green-500 border-green-100' : 'bg-gray-50 text-gray-400 border-gray-50'}`}>{o.status.charAt(0)}</div>
+                    <div className={`w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center font-black text-xs md:text-sm border-2 ${getStatusClasses(o.status)}`}>{o.status.charAt(0)}</div>
                     <div>
                       <div className="flex items-center gap-2">
                         <p className="font-black text-sm md:text-base italic text-black">#{o.id}</p>
-                        <span className={`md:hidden px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-tighter ${o.status === 'Delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.status}</span>
+                        <span className={`md:hidden px-2 py-0.5 rounded-full text-[7px] font-black uppercase tracking-tighter ${getBadgeClasses(o.status)}`}>{o.status}</span>
                       </div>
                       <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{new Date(o.date).toLocaleDateString()}</p>
                     </div>
@@ -159,7 +192,7 @@ const AdminDashboard = (props: any) => {
                     </div>
                   </div>
                   <div className="hidden md:flex items-center gap-4">
-                    <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${o.status === 'Delivered' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{o.status}</span>
+                    <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${getBadgeClasses(o.status)}`}>{o.status}</span>
                     <i className="fas fa-chevron-right text-gray-200"></i>
                   </div>
                 </div>
@@ -287,16 +320,24 @@ const AdminDashboard = (props: any) => {
                 <div>
                   <label className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 md:mb-6 block italic">Update Status</label>
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 md:gap-3">
-                    {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
-                      <button 
-                        key={s}
-                        disabled={isUpdatingStatus}
-                        onClick={() => handleStatusChange(selectedOrder.id, s, selectedOrder.dbId)}
-                        className={`py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase text-[7px] md:text-[8px] tracking-widest transition-all ${selectedOrder.status === s ? 'bg-black text-white shadow-xl scale-105 z-10' : 'bg-white text-gray-400 border border-gray-100 hover:border-black hover:text-black'}`}
-                      >
-                        {isUpdatingStatus && selectedOrder.status === s ? <i className="fas fa-circle-notch fa-spin"></i> : s}
-                      </button>
-                    ))}
+                    {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => {
+                      const isActive = selectedOrder.status === s;
+                      let activeStyle = 'bg-black text-white';
+                      if (isActive && (s === 'Confirmed' || s === 'Delivered')) activeStyle = 'bg-green-600 text-white shadow-lg shadow-green-100';
+                      if (isActive && s === 'Cancelled') activeStyle = 'bg-red-600 text-white shadow-lg shadow-red-100';
+                      if (isActive && s === 'Shipped') activeStyle = 'bg-blue-600 text-white shadow-lg shadow-blue-100';
+
+                      return (
+                        <button 
+                          key={s}
+                          disabled={isUpdatingStatus}
+                          onClick={() => handleStatusChange(selectedOrder.id, s, selectedOrder.dbId)}
+                          className={`py-3 md:py-4 rounded-xl md:rounded-2xl font-black uppercase text-[7px] md:text-[8px] tracking-widest transition-all ${isActive ? `${activeStyle} scale-105 z-10` : 'bg-white text-gray-400 border border-gray-100 hover:border-black hover:text-black'}`}
+                        >
+                          {isUpdatingStatus && isActive ? <i className="fas fa-circle-notch fa-spin"></i> : s}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
