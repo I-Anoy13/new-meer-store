@@ -12,7 +12,7 @@ const AdminDashboard = (props: any) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // Helper to get status color classes
+  // Helper to get status color classes - 'Confirmed' is now green
   const getStatusClasses = (status: string) => {
     switch (status) {
       case 'Confirmed':
@@ -89,14 +89,24 @@ const AdminDashboard = (props: any) => {
     if (isUpdatingStatus) return;
     setIsUpdatingStatus(true);
     try {
-      // First update the local state for immediate feedback
+      // 1. Instantly update the local modal state for responsiveness
       if (selectedOrder) {
-        setSelectedOrder({ ...selectedOrder, status: newStatus as any });
+        setSelectedOrder(prev => prev ? { ...prev, status: newStatus as any } : null);
       }
-      // Then trigger the async update in the parent
+      
+      // 2. Perform server update via parent prop
       await props.updateStatus(orderId, newStatus, dbId);
+      
+      // 3. Confirm sync with parent orders list
+      const updatedOrder = props.orders.find((o: Order) => (o.dbId === dbId || o.id === orderId));
+      if (updatedOrder && selectedOrder) {
+        setSelectedOrder(updatedOrder);
+      }
     } catch (e) {
-      alert("Failed to update status on server. Please try again.");
+      console.error("Status update error:", e);
+      alert("Failed to update status on server. Reverting...");
+      // Revert modal state if it failed
+      props.refreshData();
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -323,9 +333,14 @@ const AdminDashboard = (props: any) => {
                     {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => {
                       const isActive = selectedOrder.status === s;
                       let activeStyle = 'bg-black text-white';
-                      if (isActive && (s === 'Confirmed' || s === 'Delivered')) activeStyle = 'bg-green-600 text-white shadow-lg shadow-green-100';
-                      if (isActive && s === 'Cancelled') activeStyle = 'bg-red-600 text-white shadow-lg shadow-red-100';
-                      if (isActive && s === 'Shipped') activeStyle = 'bg-blue-600 text-white shadow-lg shadow-blue-100';
+                      // 'Confirmed' and 'Delivered' use the same solid green success theme
+                      if (isActive && (s === 'Confirmed' || s === 'Delivered')) {
+                        activeStyle = 'bg-green-600 text-white shadow-lg shadow-green-100';
+                      } else if (isActive && s === 'Cancelled') {
+                        activeStyle = 'bg-red-600 text-white shadow-lg shadow-red-100';
+                      } else if (isActive && s === 'Shipped') {
+                        activeStyle = 'bg-blue-600 text-white shadow-lg shadow-blue-100';
+                      }
 
                       return (
                         <button 

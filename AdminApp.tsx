@@ -54,7 +54,9 @@ const AdminApp: React.FC = () => {
         setRawOrders(data);
         data.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Order Fetch Failed:", e);
+    }
   }, []);
 
   const refreshProducts = useCallback(async () => {
@@ -121,21 +123,33 @@ const AdminApp: React.FC = () => {
   };
 
   const formattedOrders = useMemo((): Order[] => {
-    return rawOrders.map(o => ({
-      id: o.order_id || String(o.id),
-      dbId: o.id,
-      items: typeof o.items === 'string' ? JSON.parse(o.items) : (Array.isArray(o.items) ? o.items : []),
-      total: Number(o.total_pkr || o.total || 0),
-      status: (o.status ? o.status.charAt(0).toUpperCase() + o.status.slice(1) : 'Pending') as Order['status'],
-      customer: { 
-        name: o.customer_name || 'Anonymous', 
-        email: '', 
-        phone: o.customer_phone || '', 
-        address: o.customer_address || '', 
-        city: o.customer_city || '' 
-      },
-      date: o.created_at || new Date().toISOString()
-    }));
+    return rawOrders.map(o => {
+      // Robust capitalization for status
+      let cleanStatus: Order['status'] = 'Pending';
+      if (o.status) {
+        const s = o.status.toLowerCase();
+        if (s === 'confirmed') cleanStatus = 'Confirmed';
+        else if (s === 'shipped') cleanStatus = 'Shipped';
+        else if (s === 'delivered') cleanStatus = 'Delivered';
+        else if (s === 'cancelled') cleanStatus = 'Cancelled';
+      }
+
+      return {
+        id: o.order_id || String(o.id),
+        dbId: o.id,
+        items: typeof o.items === 'string' ? JSON.parse(o.items) : (Array.isArray(o.items) ? o.items : []),
+        total: Number(o.total_pkr || o.total || 0),
+        status: cleanStatus,
+        customer: { 
+          name: o.customer_name || 'Anonymous', 
+          email: '', 
+          phone: o.customer_phone || '', 
+          address: o.customer_address || '', 
+          city: o.customer_city || '' 
+        },
+        date: o.created_at || new Date().toISOString()
+      };
+    });
   }, [rawOrders]);
 
   if (loading) return (
@@ -169,20 +183,31 @@ const AdminApp: React.FC = () => {
             }}
             refreshData={initData}
             updateStatus={async (id: string, status: string, dbId: any) => {
-              // Targeted update using primary key 'id' (dbId)
-              const { error } = await adminSupabase
+              const cleanStatus = status.toLowerCase();
+              console.log(`[Admin] Updating order ${id} (PK: ${dbId}) to status: ${cleanStatus}`);
+              
+              // 1. Primary update by Database ID (Integer primary key)
+              const { error: primaryError } = await adminSupabase
                 .from('orders')
-                .update({ status: status.toLowerCase() })
+                .update({ status: cleanStatus })
                 .eq('id', dbId);
               
-              if (!error) {
-                await refreshOrders();
-              } else {
-                console.error("Status Update Failed:", error);
-                // Fallback attempt with order_id if dbId failed
-                await adminSupabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', id);
-                await refreshOrders();
+              if (primaryError) {
+                console.warn("[Admin] Primary update failed, trying order_id fallback:", primaryError);
+                // 2. Fallback update by order_id (Text unique ID)
+                const { error: fallbackError } = await adminSupabase
+                  .from('orders')
+                  .update({ status: cleanStatus })
+                  .eq('order_id', id);
+                
+                if (fallbackError) {
+                  console.error("[Admin] All update paths failed:", fallbackError);
+                  throw fallbackError;
+                }
               }
+
+              // 3. Force state refresh to ensure UI synchronization
+              await refreshOrders();
             }}
             uploadMedia={uploadMedia}
             saveProduct={async (p: any) => {
