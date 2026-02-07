@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, Suspense, useRef } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { CartItem, Product, Order, User, UserRole } from './types';
 import { MOCK_PRODUCTS } from './constants';
@@ -46,30 +46,6 @@ const AppContent: React.FC = () => {
     const saved = localStorage.getItem('itx_user_session');
     return saved ? JSON.parse(saved) : null;
   });
-
-  const presenceChannelRef = useRef<any>(null);
-
-  const setupActivePresence = useCallback(async () => {
-    if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current);
-    const channel = supabase.channel('itx_v4_silent', { config: { presence: { key: 'visitor' } } });
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        const userCity = await fetch('https://ipapi.co/json/').then(r => r.json()).then(d => d.city).catch(() => 'Unknown');
-        channel.track({ online_at: new Date().toISOString(), city: userCity, role: user?.role || 'CUSTOMER' });
-      }
-    });
-    presenceChannelRef.current = channel;
-  }, [user]);
-
-  useEffect(() => {
-    setupActivePresence();
-    const handleVisibilityChange = () => { if (document.visibilityState === 'visible') setupActivePresence(); };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current);
-    };
-  }, [setupActivePresence]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -124,19 +100,11 @@ const AppContent: React.FC = () => {
         total_pkr: Math.round(Number(order.total) || 0),
         status: 'pending',
         items: JSON.stringify(order.items),
-        source: 'ITX_SILENT_V4'
+        source: 'ITX_CLEAN_V1'
       };
 
       const { error } = await supabase.from('orders').insert([payload]);
       if (error) throw error;
-
-      if (presenceChannelRef.current) {
-        presenceChannelRef.current.send({
-          type: 'broadcast',
-          event: 'activity',
-          payload: { type: 'ORDER_PLACED', name: order.customer.name }
-        });
-      }
 
       setCart([]);
       localStorage.removeItem('cart');

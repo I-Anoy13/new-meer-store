@@ -44,7 +44,12 @@ const AdminApp: React.FC = () => {
 
   const refreshOrders = useCallback(async () => {
     try {
-      const { data, error } = await adminSupabase.from('orders').select('*').order('created_at', { ascending: false }).limit(1000);
+      const { data, error } = await adminSupabase
+        .from('orders')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .limit(5000); // Drastically increased limit to prevent getting stuck
+      
       if (!error && data) {
         setRawOrders(data);
         data.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
@@ -164,8 +169,18 @@ const AdminApp: React.FC = () => {
             }}
             refreshData={initData}
             updateStatus={async (id: string, status: string, dbId: any) => {
-              const { error } = await adminSupabase.from('orders').update({ status: status.toLowerCase() }).or(`id.eq.${dbId},order_id.eq.${id}`);
-              if (!error) refreshOrders();
+              // Targeted update using primary key 'id' (dbId)
+              const { error } = await adminSupabase
+                .from('orders')
+                .update({ status: status.toLowerCase() })
+                .eq('id', dbId);
+              
+              if (!error) {
+                await refreshOrders();
+              } else {
+                console.error("Status Update Failed:", error);
+                alert("Status Update Failed: " + error.message);
+              }
             }}
             uploadMedia={uploadMedia}
             saveProduct={async (p: any) => {
