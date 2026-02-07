@@ -12,9 +12,9 @@ const AdminDashboard = (props: any) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // Sync selectedOrder if the global orders list changes, using string-safe comparisons
+  // Sync selectedOrder if the global orders list changes
   useEffect(() => {
-    if (selectedOrder) {
+    if (selectedOrder && props.orders) {
       const match = props.orders.find((o: Order) => 
         String(o.id) === String(selectedOrder.id) || 
         (o.dbId && String(o.dbId) === String(selectedOrder.dbId))
@@ -56,21 +56,23 @@ const AdminDashboard = (props: any) => {
   };
 
   const analytics = useMemo(() => {
-    const valid = props.orders.filter((o: Order) => o.status !== 'Cancelled');
+    const orders = props.orders || [];
+    const valid = orders.filter((o: Order) => o.status !== 'Cancelled');
     const revenue = valid.reduce((acc: number, o: Order) => acc + (Number(o.total) || 0), 0);
-    const pendingCount = props.orders.filter((o: Order) => o.status === 'Pending').length;
-    const deliveredCount = props.orders.filter((o: Order) => o.status === 'Delivered').length;
+    const pendingCount = orders.filter((o: Order) => o.status === 'Pending').length;
+    const deliveredCount = orders.filter((o: Order) => o.status === 'Delivered').length;
 
     const chartData = [];
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(); d.setMonth(d.getMonth() - i);
       const mLabel = monthNames[d.getMonth()];
-      const mOrders = props.orders.filter((o: Order) => {
+      const mOrders = orders.filter((o: Order) => {
+        if (!o.date) return false;
         const od = new Date(o.date);
         return od.getMonth() === d.getMonth() && od.getFullYear() === d.getFullYear() && o.status !== 'Cancelled';
       });
-      chartData.push({ name: mLabel, revenue: mOrders.reduce((sum: number, o: Order) => sum + o.total, 0) });
+      chartData.push({ name: mLabel, revenue: mOrders.reduce((sum: number, o: Order) => sum + (Number(o.total) || 0), 0) });
     }
     return { revenue, pendingCount, deliveredCount, chartData };
   }, [props.orders]);
@@ -78,7 +80,8 @@ const AdminDashboard = (props: any) => {
   const copyToClipboard = (text: string) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
-    alert('Copied: ' + text);
+    // Simple notification instead of alert for better UX
+    console.log('Copied to clipboard:', text);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,12 +104,9 @@ const AdminDashboard = (props: any) => {
     if (isUpdatingStatus) return;
     setIsUpdatingStatus(true);
     try {
-      // 1. Instantly update local modal view for user feedback
       if (selectedOrder) {
         setSelectedOrder({ ...selectedOrder, status: newStatus as any });
       }
-      
-      // 2. Trigger parent update (The App component handles persistence and refresh)
       await props.updateStatus(orderId, newStatus, dbId);
     } catch (e) {
       console.error("[Dashboard] Status update component error:", e);
@@ -121,7 +121,14 @@ const AdminDashboard = (props: any) => {
         <div className="bg-white p-8 md:p-12 rounded-[2.5rem] md:rounded-[3rem] shadow-2xl w-full max-w-sm text-center animate-fadeIn">
           <h1 className="text-2xl md:text-3xl font-black italic tracking-tighter uppercase mb-2 text-black">ITX MASTER</h1>
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-8">Access Terminal</p>
-          <input type="password" value={authKey} onChange={e => setAuthKey(e.target.value)} placeholder="Passkey" className="w-full p-4 border border-gray-100 rounded-2xl bg-gray-50 mb-4 outline-none focus:ring-2 ring-black text-center font-bold" />
+          <input 
+            type="password" 
+            value={authKey} 
+            onChange={e => setAuthKey(e.target.value)} 
+            onKeyDown={e => e.key === 'Enter' && (authKey === props.systemPassword ? props.login(UserRole.ADMIN) : alert('Access Denied'))}
+            placeholder="Passkey" 
+            className="w-full p-4 border border-gray-100 rounded-2xl bg-gray-50 mb-4 outline-none focus:ring-2 ring-black text-center font-bold" 
+          />
           <button onClick={() => { if (authKey === props.systemPassword) props.login(UserRole.ADMIN); else alert('Access Denied'); }} className="w-full bg-black text-white p-4 rounded-2xl font-black uppercase text-xs tracking-widest active:scale-95 transition shadow-xl">Connect</button>
         </div>
       </div>
@@ -151,7 +158,7 @@ const AdminDashboard = (props: any) => {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {[
                 { label: 'Revenue', val: `Rs. ${analytics.revenue.toLocaleString()}`, icon: 'fa-wallet' },
-                { label: 'Manifests', val: props.orders.length, icon: 'fa-file-invoice' },
+                { label: 'Manifests', val: (props.orders || []).length, icon: 'fa-file-invoice' },
                 { label: 'Successful', val: analytics.deliveredCount, icon: 'fa-check-circle' },
                 { label: 'Awaiting', val: analytics.pendingCount, icon: 'fa-clock' }
               ].map((s, i) => (
@@ -180,7 +187,12 @@ const AdminDashboard = (props: any) => {
 
         {activeTab === 'orders' && (
           <div className="space-y-3 md:space-y-4 animate-fadeIn">
-            {props.orders.map((o: Order) => (
+            {(props.orders || []).length === 0 ? (
+              <div className="py-20 text-center opacity-30">
+                <i className="fas fa-box-open text-4xl mb-4"></i>
+                <p className="text-xs font-black uppercase italic tracking-widest">No Manifests Found</p>
+              </div>
+            ) : props.orders.map((o: Order) => (
               <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white p-5 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group">
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                   <div className="flex items-center space-x-4 md:space-x-6">
@@ -221,7 +233,7 @@ const AdminDashboard = (props: any) => {
               <button onClick={() => setEditingProduct({ name: '', description: '', price: 0, image: '', images: [], category: 'Luxury', inventory: 10, variants: [] })} className="bg-black text-white px-5 md:px-8 py-2 md:py-3 rounded-xl md:rounded-2xl font-black uppercase text-[8px] md:text-[10px] tracking-widest">Add Product</button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
-              {props.products.map((p: Product) => (
+              {(props.products || []).map((p: Product) => (
                 <div key={p.id} className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] border border-gray-100 overflow-hidden shadow-sm group">
                   <div className="h-32 md:h-48 relative">
                     <img src={p.image} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
@@ -263,11 +275,9 @@ const AdminDashboard = (props: any) => {
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12">
               <div className="space-y-6 md:space-y-8">
-                {/* Customer Info Section */}
                 <div>
                   <label className="text-[9px] md:text-[10px] font-black uppercase text-gray-400 block mb-3 md:mb-4 italic tracking-widest">Customer Details</label>
                   <div className="space-y-3 md:space-y-4">
-                    {/* Name */}
                     <div className="bg-gray-50 p-3 md:p-4 rounded-xl md:rounded-2xl border border-gray-100 flex items-center justify-between">
                       <div className="min-w-0 flex-grow">
                         <span className="text-[7px] md:text-[8px] font-black uppercase text-gray-400 block mb-0.5 md:mb-1">Full Name</span>
@@ -276,7 +286,6 @@ const AdminDashboard = (props: any) => {
                       <button onClick={() => copyToClipboard(selectedOrder.customer.name)} className="bg-white text-gray-300 p-2 md:p-2.5 rounded-lg md:rounded-xl hover:text-blue-600 shadow-sm transition-all shrink-0 ml-3 md:ml-4"><i className="fas fa-copy text-[10px]"></i></button>
                     </div>
 
-                    {/* Phone */}
                     <div className="bg-gray-50 p-3 md:p-4 rounded-xl md:rounded-2xl border border-gray-100 flex items-center justify-between">
                       <div className="min-w-0 flex-grow">
                         <span className="text-[7px] md:text-[8px] font-black uppercase text-gray-400 block mb-0.5 md:mb-1">Phone Number</span>
@@ -285,7 +294,6 @@ const AdminDashboard = (props: any) => {
                       <button onClick={() => copyToClipboard(selectedOrder.customer.phone)} className="bg-white text-gray-300 p-2 md:p-2.5 rounded-lg md:rounded-xl hover:text-blue-600 shadow-sm transition-all shrink-0 ml-3 md:ml-4"><i className="fas fa-copy text-[10px]"></i></button>
                     </div>
 
-                    {/* City */}
                     <div className="bg-gray-50 p-3 md:p-4 rounded-xl md:rounded-2xl border border-gray-100 flex items-center justify-between">
                       <div className="min-w-0 flex-grow">
                         <span className="text-[7px] md:text-[8px] font-black uppercase text-gray-400 block mb-0.5 md:mb-1">City</span>
@@ -294,7 +302,6 @@ const AdminDashboard = (props: any) => {
                       <button onClick={() => copyToClipboard(selectedOrder.customer.city || '')} className="bg-white text-gray-300 p-2 md:p-2.5 rounded-lg md:rounded-xl hover:text-blue-600 shadow-sm transition-all shrink-0 ml-3 md:ml-4"><i className="fas fa-copy text-[10px]"></i></button>
                     </div>
 
-                    {/* Address */}
                     <div className="bg-gray-50 p-3 md:p-4 rounded-xl md:rounded-2xl border border-gray-100 flex items-start justify-between">
                       <div className="min-w-0 flex-grow">
                         <span className="text-[7px] md:text-[8px] font-black uppercase text-gray-400 block mb-0.5 md:mb-1">Shipping Address</span>
@@ -307,11 +314,10 @@ const AdminDashboard = (props: any) => {
               </div>
 
               <div className="space-y-6 md:space-y-8">
-                {/* Order Summary Section */}
                 <div className="bg-gray-50 p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-gray-100">
                   <label className="text-[9px] md:text-[10px] font-black uppercase text-gray-400 block mb-4 md:mb-6 italic tracking-widest">Ordered Items</label>
                   <div className="space-y-3 md:space-y-4">
-                    {selectedOrder.items.map((itm: any, i: number) => (
+                    {(selectedOrder.items || []).map((itm: any, i: number) => (
                       <div key={i} className="bg-white p-4 md:p-5 rounded-xl md:rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm">
                         <div className="min-w-0">
                           <p className="text-[10px] md:text-[11px] font-black uppercase text-black truncate">{itm.product?.name || 'Item'}</p>
@@ -329,7 +335,6 @@ const AdminDashboard = (props: any) => {
                   </div>
                 </div>
 
-                {/* Status Update Grid */}
                 <div>
                   <label className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 md:mb-6 block italic">Update Status</label>
                   <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 md:gap-3">
@@ -374,7 +379,7 @@ const AdminDashboard = (props: any) => {
                   {isUploading ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-plus mb-1"></i>}
                   <span className="text-[7px] md:text-[8px] font-black">MEDIA</span>
                 </button>
-                {editingProduct.images?.map((img: string, i: number) => (
+                {(editingProduct.images || []).map((img: string, i: number) => (
                   <div key={i} className="w-16 h-16 md:w-20 md:h-20 rounded-xl md:rounded-2xl overflow-hidden border border-gray-100 relative group shrink-0">
                     <img src={img} className="w-full h-full object-cover" />
                     <button onClick={() => {

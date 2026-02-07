@@ -13,14 +13,19 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 const AdminApp: React.FC = () => {
-  // Use localStorage as a secondary cache to prevent PWA "snap-back" on resume
+  // Robust localStorage initialization with try-catch
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
-    const saved = localStorage.getItem('itx_admin_orders_cache');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('itx_admin_orders_cache');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error("[Admin State] Failed to load cached orders:", e);
+      return [];
+    }
   });
   
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(rawOrders.length === 0);
+  const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
   
@@ -28,15 +33,21 @@ const AdminApp: React.FC = () => {
   const processedIds = useRef<Set<string>>(new Set());
 
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('itx_user_session');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('itx_user_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
   });
 
   // Sync cache to localStorage whenever orders change
   useEffect(() => {
-    if (rawOrders.length > 0) {
-      localStorage.setItem('itx_admin_orders_cache', JSON.stringify(rawOrders));
-    }
+    try {
+      if (rawOrders && rawOrders.length > 0) {
+        localStorage.setItem('itx_admin_orders_cache', JSON.stringify(rawOrders));
+      }
+    } catch (e) {}
   }, [rawOrders]);
 
   const playKaching = useCallback(async () => {
@@ -69,7 +80,7 @@ const AdminApp: React.FC = () => {
         data.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
       }
     } catch (e) {
-      console.error("Order Fetch Failed:", e);
+      console.error("[Admin App] Order Fetch Failed:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -82,31 +93,37 @@ const AdminApp: React.FC = () => {
         setProducts(data.map(p => ({
           id: String(p.id),
           name: p.name,
-          description: p.description,
-          price: Number(p.price_pkr || p.price),
-          image: p.image || p.image_url,
+          description: p.description || '',
+          price: Number(p.price_pkr || p.price || 0),
+          image: p.image || p.image_url || '',
           images: Array.isArray(p.images) ? p.images : (p.image ? [p.image] : []),
-          category: p.category,
-          inventory: p.inventory,
-          rating: p.rating || 5,
+          category: p.category || 'Luxury',
+          inventory: Number(p.inventory || 0),
+          rating: Number(p.rating || 5),
           reviews: [],
-          variants: p.variants || []
+          variants: Array.isArray(p.variants) ? p.variants : []
         })));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Admin App] Product Fetch Failed:", e);
+    }
   }, []);
 
   const initData = useCallback(async () => {
-    if (rawOrders.length === 0) setLoading(true);
-    await Promise.all([refreshOrders(), refreshProducts()]);
+    setLoading(true);
+    // Add a safety timeout to ensure the blank screen clears
+    const safetyTimeout = setTimeout(() => setLoading(false), 5000);
+    
+    await Promise.allSettled([refreshOrders(), refreshProducts()]);
+    
+    clearTimeout(safetyTimeout);
     setLoading(false);
-  }, [refreshOrders, refreshProducts, rawOrders.length]);
+  }, [refreshOrders, refreshProducts]);
 
-  // Handle PWA Visibility / Resume
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) {
-        refreshOrders(true); // Silent background sync on resume
+        refreshOrders(true);
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -132,66 +149,46 @@ const AdminApp: React.FC = () => {
   }, [playKaching]);
 
   useEffect(() => {
-    if (user?.role === UserRole.ADMIN) initData();
-    else setLoading(false);
+    if (user?.role === UserRole.ADMIN) {
+      initData();
+    } else {
+      setLoading(false);
+    }
   }, [user, initData]);
 
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
-    const previousState = JSON.parse(JSON.stringify(rawOrders)); // Deep clone
+    const previousState = JSON.parse(JSON.stringify(rawOrders));
     
-    // 1. Instant UI update (Optimistic)
-    const updatedOrders = rawOrders.map(o => {
+    setRawOrders(prev => prev.map(o => {
       const isMatch = String(o.id) === String(dbId) || String(o.order_id) === String(id);
       return isMatch ? { ...o, status: cleanStatus } : o;
-    });
-    setRawOrders(updatedOrders);
+    }));
 
     try {
-      // 2. Database update - Prefer Primary Key for absolute precision
       const targetPk = isNaN(Number(dbId)) ? dbId : Number(dbId);
-      
       const { error } = await adminSupabase
         .from('orders')
         .update({ status: cleanStatus })
         .eq('id', targetPk);
       
       if (error) {
-        console.warn("[Admin] Primary ID update failed, trying order_id:", error.message);
-        const { error: fallbackError } = await adminSupabase
+        const { error: fbError } = await adminSupabase
           .from('orders')
           .update({ status: cleanStatus })
           .eq('order_id', id);
         
-        if (fallbackError) throw fallbackError;
+        if (fbError) throw fbError;
       }
-
-      // SUCCESS: Status is now locked in the DB.
-      // We do NOT call refreshOrders() here to avoid a race-condition revert.
-      console.log(`[Admin] Successfully persisted status: ${cleanStatus} for ${id}`);
-      
     } catch (err: any) {
-      console.error("[Admin Critical Persistence Error]", err);
-      // Revert both memory and localStorage on true failure
+      console.error("[Admin App] Status Update Failed:", err);
       setRawOrders(previousState);
-      alert(`Persistence Failed: ${err.message}. This usually happens if Supabase RLS policies are not set to allow 'UPDATE' on the 'orders' table.`);
-    }
-  };
-
-  const uploadMedia = async (file: File): Promise<string | null> => {
-    try {
-      const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-      const { data, error } = await adminSupabase.storage.from('products').upload(fileName, file);
-      if (error) throw error;
-      const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
-      return publicUrl;
-    } catch (err) {
-      console.error("Upload Error:", err);
-      return null;
+      alert(`Update Failed: ${err.message}`);
     }
   };
 
   const formattedOrders = useMemo((): Order[] => {
+    if (!rawOrders) return [];
     return rawOrders.map(o => {
       let cleanStatus: Order['status'] = 'Pending';
       if (o.status) {
@@ -203,10 +200,18 @@ const AdminApp: React.FC = () => {
         else cleanStatus = 'Pending';
       }
 
+      // Safe JSON parsing for items
+      let parsedItems = [];
+      try {
+        parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : (Array.isArray(o.items) ? o.items : []);
+      } catch (e) {
+        console.warn(`[Admin App] Corrupted items in order ${o.order_id || o.id}`);
+      }
+
       return {
         id: o.order_id || String(o.id),
         dbId: o.id,
-        items: typeof o.items === 'string' ? JSON.parse(o.items) : (Array.isArray(o.items) ? o.items : []),
+        items: parsedItems,
         total: Number(o.total_pkr || o.total || 0),
         status: cleanStatus,
         customer: { 
@@ -221,11 +226,29 @@ const AdminApp: React.FC = () => {
     });
   }, [rawOrders]);
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-      <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-    </div>
-  );
+  const uploadMedia = async (file: File): Promise<string | null> => {
+    try {
+      const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+      const { data, error } = await adminSupabase.storage.from('products').upload(fileName, file);
+      if (error) throw error;
+      const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
+      return publicUrl;
+    } catch (err) {
+      console.error("[Admin App] Upload Error:", err);
+      return null;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest italic">Syncing Manifest...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <HashRouter>
