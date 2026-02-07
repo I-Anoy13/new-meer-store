@@ -59,10 +59,10 @@ const AdminDashboard = (props: any) => {
         <div className="w-full max-w-sm">
           <div className="mb-12 text-center">
             <div className="w-20 h-20 bg-blue-600 rounded-[2.5rem] mx-auto mb-6 flex items-center justify-center shadow-[0_0_50px_rgba(37,99,235,0.3)]">
-              <i className="fas fa-shield-halved text-white text-3xl"></i>
+              <i className="fas fa-lock text-white text-3xl"></i>
             </div>
-            <h1 className="text-3xl font-black italic tracking-tighter text-white uppercase">ITX MASTER</h1>
-            <p className="text-[10px] font-black text-blue-500/50 uppercase tracking-[0.4em] mt-2">Biometric Verification Required</p>
+            <h1 className="text-3xl font-black italic tracking-tighter text-white uppercase">ITX ADMIN</h1>
+            <p className="text-[10px] font-black text-blue-500/50 uppercase tracking-[0.4em] mt-2">Authentication Required</p>
           </div>
           
           <div className="space-y-4">
@@ -71,14 +71,14 @@ const AdminDashboard = (props: any) => {
               value={authKey} 
               onChange={e => setAuthKey(e.target.value)} 
               onKeyDown={e => e.key === 'Enter' && (authKey === props.systemPassword ? props.login(UserRole.ADMIN) : alert('Access Denied'))}
-              placeholder="Passkey" 
+              placeholder="Admin Passkey" 
               className="w-full p-5 bg-white/5 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 ring-blue-500 text-center font-black text-lg tracking-[0.5em] placeholder:tracking-normal placeholder:text-white/20" 
             />
             <button 
               onClick={() => { if (authKey === props.systemPassword) props.login(UserRole.ADMIN); else alert('Access Denied'); }} 
               className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase text-xs tracking-widest active:scale-95 transition-all shadow-xl shadow-blue-600/20"
             >
-              Authenticate
+              Sign In
             </button>
           </div>
         </div>
@@ -106,8 +106,8 @@ const AdminDashboard = (props: any) => {
       {/* HEADER */}
       <header className="sticky top-0 z-[100] bg-black/60 backdrop-blur-xl border-b border-white/5 px-6 py-5 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black text-[10px] italic">IM</div>
-          <h2 className="text-sm font-black italic tracking-tighter uppercase">ITX MASTER</h2>
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black text-[10px] italic text-white">ITX</div>
+          <h2 className="text-sm font-black italic tracking-tighter uppercase">E-COMMERCE ADMIN</h2>
         </div>
         <div className="flex items-center space-x-4">
           <button onClick={() => props.refreshData()} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center active:rotate-180 transition-transform duration-500">
@@ -124,14 +124,14 @@ const AdminDashboard = (props: any) => {
         {activeTab === 'overview' && (
           <div className="space-y-8">
             <section>
-              <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.3em] mb-4">Today's Pulse</p>
+              <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.3em] mb-4">Store Overview</p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white/5 border border-white/10 p-6 rounded-[2rem]">
-                  <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-2">Revenue</p>
+                  <p className="text-[8px] font-black text-blue-500 uppercase tracking-widest mb-2">Total Revenue</p>
                   <p className="text-xl font-black italic">Rs. {analytics.revenue.toLocaleString()}</p>
                 </div>
                 <div className="bg-white/5 border border-white/10 p-6 rounded-[2rem]">
-                  <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-2">Manifests</p>
+                  <p className="text-[8px] font-black text-emerald-500 uppercase tracking-widest mb-2">Total Orders</p>
                   <p className="text-xl font-black italic">{props.orders.length}</p>
                 </div>
               </div>
@@ -139,7 +139,7 @@ const AdminDashboard = (props: any) => {
 
             <section className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem]">
               <div className="flex justify-between items-center mb-6">
-                <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.3em]">Volume Tracking</p>
+                <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.3em]">Sales Performance</p>
                 <span className="text-[9px] font-black text-emerald-500 uppercase bg-emerald-500/10 px-2 py-1 rounded-md">+12.5%</span>
               </div>
               <div className="h-48">
@@ -163,7 +163,7 @@ const AdminDashboard = (props: any) => {
 
             <section>
               <div className="flex justify-between items-center mb-4">
-                <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.3em]">Recent Inbound</p>
+                <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.3em]">Recent Orders</p>
                 <button onClick={() => setActiveTab('orders')} className="text-[10px] font-black uppercase text-blue-500">View All</button>
               </div>
               <div className="space-y-3">
@@ -188,7 +188,7 @@ const AdminDashboard = (props: any) => {
         {activeTab === 'orders' && (
           <div className="space-y-4 animate-fadeIn">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-black italic uppercase tracking-tighter">Manifests</h3>
+              <h3 className="text-xl font-black italic uppercase tracking-tighter">Order Management</h3>
               <div className="bg-white/5 px-4 py-2 rounded-full border border-white/10 text-[9px] font-black uppercase tracking-widest">
                 {props.orders.length} TOTAL
               </div>
@@ -198,15 +198,15 @@ const AdminDashboard = (props: any) => {
               <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white/5 border border-white/10 p-6 rounded-[2rem] space-y-4 active:scale-[0.98] transition-transform">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-1">#{o.id}</p>
+                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-1">ORDER #{o.id}</p>
                     <p className="text-sm font-black uppercase tracking-tight">{o.customer.name}</p>
                   </div>
                   <StatusBadge status={o.status} />
                 </div>
                 <div className="flex justify-between items-end pt-4 border-t border-white/5">
                    <div>
-                      <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Destination</p>
-                      <p className="text-[10px] font-black uppercase text-white/60">{o.customer.city || 'KHI'}</p>
+                      <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Location</p>
+                      <p className="text-[10px] font-black uppercase text-white/60">{o.customer.city || 'N/A'}</p>
                    </div>
                    <p className="text-sm font-black italic text-white">Rs. {o.total.toLocaleString()}</p>
                 </div>
@@ -219,7 +219,7 @@ const AdminDashboard = (props: any) => {
         {activeTab === 'products' && (
           <div className="space-y-6 animate-fadeIn">
             <div className="flex justify-between items-center">
-              <h3 className="text-xl font-black italic uppercase tracking-tighter">Inventory Vault</h3>
+              <h3 className="text-xl font-black italic uppercase tracking-tighter">Product Catalog</h3>
               <button 
                 onClick={() => setEditingProduct({ name: '', description: '', price: 0, image: '', images: [], category: 'Luxury', inventory: 10, variants: [] })}
                 className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shadow-lg shadow-blue-600/20"
@@ -235,7 +235,7 @@ const AdminDashboard = (props: any) => {
                     <img src={p.image} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent"></div>
                     <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest">
-                       STK: {p.inventory}
+                       STOCK: {p.inventory}
                     </div>
                   </div>
                   <div className="p-4 space-y-3">
@@ -243,7 +243,7 @@ const AdminDashboard = (props: any) => {
                     <div className="flex justify-between items-center">
                       <p className="text-[10px] font-black text-blue-500 italic">Rs. {p.price.toLocaleString()}</p>
                       <button onClick={() => setEditingProduct(p)} className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center">
-                        <i className="fas fa-pen text-[8px]"></i>
+                        <i className="fas fa-edit text-[8px]"></i>
                       </button>
                     </div>
                   </div>
@@ -257,20 +257,20 @@ const AdminDashboard = (props: any) => {
       {/* BOTTOM NAVIGATION */}
       <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-2xl border border-white/10 h-20 px-8 rounded-[2.5rem] flex items-center space-x-12 z-[200] shadow-2xl shadow-black">
         <button onClick={() => setActiveTab('overview')} className={`flex flex-col items-center space-y-1 ${activeTab === 'overview' ? 'text-blue-500' : 'text-white/30'}`}>
-          <i className="fas fa-chart-pie text-lg"></i>
-          <span className="text-[7px] font-black uppercase tracking-widest">Status</span>
+          <i className="fas fa-chart-line text-lg"></i>
+          <span className="text-[7px] font-black uppercase tracking-widest">Dashboard</span>
         </button>
         <button onClick={() => setActiveTab('orders')} className={`flex flex-col items-center space-y-1 ${activeTab === 'orders' ? 'text-blue-500' : 'text-white/30'}`}>
-          <i className="fas fa-file-invoice text-lg"></i>
+          <i className="fas fa-shopping-bag text-lg"></i>
           <span className="text-[7px] font-black uppercase tracking-widest">Orders</span>
         </button>
         <button onClick={() => setActiveTab('products')} className={`flex flex-col items-center space-y-1 ${activeTab === 'products' ? 'text-blue-500' : 'text-white/30'}`}>
-          <i className="fas fa-box text-lg"></i>
-          <span className="text-[7px] font-black uppercase tracking-widest">Vault</span>
+          <i className="fas fa-boxes text-lg"></i>
+          <span className="text-[7px] font-black uppercase tracking-widest">Inventory</span>
         </button>
       </nav>
 
-      {/* ORDER ACTION SHEET (Drawer) */}
+      {/* ORDER DETAIL ACTION SHEET */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[300] flex flex-col justify-end animate-fadeIn">
           <div className="absolute inset-0" onClick={() => setSelectedOrder(null)}></div>
@@ -279,33 +279,33 @@ const AdminDashboard = (props: any) => {
             
             <div className="flex justify-between items-start">
                <div>
-                  <h4 className="text-2xl font-black italic uppercase tracking-tighter">Manifest #{selectedOrder.id}</h4>
-                  <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em] mt-1">Status: {selectedOrder.status}</p>
+                  <h4 className="text-2xl font-black italic uppercase tracking-tighter">Order Details</h4>
+                  <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em] mt-1">ID: {selectedOrder.id}</p>
                </div>
                <button onClick={() => setSelectedOrder(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center"><i className="fas fa-times"></i></button>
             </div>
 
             <div className="grid grid-cols-1 gap-4">
               <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10">
-                <p className="text-[8px] font-black text-white/20 uppercase tracking-[0.3em] mb-4">Customer Intelligence</p>
+                <p className="text-[8px] font-black text-white/20 uppercase tracking-[0.3em] mb-4">Customer Information</p>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-black uppercase text-white/40">Name</span>
                     <span className="text-xs font-black">{selectedOrder.customer.name}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-white/40">Link</span>
+                    <span className="text-[10px] font-black uppercase text-white/40">Phone</span>
                     <a href={`tel:${selectedOrder.customer.phone}`} className="text-xs font-black text-blue-500 underline">{selectedOrder.customer.phone}</a>
                   </div>
                   <div className="pt-4 border-t border-white/5">
-                     <span className="text-[8px] font-black uppercase text-white/20 block mb-2">Logistical Address</span>
-                     <p className="text-[11px] font-medium leading-relaxed italic text-white/80">{selectedOrder.customer.address}, {selectedOrder.customer.city}</p>
+                     <span className="text-[8px] font-black uppercase text-white/20 block mb-2">Shipping Address</span>
+                     <p className="text-[11px] font-medium leading-relaxed text-white/80">{selectedOrder.customer.address}, {selectedOrder.customer.city}</p>
                   </div>
                 </div>
               </div>
 
               <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10">
-                <p className="text-[8px] font-black text-white/20 uppercase tracking-[0.3em] mb-4">Manifest Contents</p>
+                <p className="text-[8px] font-black text-white/20 uppercase tracking-[0.3em] mb-4">Order Summary</p>
                 <div className="space-y-3">
                   {selectedOrder.items.map((item: any, i: number) => (
                     <div key={i} className="flex justify-between items-center">
@@ -314,7 +314,7 @@ const AdminDashboard = (props: any) => {
                     </div>
                   ))}
                   <div className="pt-4 mt-4 border-t border-white/5 flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-blue-500">Total Due</span>
+                    <span className="text-[10px] font-black uppercase text-blue-500">Order Total</span>
                     <span className="text-lg font-black italic">Rs. {selectedOrder.total.toLocaleString()}</span>
                   </div>
                 </div>
@@ -322,7 +322,7 @@ const AdminDashboard = (props: any) => {
             </div>
 
             <div className="space-y-4">
-              <p className="text-[9px] font-black text-center uppercase text-white/20 tracking-widest">Update Operational Status</p>
+              <p className="text-[9px] font-black text-center uppercase text-white/20 tracking-widest">Update Order Status</p>
               <div className="grid grid-cols-2 gap-3">
                 {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
                   <button 
@@ -345,11 +345,11 @@ const AdminDashboard = (props: any) => {
               onClick={() => {
                 const text = `Order #${selectedOrder.id}\nName: ${selectedOrder.customer.name}\nPhone: ${selectedOrder.customer.phone}\nAddress: ${selectedOrder.customer.address}\nTotal: Rs. ${selectedOrder.total}`;
                 navigator.clipboard.writeText(text);
-                alert('Manifest Data Copied');
+                alert('Order Information Copied');
               }}
               className="w-full py-4 border border-white/10 rounded-2xl font-black uppercase text-[9px] tracking-[0.3em] text-white/40"
             >
-              Export Manifest Data
+              Copy Order Summary
             </button>
           </div>
         </div>
@@ -361,7 +361,7 @@ const AdminDashboard = (props: any) => {
           <div className="absolute inset-0" onClick={() => setEditingProduct(null)}></div>
           <div className="bg-[#0a0a0a] w-full rounded-t-[3rem] p-8 space-y-6 relative animate-slideInTop overflow-y-auto max-h-[90vh] border-t border-white/10">
             <div className="flex justify-between items-center mb-4">
-               <h4 className="text-xl font-black italic uppercase tracking-tighter">Vault Protocol</h4>
+               <h4 className="text-xl font-black italic uppercase tracking-tighter">{editingProduct.id ? 'Edit Product' : 'Add New Product'}</h4>
                <button onClick={() => setEditingProduct(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center"><i className="fas fa-times"></i></button>
             </div>
 
@@ -369,7 +369,7 @@ const AdminDashboard = (props: any) => {
               <div className="flex space-x-4 overflow-x-auto py-2 no-scrollbar">
                 <button onClick={() => fileInputRef.current?.click()} className="w-20 h-20 bg-white/5 border-2 border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center text-white/20 shrink-0">
                   <i className={`fas ${isUploading ? 'fa-spinner fa-spin' : 'fa-camera'} text-lg mb-1`}></i>
-                  <span className="text-[7px] font-black uppercase">Media</span>
+                  <span className="text-[7px] font-black uppercase">Photos</span>
                 </button>
                 {editingProduct.images?.map((img: string, i: number) => (
                   <div key={i} className="w-20 h-20 rounded-3xl overflow-hidden border border-white/10 shrink-0 relative group">
@@ -391,21 +391,21 @@ const AdminDashboard = (props: any) => {
               </div>
 
               <div className="space-y-4">
-                <input type="text" placeholder="Identity Name" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-xs border border-white/5" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} />
+                <input type="text" placeholder="Product Name" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-xs border border-white/5" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} />
                 <div className="grid grid-cols-2 gap-4">
                   <input type="number" placeholder="Price (PKR)" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-xs border border-white/5" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: Number(e.target.value)})} />
-                  <input type="number" placeholder="Inventory" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-xs border border-white/5" value={editingProduct.inventory} onChange={e => setEditingProduct({...editingProduct, inventory: Number(e.target.value)})} />
+                  <input type="number" placeholder="Inventory Quantity" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-xs border border-white/5" value={editingProduct.inventory} onChange={e => setEditingProduct({...editingProduct, inventory: Number(e.target.value)})} />
                 </div>
-                <textarea placeholder="Technical Specification" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none h-32 resize-none text-xs border border-white/5" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} />
+                <textarea placeholder="Product Description" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none h-32 resize-none text-xs border border-white/5" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} />
               </div>
 
               <div className="flex gap-4 pt-6">
-                 <button onClick={() => setEditingProduct(null)} className="flex-grow py-5 rounded-2xl font-black uppercase text-[10px] text-white/40 border border-white/10">Discard</button>
-                 <button onClick={async () => { if(await props.saveProduct(editingProduct)) setEditingProduct(null); }} className="flex-grow py-5 bg-blue-600 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-600/20">Commit Vault</button>
+                 <button onClick={() => setEditingProduct(null)} className="flex-grow py-5 rounded-2xl font-black uppercase text-[10px] text-white/40 border border-white/10">Cancel</button>
+                 <button onClick={async () => { if(await props.saveProduct(editingProduct)) setEditingProduct(null); }} className="flex-grow py-5 bg-blue-600 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-600/20">Save Product</button>
               </div>
               
               {editingProduct.id && (
-                <button onClick={() => { if(confirm('Erase product?')) props.deleteProduct(editingProduct.id); setEditingProduct(null); }} className="w-full py-4 text-red-500 font-black uppercase text-[8px] tracking-widest opacity-40 hover:opacity-100 transition-opacity">Decommission Product</button>
+                <button onClick={() => { if(confirm('Permanently delete this product?')) props.deleteProduct(editingProduct.id); setEditingProduct(null); }} className="w-full py-4 text-red-500 font-black uppercase text-[8px] tracking-widest opacity-40 hover:opacity-100 transition-opacity">Delete Product</button>
               )}
             </div>
           </div>
