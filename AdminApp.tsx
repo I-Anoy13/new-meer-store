@@ -13,9 +13,14 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 const AdminApp: React.FC = () => {
-  const [rawOrders, setRawOrders] = useState<any[]>([]);
+  // Use localStorage as a secondary cache to prevent PWA "snap-back" on resume
+  const [rawOrders, setRawOrders] = useState<any[]>(() => {
+    const saved = localStorage.getItem('itx_admin_orders_cache');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(rawOrders.length === 0);
   const [isLive, setIsLive] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
   
@@ -26,6 +31,13 @@ const AdminApp: React.FC = () => {
     const saved = localStorage.getItem('itx_user_session');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // Sync cache to localStorage whenever orders change
+  useEffect(() => {
+    if (rawOrders.length > 0) {
+      localStorage.setItem('itx_admin_orders_cache', JSON.stringify(rawOrders));
+    }
+  }, [rawOrders]);
 
   const playKaching = useCallback(async () => {
     try {
@@ -44,7 +56,7 @@ const AdminApp: React.FC = () => {
     } catch (e) {}
   }, []);
 
-  const refreshOrders = useCallback(async () => {
+  const refreshOrders = useCallback(async (isSilent = false) => {
     try {
       const { data, error } = await adminSupabase
         .from('orders')
@@ -58,6 +70,8 @@ const AdminApp: React.FC = () => {
       }
     } catch (e) {
       console.error("Order Fetch Failed:", e);
+    } finally {
+      if (!isSilent) setLoading(false);
     }
   }, []);
 
@@ -83,10 +97,21 @@ const AdminApp: React.FC = () => {
   }, []);
 
   const initData = useCallback(async () => {
-    setLoading(true);
+    if (rawOrders.length === 0) setLoading(true);
     await Promise.all([refreshOrders(), refreshProducts()]);
     setLoading(false);
-  }, [refreshOrders, refreshProducts]);
+  }, [refreshOrders, refreshProducts, rawOrders.length]);
+
+  // Handle PWA Visibility / Resume
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) {
+        refreshOrders(true); // Silent background sync on resume
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user, refreshOrders]);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -113,41 +138,43 @@ const AdminApp: React.FC = () => {
 
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
-    const previousState = [...rawOrders];
+    const previousState = JSON.parse(JSON.stringify(rawOrders)); // Deep clone
     
-    // 1. Optimistic UI update
-    setRawOrders(prev => prev.map(o => {
+    // 1. Instant UI update (Optimistic)
+    const updatedOrders = rawOrders.map(o => {
       const isMatch = String(o.id) === String(dbId) || String(o.order_id) === String(id);
       return isMatch ? { ...o, status: cleanStatus } : o;
-    }));
+    });
+    setRawOrders(updatedOrders);
 
     try {
-      // 2. Persistent update - try order_id (string) first as it's our standard identifier
+      // 2. Database update - Prefer Primary Key for absolute precision
+      const targetPk = isNaN(Number(dbId)) ? dbId : Number(dbId);
+      
       const { error } = await adminSupabase
         .from('orders')
         .update({ status: cleanStatus })
-        .eq('order_id', id);
+        .eq('id', targetPk);
       
       if (error) {
-        // 3. Fallback to Primary Key (integer) if order_id update fails or is ignored
-        const targetId = isNaN(Number(dbId)) ? dbId : Number(dbId);
-        const { error: fbError } = await adminSupabase
+        console.warn("[Admin] Primary ID update failed, trying order_id:", error.message);
+        const { error: fallbackError } = await adminSupabase
           .from('orders')
           .update({ status: cleanStatus })
-          .eq('id', targetId);
+          .eq('order_id', id);
         
-        if (fbError) throw fbError;
+        if (fallbackError) throw fallbackError;
       }
 
-      console.log(`[Admin] Persistence success for order ${id}`);
-      // Refresh in background to sync any other changes
-      refreshOrders();
+      // SUCCESS: Status is now locked in the DB.
+      // We do NOT call refreshOrders() here to avoid a race-condition revert.
+      console.log(`[Admin] Successfully persisted status: ${cleanStatus} for ${id}`);
       
     } catch (err: any) {
-      console.error("[Admin Critical Error]", err);
-      // Revert UI to previous state on true database rejection
+      console.error("[Admin Critical Persistence Error]", err);
+      // Revert both memory and localStorage on true failure
       setRawOrders(previousState);
-      alert(`Database rejection: ${err.message || 'Unknown error'}. Please check if your Supabase RLS policies allow 'UPDATE' for the anon key on the 'orders' table.`);
+      alert(`Persistence Failed: ${err.message}. This usually happens if Supabase RLS policies are not set to allow 'UPDATE' on the 'orders' table.`);
     }
   };
 
@@ -217,7 +244,11 @@ const AdminApp: React.FC = () => {
               if (Notification.permission !== 'granted') Notification.requestPermission();
               setAudioReady(true);
             }}
-            logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }}
+            logout={() => { 
+              setUser(null); 
+              localStorage.removeItem('itx_user_session');
+              localStorage.removeItem('itx_admin_orders_cache');
+            }}
             systemPassword={localStorage.getItem('systemPassword') || 'admin123'}
             initAudio={() => {
               if (Notification.permission !== 'granted') Notification.requestPermission();
