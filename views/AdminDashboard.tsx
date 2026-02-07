@@ -54,13 +54,18 @@ const AdminDashboard = (props: any) => {
   };
 
   const handleStatusChange = async (orderId: string, newStatus: string, dbId: any) => {
+    if (isUpdatingStatus) return;
     setIsUpdatingStatus(true);
-    await props.updateStatus(orderId, newStatus, dbId);
-    // Locally update the selected order state if it's the one open
-    if (selectedOrder && selectedOrder.id === orderId) {
-      setSelectedOrder({ ...selectedOrder, status: newStatus as any });
+    try {
+      await props.updateStatus(orderId, newStatus, dbId);
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, status: newStatus as any });
+      }
+    } catch (e) {
+      alert("Failed to update status.");
+    } finally {
+      setIsUpdatingStatus(false);
     }
-    setIsUpdatingStatus(false);
   };
 
   if (!props.user) {
@@ -209,12 +214,12 @@ const AdminDashboard = (props: any) => {
                   <div className="space-y-3">
                     <p className="font-black text-xl flex items-center gap-2">{selectedOrder.customer.name} <button onClick={() => copyToClipboard(selectedOrder.customer.name)} className="text-gray-200 hover:text-black transition"><i className="fas fa-copy text-xs"></i></button></p>
                     <p className="font-bold text-blue-600 flex items-center gap-2">{selectedOrder.customer.phone} <button onClick={() => copyToClipboard(selectedOrder.customer.phone)} className="text-gray-200 hover:text-black transition"><i className="fas fa-copy text-xs"></i></button></p>
-                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 flex items-center justify-between">
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-center justify-between">
                       <div>
-                        <span className="text-[8px] font-black uppercase text-gray-400 block">Target City</span>
-                        <p className="text-xs font-black uppercase">{selectedOrder.customer.city || 'N/A'}</p>
+                        <span className="text-[8px] font-black uppercase text-gray-400 block mb-1">Target City</span>
+                        <p className="text-xs font-black uppercase text-black">{selectedOrder.customer.city || 'N/A'}</p>
                       </div>
-                      <button onClick={() => copyToClipboard(selectedOrder.customer.city || '')} className="text-gray-300 hover:text-black transition"><i className="fas fa-copy text-xs"></i></button>
+                      <button onClick={() => copyToClipboard(selectedOrder.customer.city || '')} className="bg-white text-gray-300 p-2 rounded-lg hover:text-blue-600 shadow-sm transition"><i className="fas fa-copy text-xs"></i></button>
                     </div>
                   </div>
                 </div>
@@ -245,26 +250,26 @@ const AdminDashboard = (props: any) => {
             
             <div className="mt-10 pt-8 border-t border-gray-100">
                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 block italic">Update Manifest Status</label>
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                  {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
                    <button 
                      key={s}
                      disabled={isUpdatingStatus}
                      onClick={() => handleStatusChange(selectedOrder.id, s, selectedOrder.dbId)}
-                     className={`py-3 rounded-xl font-black uppercase text-[9px] tracking-widest transition-all ${selectedOrder.status === s ? 'bg-black text-white shadow-lg' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-black'}`}
+                     className={`py-3 rounded-xl font-black uppercase text-[8px] tracking-widest transition-all ${selectedOrder.status === s ? 'bg-black text-white shadow-lg scale-105' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-black'}`}
                    >
-                     {isUpdatingStatus && selectedOrder.status !== s ? '...' : s}
+                     {isUpdatingStatus && selectedOrder.status === s ? <i className="fas fa-circle-notch fa-spin"></i> : s}
                    </button>
                  ))}
                </div>
             </div>
 
-            <div className="mt-8 flex flex-col md:flex-row gap-4">
+            <div className="mt-8">
               <button 
                 onClick={() => { const phone = selectedOrder.customer.phone.replace(/\D/g,''); window.open(`https://wa.me/${phone}?text=Assalam-o-Alaikum ${selectedOrder.customer.name}, ITX MEER SHOP here. Your order #${selectedOrder.id} is confirmed.`, '_blank'); }}
-                className="flex-grow bg-[#25D366] text-white p-4 rounded-2xl font-black uppercase text-xs shadow-xl hover:scale-[1.02] transition-transform"
+                className="w-full bg-[#25D366] text-white p-4 rounded-2xl font-black uppercase text-xs shadow-xl hover:scale-[1.02] transition-transform flex items-center justify-center gap-3"
               >
-                <i className="fab fa-whatsapp mr-2 text-base"></i> WhatsApp Message
+                <i className="fab fa-whatsapp text-lg"></i> Send Confirmation Message
               </button>
             </div>
           </div>

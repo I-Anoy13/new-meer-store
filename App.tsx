@@ -87,6 +87,7 @@ const AppContent: React.FC = () => {
   const placeOrder = async (order: Order): Promise<boolean> => {
     try {
       const firstItem = order.items[0];
+      // Clean payload ensures compatibility with most Supabase order table schemas
       const payload = {
         order_id: order.id,
         customer_name: order.customer.name,
@@ -100,17 +101,20 @@ const AppContent: React.FC = () => {
         total_pkr: Math.round(Number(order.total) || 0),
         status: 'pending',
         items: JSON.stringify(order.items),
-        source: 'ITX_CLEAN_V1'
+        created_at: new Date().toISOString()
       };
 
       const { error } = await supabase.from('orders').insert([payload]);
-      if (error) throw error;
+      if (error) {
+        console.error("DB Error:", error.message);
+        throw error;
+      }
 
       setCart([]);
       localStorage.removeItem('cart');
       return true;
     } catch (err) {
-      console.error("[Order Rejection]", err);
+      console.error("[CRITICAL] Order Placement Failed:", err);
       return false;
     }
   };

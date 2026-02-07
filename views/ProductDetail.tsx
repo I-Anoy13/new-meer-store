@@ -27,12 +27,24 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [unitsLeft, setUnitsLeft] = useState(14);
   const [formData, setFormData] = useState({ name: '', phone: '', city: '', address: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Flash Sale Timer (1 Hour)
+  const [timeLeft, setTimeLeft] = useState(3600); 
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev > 0 ? prev - 1 : 0);
+    }, 1000);
     const vInterval = setInterval(() => setViewers(prev => Math.min(45, Math.max(20, prev + (Math.random() > 0.5 ? 1 : -1)))), 4000);
     const stockInterval = setInterval(() => setUnitsLeft(prev => (prev > 2 ? prev - (Math.random() > 0.98 ? 1 : 0) : prev)), 20000);
-    return () => { clearInterval(vInterval); clearInterval(stockInterval); };
+    return () => { clearInterval(timer); clearInterval(vInterval); clearInterval(stockInterval); };
   }, []);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   if (!product) return (
     <div className="container mx-auto px-4 py-32 text-center">
@@ -58,7 +70,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       date: new Date().toISOString()
     };
     if (await placeOrder(newOrder)) setOrderSuccess({ id: newOrderId });
-    else alert("Placement Failed. System Reconnecting...");
+    else alert("Placement Failed. Please check your internet connection.");
     setIsSubmitting(false);
   };
 
@@ -119,6 +131,9 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                   <div key={i} className="w-full h-full shrink-0 snap-center"><img src={img} className="w-full h-full object-cover" /></div>
                 ))}
               </div>
+              <div className="absolute top-6 right-6 bg-red-600 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest animate-pulse z-10">
+                Flash Sale: {formatTime(timeLeft)}
+              </div>
               <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex space-x-2">
                 {productImages.map((_, i) => (
                   <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${activeImageIdx === i ? 'bg-black w-6' : 'bg-black/10'}`}></div>
@@ -148,7 +163,10 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
             </div>
             <button onClick={() => setIsOrderPortalActive(true)} className="w-full bg-black text-white font-black text-xs uppercase tracking-widest py-6 rounded-2xl shadow-2xl active:scale-[0.98] transition-all italic">Order Now — Cash On Delivery</button>
             <div className="mt-12 space-y-8">
-               <div className="border-l-2 border-black pl-6"><h3 className="text-[10px] font-black uppercase text-gray-400 mb-3 italic">Item Specification</h3><p className="text-sm font-medium leading-relaxed opacity-70">{product.description}</p></div>
+               <div className="border-l-2 border-black pl-6">
+                 <h3 className="text-[10px] font-black uppercase text-gray-400 mb-3 italic">Item Specification</h3>
+                 <p className="text-sm font-medium leading-relaxed opacity-70 whitespace-pre-wrap">{product.description}</p>
+               </div>
                <div className="grid grid-cols-2 gap-6 pt-10 border-t border-gray-100">
                  {TRUST_BADGES.map((b, i) => (
                    <div key={i} className="flex items-center space-x-3"><div className="w-8 h-8 flex items-center justify-center bg-gray-50 rounded-xl text-blue-600"><i className={`fas ${b.icon} text-xs`}></i></div><span className="text-[9px] font-black text-gray-400 uppercase tracking-tight">{b.text}</span></div>
