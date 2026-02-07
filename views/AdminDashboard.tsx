@@ -12,15 +12,18 @@ const AdminDashboard = (props: any) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // Sync selectedOrder if the orders list changes (persistence fix)
+  // Sync selectedOrder if the global orders list changes, using string-safe comparisons
   useEffect(() => {
     if (selectedOrder) {
-      const match = props.orders.find((o: Order) => o.id === selectedOrder.id || o.dbId === selectedOrder.dbId);
+      const match = props.orders.find((o: Order) => 
+        String(o.id) === String(selectedOrder.id) || 
+        (o.dbId && String(o.dbId) === String(selectedOrder.dbId))
+      );
       if (match && match.status !== selectedOrder.status) {
         setSelectedOrder(match);
       }
     }
-  }, [props.orders]);
+  }, [props.orders, selectedOrder]);
 
   const getStatusClasses = (status: string) => {
     switch (status) {
@@ -98,15 +101,15 @@ const AdminDashboard = (props: any) => {
     if (isUpdatingStatus) return;
     setIsUpdatingStatus(true);
     try {
-      // 1. Instantly update local modal view
+      // 1. Instantly update local modal view for user feedback
       if (selectedOrder) {
         setSelectedOrder({ ...selectedOrder, status: newStatus as any });
       }
       
-      // 2. Trigger parent update (Optimistic)
+      // 2. Trigger parent update (The App component handles persistence and refresh)
       await props.updateStatus(orderId, newStatus, dbId);
     } catch (e) {
-      alert("Persistence Failed. Reverting status...");
+      console.error("[Dashboard] Status update component error:", e);
     } finally {
       setIsUpdatingStatus(false);
     }
