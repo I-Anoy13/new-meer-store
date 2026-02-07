@@ -48,7 +48,7 @@ const AdminApp: React.FC = () => {
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(5000); 
+        .limit(2000); 
       
       if (!error && data) {
         setRawOrders(data);
@@ -109,6 +109,38 @@ const AdminApp: React.FC = () => {
     else setLoading(false);
   }, [user, initData]);
 
+  const updateOrderStatus = async (id: string, status: string, dbId: any) => {
+    const cleanStatus = status.toLowerCase();
+    
+    // 1. Optimistic Update: Update local state immediately
+    setRawOrders(prev => prev.map(o => 
+      (o.id === dbId || o.order_id === id) ? { ...o, status: cleanStatus } : o
+    ));
+
+    try {
+      // 2. Persist to Server
+      const { error } = await adminSupabase
+        .from('orders')
+        .update({ status: cleanStatus })
+        .eq('id', dbId);
+      
+      if (error) {
+        // Fallback to order_id if standard ID fails
+        const { error: fallbackError } = await adminSupabase
+          .from('orders')
+          .update({ status: cleanStatus })
+          .eq('order_id', id);
+        
+        if (fallbackError) throw fallbackError;
+      }
+    } catch (err) {
+      console.error("[Persistence Error] Status update failed:", err);
+      // 3. Revert local state on failure
+      refreshOrders();
+      throw err;
+    }
+  };
+
   const uploadMedia = async (file: File): Promise<string | null> => {
     try {
       const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
@@ -124,7 +156,6 @@ const AdminApp: React.FC = () => {
 
   const formattedOrders = useMemo((): Order[] => {
     return rawOrders.map(o => {
-      // Robust capitalization for status
       let cleanStatus: Order['status'] = 'Pending';
       if (o.status) {
         const s = o.status.toLowerCase();
@@ -182,33 +213,7 @@ const AdminApp: React.FC = () => {
               setAudioReady(true);
             }}
             refreshData={initData}
-            updateStatus={async (id: string, status: string, dbId: any) => {
-              const cleanStatus = status.toLowerCase();
-              console.log(`[Admin] Updating order ${id} (PK: ${dbId}) to status: ${cleanStatus}`);
-              
-              // 1. Primary update by Database ID (Integer primary key)
-              const { error: primaryError } = await adminSupabase
-                .from('orders')
-                .update({ status: cleanStatus })
-                .eq('id', dbId);
-              
-              if (primaryError) {
-                console.warn("[Admin] Primary update failed, trying order_id fallback:", primaryError);
-                // 2. Fallback update by order_id (Text unique ID)
-                const { error: fallbackError } = await adminSupabase
-                  .from('orders')
-                  .update({ status: cleanStatus })
-                  .eq('order_id', id);
-                
-                if (fallbackError) {
-                  console.error("[Admin] All update paths failed:", fallbackError);
-                  throw fallbackError;
-                }
-              }
-
-              // 3. Force state refresh to ensure UI synchronization
-              await refreshOrders();
-            }}
+            updateStatus={updateOrderStatus}
             uploadMedia={uploadMedia}
             saveProduct={async (p: any) => {
               const payload = {

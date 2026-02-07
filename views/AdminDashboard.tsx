@@ -12,7 +12,16 @@ const AdminDashboard = (props: any) => {
   const [isUploading, setIsUploading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // Helper to get status color classes - 'Confirmed' is now green
+  // Sync selectedOrder if the orders list changes (persistence fix)
+  useEffect(() => {
+    if (selectedOrder) {
+      const match = props.orders.find((o: Order) => o.id === selectedOrder.id || o.dbId === selectedOrder.dbId);
+      if (match && match.status !== selectedOrder.status) {
+        setSelectedOrder(match);
+      }
+    }
+  }, [props.orders]);
+
   const getStatusClasses = (status: string) => {
     switch (status) {
       case 'Confirmed':
@@ -89,24 +98,15 @@ const AdminDashboard = (props: any) => {
     if (isUpdatingStatus) return;
     setIsUpdatingStatus(true);
     try {
-      // 1. Instantly update the local modal state for responsiveness
+      // 1. Instantly update local modal view
       if (selectedOrder) {
-        setSelectedOrder(prev => prev ? { ...prev, status: newStatus as any } : null);
+        setSelectedOrder({ ...selectedOrder, status: newStatus as any });
       }
       
-      // 2. Perform server update via parent prop
+      // 2. Trigger parent update (Optimistic)
       await props.updateStatus(orderId, newStatus, dbId);
-      
-      // 3. Confirm sync with parent orders list
-      const updatedOrder = props.orders.find((o: Order) => (o.dbId === dbId || o.id === orderId));
-      if (updatedOrder && selectedOrder) {
-        setSelectedOrder(updatedOrder);
-      }
     } catch (e) {
-      console.error("Status update error:", e);
-      alert("Failed to update status on server. Reverting...");
-      // Revert modal state if it failed
-      props.refreshData();
+      alert("Persistence Failed. Reverting status...");
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -333,7 +333,6 @@ const AdminDashboard = (props: any) => {
                     {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => {
                       const isActive = selectedOrder.status === s;
                       let activeStyle = 'bg-black text-white';
-                      // 'Confirmed' and 'Delivered' use the same solid green success theme
                       if (isActive && (s === 'Confirmed' || s === 'Delivered')) {
                         activeStyle = 'bg-green-600 text-white shadow-lg shadow-green-100';
                       } else if (isActive && s === 'Cancelled') {
