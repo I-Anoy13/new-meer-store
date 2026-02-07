@@ -343,13 +343,13 @@ const AdminDashboard = (props: any) => {
             
             <button 
               onClick={() => {
-                const text = `Order #${selectedOrder.id}\nName: ${selectedOrder.customer.name}\nPhone: ${selectedOrder.customer.phone}\nAddress: ${selectedOrder.customer.address}\nTotal: Rs. ${selectedOrder.total}`;
+                const text = `Name: ${selectedOrder.customer.name}\nPhone: ${selectedOrder.customer.phone}\nCity: ${selectedOrder.customer.city || 'N/A'}\nAddress: ${selectedOrder.customer.address}`;
                 navigator.clipboard.writeText(text);
-                alert('Order Information Copied');
+                alert('Customer Details Copied to Clipboard');
               }}
               className="w-full py-4 border border-white/10 rounded-2xl font-black uppercase text-[9px] tracking-[0.3em] text-white/40"
             >
-              Copy Order Summary
+              Copy Customer Details
             </button>
           </div>
         </div>

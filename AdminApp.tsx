@@ -157,14 +157,14 @@ const AdminApp: React.FC = () => {
         throw new Error("PERMISSION_DENIED_OR_NOT_FOUND");
       }
 
-      console.log(`[Persistence] Manifest ${id} locked as ${cleanStatus}`);
+      console.log(`[Persistence] Order ${id} updated to ${cleanStatus}`);
     } catch (err: any) {
       console.error("[Persistence Critical]", err);
       delete recentUpdates.current[orderKey];
       
       let msg = "The database rejected this change.";
       if (err.message === "PERMISSION_DENIED_OR_NOT_FOUND") {
-        msg = "Manifest Update Rejected: Permission Denied.\n\nFIX: Go to Supabase SQL Editor and run:\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;";
+        msg = "Order Update Rejected: Permission Denied.\n\nFIX: Go to Supabase SQL Editor and run:\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;";
       } else {
         msg = `System Error: ${err.message}`;
       }
@@ -210,7 +210,7 @@ const AdminApp: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
       <div className="flex flex-col items-center space-y-4">
         <div className="w-5 h-5 border-2 border-white/10 border-t-white rounded-full animate-spin"></div>
-        <p className="text-[8px] font-black uppercase text-white/20 tracking-[0.4em]">Vault Accessing...</p>
+        <p className="text-[8px] font-black uppercase text-white/20 tracking-[0.4em]">Accessing Store...</p>
       </div>
     </div>
   );

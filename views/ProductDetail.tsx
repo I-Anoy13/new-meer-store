@@ -49,7 +49,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   if (!product) return (
     <div className="container mx-auto px-4 py-32 text-center">
       <h2 className="text-lg font-black uppercase italic">Product Manifest Lost</h2>
-      <Link to="/" className="text-blue-600 mt-4 inline-block font-black underline italic uppercase text-xs">Return to Terminal</Link>
+      <Link to="/" className="text-blue-600 mt-4 inline-block font-black underline italic uppercase text-xs">Return to Home</Link>
     </div>
   );
 
@@ -83,8 +83,8 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     return (
       <div className="fixed inset-0 bg-white z-[200] flex flex-col animate-fadeIn overflow-hidden">
         <div className="bg-black text-white py-5 px-6 flex justify-between items-center">
-          <p className="text-[10px] font-black uppercase tracking-widest italic">Secure Manifest — Cash On Delivery</p>
-          <button onClick={() => setIsOrderPortalActive(false)} className="text-white/40 hover:text-white uppercase text-[10px] font-black">Close Manifest</button>
+          <p className="text-[10px] font-black uppercase tracking-widest italic">Secure Order — Cash On Delivery</p>
+          <button onClick={() => setIsOrderPortalActive(false)} className="text-white/40 hover:text-white uppercase text-[10px] font-black">Close</button>
         </div>
         <div className="flex-grow overflow-y-auto pb-12">
           <div className="container mx-auto px-6 py-8 max-w-md">
@@ -110,7 +110,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <div className="text-center py-20 animate-fadeIn">
                 <div className="w-16 h-16 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 text-2xl shadow-xl"><i className="fas fa-check"></i></div>
                 <h2 className="text-2xl font-black italic uppercase mb-2">Order Confirmed</h2>
-                <p className="text-gray-400 text-xs font-black uppercase mb-12">Manifest #{orderSuccess.id}</p>
+                <p className="text-gray-400 text-xs font-black uppercase mb-12">Order #{orderSuccess.id}</p>
                 <button onClick={() => { setIsOrderPortalActive(false); setOrderSuccess(null); }} className="w-full bg-black text-white font-black uppercase py-5 rounded-2xl text-[10px] tracking-widest">Back to Gallery</button>
               </div>
             )}
@@ -154,12 +154,12 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <span className="text-[9px] font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-100 uppercase italic">Free Delivery</span>
             </div>
             <div className="mb-10 bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
-              <p className="text-[10px] font-black text-red-600 mb-4 uppercase italic flex items-center"><i className="fas fa-bolt mr-2"></i> Only {unitsLeft} units remaining in vault</p>
+              <p className="text-[10px] font-black text-red-600 mb-4 uppercase italic flex items-center"><i className="fas fa-bolt mr-2"></i> Only {unitsLeft} units remaining</p>
               <div className="w-full h-1 bg-white rounded-full overflow-hidden"><div className="h-full bg-red-600 transition-all duration-1000" style={{ width: `${(unitsLeft / 14) * 100}%` }}></div></div>
             </div>
             <div className="mb-8 flex items-center space-x-3 pl-2">
               <div className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span></div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">{viewers} Master Collectors viewing</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">{viewers} people watching</span>
             </div>
             <button onClick={() => setIsOrderPortalActive(true)} className="w-full bg-black text-white font-black text-xs uppercase tracking-widest py-6 rounded-2xl shadow-2xl active:scale-[0.98] transition-all italic">Order Now — Cash On Delivery</button>
             <div className="mt-12 space-y-8">
