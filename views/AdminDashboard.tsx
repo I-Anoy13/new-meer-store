@@ -59,6 +59,7 @@ const AdminDashboard = (props: any) => {
     setIsUpdatingStatus(true);
     try {
       await props.updateStatus(orderId, newStatus, dbId);
+      // Immediately update local selected order for persistence feedback
       if (selectedOrder && (selectedOrder.id === orderId || selectedOrder.dbId === dbId)) {
         setSelectedOrder({ ...selectedOrder, status: newStatus as any });
       }
@@ -205,82 +206,95 @@ const AdminDashboard = (props: any) => {
       {/* ORDER DETAIL MODAL */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[300] flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-2xl p-8 lg:p-12 rounded-[3rem] relative shadow-2xl overflow-y-auto max-h-[90vh]">
-            <button onClick={() => setSelectedOrder(null)} className="absolute top-8 right-8 text-gray-300 hover:text-black"><i className="fas fa-times text-2xl"></i></button>
+          <div className="bg-white w-full max-w-4xl p-8 lg:p-12 rounded-[3rem] relative shadow-2xl overflow-y-auto max-h-[90vh]">
+            <button onClick={() => setSelectedOrder(null)} className="absolute top-8 right-8 text-gray-300 hover:text-black transition-colors"><i className="fas fa-times text-2xl"></i></button>
             <h4 className="text-2xl font-black italic uppercase mb-10">Manifest <span className="text-blue-600">#{selectedOrder.id}</span></h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="space-y-8">
-                <div>
-                  <label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Customer Details</label>
-                  <div className="space-y-3">
-                    <p className="font-black text-xl flex items-center gap-2">
-                      {selectedOrder.customer.name} 
-                      <button onClick={() => copyToClipboard(selectedOrder.customer.name)} className="bg-gray-50 text-gray-400 p-2 rounded-lg hover:text-black transition shadow-sm"><i className="fas fa-copy text-xs"></i></button>
-                    </p>
-                    <p className="font-bold text-blue-600 flex items-center gap-2">
-                      {selectedOrder.customer.phone} 
-                      <button onClick={() => copyToClipboard(selectedOrder.customer.phone)} className="bg-gray-50 text-gray-400 p-2 rounded-lg hover:text-black transition shadow-sm"><i className="fas fa-copy text-xs"></i></button>
-                    </p>
-                    
-                    {/* Standalone City Block */}
-                    <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 flex items-center justify-between">
-                      <div>
-                        <span className="text-[8px] font-black uppercase text-gray-400 block mb-1">Target City</span>
-                        <p className="text-xs font-black uppercase text-black italic tracking-tight">{selectedOrder.customer.city || 'N/A'}</p>
-                      </div>
-                      <button onClick={() => copyToClipboard(selectedOrder.customer.city || '')} className="bg-white text-blue-600 p-2 rounded-lg hover:bg-blue-600 hover:text-white shadow-sm transition"><i className="fas fa-copy text-xs"></i></button>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Shipping Address</label>
-                  <div className="text-sm font-bold text-gray-600 leading-relaxed bg-gray-50 p-4 rounded-2xl italic flex items-start justify-between">
-                    <span>{selectedOrder.customer.address}</span>
-                    <button onClick={() => copyToClipboard(selectedOrder.customer.address)} className="ml-2 bg-white text-gray-400 p-2 rounded-lg hover:text-black transition shadow-sm shrink-0"><i className="fas fa-copy text-xs"></i></button>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 p-6 rounded-3xl">
-                <label className="text-[9px] font-black uppercase text-gray-400 block mb-4 italic">Item Summary</label>
-                <div className="space-y-3">
-                  {selectedOrder.items.map((itm: any, i: number) => (
-                    <div key={i} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center">
-                      <p className="text-[11px] font-black uppercase truncate max-w-[150px]">{itm.product?.name || 'Item'}</p>
-                      <span className="text-blue-600 font-black italic">x{itm.quantity}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-6 pt-4 border-t border-gray-200 flex justify-between items-center">
-                  <p className="text-[10px] font-black uppercase">Total Due</p>
-                  <p className="text-lg font-black italic">Rs. {selectedOrder.total.toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
             
-            {/* Status Action Buttons */}
-            <div className="mt-10 pt-8 border-t border-gray-100">
-               <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6 block italic">Update Manifest Status</label>
-               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                 {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
-                   <button 
-                     key={s}
-                     disabled={isUpdatingStatus}
-                     onClick={() => handleStatusChange(selectedOrder.id, s, selectedOrder.dbId)}
-                     className={`py-4 rounded-2xl font-black uppercase text-[8px] tracking-widest transition-all ${selectedOrder.status === s ? 'bg-black text-white shadow-xl scale-105 z-10' : 'bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-black'}`}
-                   >
-                     {isUpdatingStatus && selectedOrder.status === s ? <i className="fas fa-circle-notch fa-spin"></i> : s}
-                   </button>
-                 ))}
-               </div>
-            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+              <div className="space-y-8">
+                {/* Customer Info Section */}
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400 block mb-4 italic tracking-widest">Customer Details</label>
+                  <div className="space-y-4">
+                    {/* Name */}
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
+                      <div className="min-w-0 flex-grow">
+                        <span className="text-[8px] font-black uppercase text-gray-400 block mb-1">Full Name</span>
+                        <p className="text-sm font-black text-black truncate">{selectedOrder.customer.name}</p>
+                      </div>
+                      <button onClick={() => copyToClipboard(selectedOrder.customer.name)} className="bg-white text-gray-300 p-2.5 rounded-xl hover:text-blue-600 shadow-sm transition-all shrink-0 ml-4"><i className="fas fa-copy text-xs"></i></button>
+                    </div>
 
-            <div className="mt-8">
-              <button 
-                onClick={() => { const phone = selectedOrder.customer.phone.replace(/\D/g,''); window.open(`https://wa.me/${phone}?text=Assalam-o-Alaikum ${selectedOrder.customer.name}, ITX MEER SHOP here. Your order #${selectedOrder.id} is confirmed.`, '_blank'); }}
-                className="w-full bg-[#25D366] text-white p-5 rounded-[1.5rem] font-black uppercase text-[10px] shadow-xl hover:scale-[1.02] transition-transform flex items-center justify-center gap-4 italic"
-              >
-                <i className="fab fa-whatsapp text-xl"></i> Send Confirmation to WhatsApp
-              </button>
+                    {/* Phone */}
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
+                      <div className="min-w-0 flex-grow">
+                        <span className="text-[8px] font-black uppercase text-gray-400 block mb-1">Phone Number</span>
+                        <p className="text-sm font-black text-blue-600 truncate">{selectedOrder.customer.phone}</p>
+                      </div>
+                      <button onClick={() => copyToClipboard(selectedOrder.customer.phone)} className="bg-white text-gray-300 p-2.5 rounded-xl hover:text-blue-600 shadow-sm transition-all shrink-0 ml-4"><i className="fas fa-copy text-xs"></i></button>
+                    </div>
+
+                    {/* City */}
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between">
+                      <div className="min-w-0 flex-grow">
+                        <span className="text-[8px] font-black uppercase text-gray-400 block mb-1">City</span>
+                        <p className="text-sm font-black text-black uppercase truncate">{selectedOrder.customer.city || 'N/A'}</p>
+                      </div>
+                      <button onClick={() => copyToClipboard(selectedOrder.customer.city || '')} className="bg-white text-gray-300 p-2.5 rounded-xl hover:text-blue-600 shadow-sm transition-all shrink-0 ml-4"><i className="fas fa-copy text-xs"></i></button>
+                    </div>
+
+                    {/* Address */}
+                    <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-start justify-between">
+                      <div className="min-w-0 flex-grow">
+                        <span className="text-[8px] font-black uppercase text-gray-400 block mb-1">Shipping Address</span>
+                        <p className="text-xs font-bold text-gray-600 leading-relaxed italic">{selectedOrder.customer.address}</p>
+                      </div>
+                      <button onClick={() => copyToClipboard(selectedOrder.customer.address)} className="bg-white text-gray-300 p-2.5 rounded-xl hover:text-blue-600 shadow-sm transition-all shrink-0 ml-4"><i className="fas fa-copy text-xs"></i></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                {/* Order Summary Section */}
+                <div className="bg-gray-50 p-8 rounded-[2.5rem] border border-gray-100">
+                  <label className="text-[10px] font-black uppercase text-gray-400 block mb-6 italic tracking-widest">Ordered Items</label>
+                  <div className="space-y-4">
+                    {selectedOrder.items.map((itm: any, i: number) => (
+                      <div key={i} className="bg-white p-5 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-black uppercase text-black truncate">{itm.product?.name || 'Item'}</p>
+                          {itm.variantName && (
+                            <span className="text-[8px] font-black uppercase text-blue-500 tracking-widest block mt-1">Variant: {itm.variantName}</span>
+                          )}
+                        </div>
+                        <span className="text-blue-600 font-black italic ml-4 shrink-0">x{itm.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-8 pt-6 border-t border-gray-200 flex justify-between items-center">
+                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Total Payable</p>
+                    <p className="text-xl font-black italic text-black">Rs. {selectedOrder.total.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* Status Update Grid */}
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6 block italic">Update Status</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                    {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
+                      <button 
+                        key={s}
+                        disabled={isUpdatingStatus}
+                        onClick={() => handleStatusChange(selectedOrder.id, s, selectedOrder.dbId)}
+                        className={`py-4 rounded-2xl font-black uppercase text-[8px] tracking-widest transition-all ${selectedOrder.status === s ? 'bg-black text-white shadow-xl scale-105 z-10' : 'bg-white text-gray-400 border border-gray-100 hover:border-black hover:text-black'}`}
+                      >
+                        {isUpdatingStatus && selectedOrder.status === s ? <i className="fas fa-circle-notch fa-spin"></i> : s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
