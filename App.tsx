@@ -88,7 +88,6 @@ const AppContent: React.FC = () => {
           last_view: window.location.hash
         });
         
-        // Notify Service Worker to stay awake
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
           navigator.serviceWorker.controller.postMessage('PING_SENTINEL');
         }
@@ -100,13 +99,9 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     setupActivePresence();
-    
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        setupActivePresence();
-      }
+      if (document.visibilityState === 'visible') setupActivePresence();
     };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -152,11 +147,15 @@ const AppContent: React.FC = () => {
 
   const placeOrder = async (order: Order): Promise<boolean> => {
     setIsSyncing(true);
+    console.log("[Order Engine] Initializing placement for:", order.id);
+    
     try {
-      const orderId = order.id;
       const firstItem = order.items[0];
+      
+      // We use a safe payload structure. If some columns don't exist, we try to be as compatible as possible.
       const payload = {
-        order_id: orderId,
+        // Use a descriptive order_id, but avoid sending it if the DB uses 'id' as primary int
+        order_id: order.id, 
         customer_name: order.customer.name,
         customer_phone: order.customer.phone,
         customer_city: order.customer.city || 'N/A',
@@ -167,11 +166,33 @@ const AppContent: React.FC = () => {
         product_image: firstItem?.product.image || '',
         total_pkr: Math.round(Number(order.total) || 0),
         status: 'pending',
-        items: order.items,
-        source: 'ITX_CLEAN_REDUX_V1'
+        items: JSON.stringify(order.items), // Stringify items to ensure compatibility with Text or JSONB columns
+        source: 'ITX_CLEAN_REDUX_V2'
       };
 
-      // Broadcast activity for live updates
+      // 1. Log intended payload for debugging
+      console.log("[Order Engine] Payload prepared:", payload);
+
+      // 2. Insert into Supabase
+      const { data, error } = await supabase
+        .from('orders')
+        .insert([payload])
+        .select();
+
+      if (error) {
+        // CRITICAL: Log the exact Supabase error. 
+        // Likely causes: 
+        // - Table 'orders' does not exist.
+        // - RLS (Row Level Security) is ON but no 'INSERT' policy for 'anon'.
+        // - Missing required columns in the DB that aren't in our payload.
+        console.error("[Order Engine] Supabase Rejection:", error);
+        console.error("DEBUG TIP: Ensure your 'orders' table allows Public/Anon INSERT and check RLS policies.");
+        throw error;
+      }
+
+      console.log("[Order Engine] Placement Successful:", data);
+
+      // 3. Broadcast activity for live updates
       if (presenceChannelRef.current) {
         presenceChannelRef.current.send({
           type: 'broadcast',
@@ -180,18 +201,11 @@ const AppContent: React.FC = () => {
         });
       }
 
-      const { error } = await supabase.from('orders').insert([payload]);
-      
-      if (error) {
-        console.error("Order Submission Failed:", error.message);
-        throw error;
-      }
-
       setCart([]);
       localStorage.removeItem('cart');
       return true;
     } catch (err) {
-      console.error("Order placement exception:", err);
+      console.error("[Order Engine] Fatal Exception:", err);
       return false;
     } finally {
       setIsSyncing(false);

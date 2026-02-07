@@ -26,7 +26,8 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
     if (isSubmitting) return;
     
     setIsSubmitting(true);
-    const newOrderId = `ORD-${Math.floor(Math.random() * 900000) + 100000}`;
+    // Generate a shorter, safer numeric order ID
+    const newOrderId = `ORD-${Math.floor(Date.now() / 1000).toString().slice(-6)}`;
     
     const newOrder: Order = {
       id: newOrderId,
@@ -44,16 +45,18 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
     };
     
     try {
+      console.log("[Checkout] Attempting to place order:", newOrderId);
       const success = await placeOrder(newOrder);
       if (success) {
         setOrderId(newOrderId);
         setIsOrdered(true);
       } else {
-        alert("We encountered an issue placing your order. Please check your connection and try again.");
+        // The error is already logged in App.tsx placeOrder
+        alert("Sorry! We couldn't place your order. Please check your internet connection or try again in a few moments.");
       }
     } catch (err) {
-      console.error("Order process error", err);
-      alert("Something went wrong. Please try again later.");
+      console.error("[Checkout] Order processing error", err);
+      alert("A system error occurred. Our team has been notified.");
     } finally {
       setIsSubmitting(false);
     }
@@ -166,7 +169,7 @@ const Checkout: React.FC<CheckoutProps> = ({ cart, placeOrder }) => {
                   className="w-full bg-black text-white font-bold uppercase py-5 rounded-xl hover:bg-blue-600 transition shadow-xl text-xs tracking-widest italic"
                 >
                   {isSubmitting ? (
-                    <i className="fas fa-circle-notch fa-spin"></i>
+                    <i className="fas fa-circle-notch fa-spin mr-2"></i>
                   ) : (
                     <span>
                       Place Order — Rs. {subtotal.toLocaleString()} 
