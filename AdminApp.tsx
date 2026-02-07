@@ -13,7 +13,9 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 const AdminApp: React.FC = () => {
-  // Defensive initialization for rawOrders
+  // Use a ref to track very recent local updates to prevent server "overwriting"
+  const recentUpdates = useRef<Record<string, { status: string, time: number }>>({});
+
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('itx_admin_orders_cache');
@@ -31,7 +33,6 @@ const AdminApp: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const processedIds = useRef<Set<string>>(new Set());
 
-  // Defensive initialization for user
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('itx_user_session');
@@ -41,36 +42,16 @@ const AdminApp: React.FC = () => {
     }
   });
 
-  // Emergency Force-Unblock Loading
+  // Global loading timeout safety
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 2000); // If requests take longer than 2s, show what we have (even if empty)
+    const timer = setTimeout(() => setLoading(false), 2500);
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
+  // Sync state to localStorage with every change
+  const syncToStorage = useCallback((data: any[]) => {
     try {
-      if (rawOrders && Array.isArray(rawOrders) && rawOrders.length > 0) {
-        localStorage.setItem('itx_admin_orders_cache', JSON.stringify(rawOrders));
-      }
-    } catch (e) {}
-  }, [rawOrders]);
-
-  const playKaching = useCallback(async () => {
-    try {
-      if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const ctx = audioContextRef.current;
-      if (ctx.state === 'suspended') await ctx.resume();
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = 'sine'; osc.frequency.setValueAtTime(2489, now); 
-      g.gain.setValueAtTime(0, now);
-      g.gain.linearRampToValueAtTime(0.5, now + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
-      osc.connect(g); g.connect(ctx.destination);
-      osc.start(); osc.stop(now + 1.2);
+      localStorage.setItem('itx_admin_orders_cache', JSON.stringify(data));
     } catch (e) {}
   }, []);
 
@@ -80,18 +61,30 @@ const AdminApp: React.FC = () => {
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(1000); 
+        .limit(100); 
       
       if (!error && data) {
-        setRawOrders(data);
-        data.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
+        // Merge server data with recent local "un-synced" intents
+        const mergedData = data.map(serverOrder => {
+          const id = String(serverOrder.order_id || serverOrder.id);
+          const localIntent = recentUpdates.current[id];
+          // If we updated this locally in the last 15 seconds, prioritize local status
+          if (localIntent && (Date.now() - localIntent.time < 15000)) {
+            return { ...serverOrder, status: localIntent.status };
+          }
+          return serverOrder;
+        });
+
+        setRawOrders(mergedData);
+        syncToStorage(mergedData);
+        mergedData.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
       }
     } catch (e) {
-      console.error("[Admin App] Sync Failed:", e);
+      console.error("[Admin App] Data Sync Failed:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, []);
+  }, [syncToStorage]);
 
   const refreshProducts = useCallback(async () => {
     try {
@@ -99,7 +92,7 @@ const AdminApp: React.FC = () => {
       if (!error && data) {
         setProducts(data.map(p => ({
           id: String(p.id),
-          name: p.name || 'Untitled Product',
+          name: p.name || 'Product',
           description: p.description || '',
           price: Number(p.price_pkr || p.price || 0),
           image: p.image || p.image_url || '',
@@ -120,47 +113,68 @@ const AdminApp: React.FC = () => {
   }, [refreshOrders, refreshProducts]);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    if (user?.role === UserRole.ADMIN) initData();
+    else setLoading(false);
+  }, [user, initData]);
+
+  // Handle App Resume
+  useEffect(() => {
+    const onResume = () => {
       if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) {
         refreshOrders(true);
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', onResume);
+    return () => document.removeEventListener('visibilitychange', onResume);
   }, [user, refreshOrders]);
-
-  useEffect(() => {
-    if (user?.role === UserRole.ADMIN) {
-      initData();
-    } else {
-      setLoading(false);
-    }
-  }, [user, initData]);
 
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
-    const snapshot = [...rawOrders];
+    const orderKey = String(id);
     
-    setRawOrders(prev => prev.map(o => {
-      const match = String(o.id) === String(dbId) || String(o.order_id) === String(id);
+    // 1. Mark as a "Recent Local Update" to prevent sync-overwrites
+    recentUpdates.current[orderKey] = { status: cleanStatus, time: Date.now() };
+
+    // 2. Optimistic UI & Storage update
+    const nextState = rawOrders.map(o => {
+      const match = String(o.id) === String(dbId) || String(o.order_id) === orderKey;
       return match ? { ...o, status: cleanStatus } : o;
-    }));
+    });
+    setRawOrders(nextState);
+    syncToStorage(nextState);
 
     try {
-      const targetPk = isNaN(Number(dbId)) ? dbId : Number(dbId);
-      const { error } = await adminSupabase.from('orders').update({ status: cleanStatus }).eq('id', targetPk);
-      if (error) {
-        const { error: fbError } = await adminSupabase.from('orders').update({ status: cleanStatus }).eq('order_id', id);
+      // 3. Precise Database Update
+      // We use .select() here to verify if the update actually hit a row
+      const { data, error } = await adminSupabase
+        .from('orders')
+        .update({ status: cleanStatus })
+        .eq('id', dbId)
+        .select();
+
+      // If ID failed, try fallback to order_id
+      if (error || !data || data.length === 0) {
+        const { data: fbData, error: fbError } = await adminSupabase
+          .from('orders')
+          .update({ status: cleanStatus })
+          .eq('order_id', orderKey)
+          .select();
+        
         if (fbError) throw fbError;
+        if (!fbData || fbData.length === 0) throw new Error("Manifest not found in remote vault.");
       }
+
+      console.log(`[Persistence] Order ${id} successfully locked as ${cleanStatus}`);
     } catch (err: any) {
-      setRawOrders(snapshot);
-      alert(`Manifest Update Rejected: ${err.message}`);
+      console.error("[Persistence Critical]", err);
+      // Clean up the "recent update" lock so a refresh can fix the UI
+      delete recentUpdates.current[orderKey];
+      alert(`Manifest Update Rejected: ${err.message}\n\nPlease check if Supabase RLS policies allow 'UPDATE' for 'anon' role.`);
+      refreshOrders(true); // Re-sync to true state
     }
   };
 
   const formattedOrders = useMemo((): Order[] => {
-    if (!Array.isArray(rawOrders)) return [];
     return rawOrders.map(o => {
       let cleanStatus: Order['status'] = 'Pending';
       const s = String(o.status || '').toLowerCase();
@@ -192,16 +206,14 @@ const AdminApp: React.FC = () => {
     });
   }, [rawOrders]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-          <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Establishing Link...</p>
-        </div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
+      <div className="flex flex-col items-center space-y-4">
+        <div className="w-5 h-5 border-2 border-white/10 border-t-white rounded-full animate-spin"></div>
+        <p className="text-[8px] font-black uppercase text-white/20 tracking-[0.4em]">Vault Accessing...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <HashRouter>
