@@ -8,7 +8,6 @@ import AdminDashboard from './views/AdminDashboard';
 const SUPABASE_URL = 'https://hwkotlfmxuczloonjziz.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh3a290bGZteHVjemxvb25qeml6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkyMzE5ODUsImV4cCI6MjA4NDgwNzk4NX0.GUFuxE-xMBy4WawTWbiyCOWr3lcqNF7BoqQ55-UMe3Y';
 
-// PERSIST_SESSION: FALSE is important to prevent auth state conflicts with other clients
 const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false }
 });
@@ -51,7 +50,7 @@ const AdminApp: React.FC = () => {
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(2000); 
+        .limit(1000); 
       
       if (!error && data) {
         setRawOrders(data);
@@ -115,41 +114,47 @@ const AdminApp: React.FC = () => {
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
     
-    // 1. Optimistic local update
+    // 1. Surgical Optimistic Update (Avoids full refresh flicker)
     setRawOrders(prev => prev.map(o => {
       const isMatch = String(o.id) === String(dbId) || String(o.order_id) === String(id);
       return isMatch ? { ...o, status: cleanStatus } : o;
     }));
 
     try {
-      // 2. Persistent update - prefer Primary Key for maximum stability
-      // casting target to number if applicable
+      // 2. Persistent update - prefer Primary Key
       const targetId = isNaN(Number(dbId)) ? dbId : Number(dbId);
       
-      const { error } = await adminSupabase
+      // We use .select() to get the actual record back from the server as confirmation
+      const { data, error } = await adminSupabase
         .from('orders')
         .update({ status: cleanStatus })
-        .eq('id', targetId);
+        .eq('id', targetId)
+        .select();
       
-      if (error) {
-        console.warn("[Admin] Primary ID update failed, attempting order_id fallback:", error.message);
-        const { error: fallbackError } = await adminSupabase
+      if (error || !data || data.length === 0) {
+        // Fallback to order_id if PK fails
+        const { data: fbData, error: fbError } = await adminSupabase
           .from('orders')
           .update({ status: cleanStatus })
-          .eq('order_id', id);
+          .eq('order_id', id)
+          .select();
         
-        if (fallbackError) throw fallbackError;
+        if (fbError || !fbData || fbData.length === 0) throw fbError || new Error("No rows updated");
+        
+        // Update local state with the actual data returned by the server
+        setRawOrders(prev => prev.map(o => String(o.order_id) === String(id) ? fbData[0] : o));
+      } else {
+        // Update local state with the actual data returned by the server
+        setRawOrders(prev => prev.map(o => String(o.id) === String(dbId) ? data[0] : o));
       }
 
-      // 3. Immediately re-fetch AFTER database confirmation to ensure truth
-      await refreshOrders();
-      console.log(`[Admin] Order ${id} persistent as ${cleanStatus}`);
+      console.log(`[Persistence] Success: Status locked to ${cleanStatus}`);
       
     } catch (err: any) {
-      console.error("[Admin Update Failure]", err);
-      // Revert to server state on failure
+      console.error("[Persistence Critical Error]", err);
+      // Revert only on actual failure by re-syncing everything
       await refreshOrders();
-      alert(`System Error: The database rejected the change. This is usually due to missing 'UPDATE' permissions in Supabase RLS policies. Reason: ${err.message || 'Unknown'}`);
+      alert(`System Error: Database rejected the update. (Check RLS Policies). Reason: ${err.message || 'Unknown'}`);
     }
   };
 
