@@ -13,11 +13,9 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const AdminApp: React.FC = () => {
   const [rawOrders, setRawOrders] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [totalDbCount, setTotalDbCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const processedIds = useRef<Set<string>>(new Set());
@@ -33,11 +31,9 @@ const AdminApp: React.FC = () => {
       const ctx = audioContextRef.current;
       if (ctx.state === 'suspended') await ctx.resume();
       const now = ctx.currentTime;
-      
       const osc = ctx.createOscillator();
       const g = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(2489, now); 
+      osc.type = 'sine'; osc.frequency.setValueAtTime(2489, now); 
       g.gain.setValueAtTime(0, now);
       g.gain.linearRampToValueAtTime(0.5, now + 0.01);
       g.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
@@ -48,23 +44,17 @@ const AdminApp: React.FC = () => {
 
   const refreshOrders = useCallback(async () => {
     try {
-      const { data, error } = await adminSupabase.from('orders')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500); // Increased limit significantly
-      
+      const { data, error } = await adminSupabase.from('orders').select('*').order('created_at', { ascending: false }).limit(1000);
       if (!error && data) {
         setRawOrders(data);
-        setTotalDbCount(data.length);
         data.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
-        setLastSyncTime(new Date());
       }
     } catch (e) {}
   }, []);
 
   const refreshProducts = useCallback(async () => {
     try {
-      const { data, error } = await adminSupabase.from('products').select('*');
+      const { data, error } = await adminSupabase.from('products').select('*').order('created_at', { ascending: false });
       if (!error && data) {
         setProducts(data.map(p => ({
           id: String(p.id),
@@ -72,6 +62,7 @@ const AdminApp: React.FC = () => {
           description: p.description,
           price: Number(p.price_pkr || p.price),
           image: p.image || p.image_url,
+          images: Array.isArray(p.images) ? p.images : (p.image ? [p.image] : []),
           category: p.category,
           inventory: p.inventory,
           rating: p.rating || 5,
@@ -90,32 +81,20 @@ const AdminApp: React.FC = () => {
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
-
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === 'NEW_ORDER_DETECTED') {
         const newOrder = event.data.order;
         const id = String(newOrder.order_id || newOrder.id);
-        
         if (!processedIds.current.has(id)) {
           processedIds.current.add(id);
-          setRawOrders(prev => [newOrder, ...prev]); // Removed slice
-          setTotalDbCount(c => c + 1);
+          setRawOrders(prev => [newOrder, ...prev]);
           playKaching();
-          setLastSyncTime(new Date());
         }
       }
       if (event.data.type === 'SENTINEL_ALIVE') setIsLive(true);
     };
-
     navigator.serviceWorker.addEventListener('message', handleMessage);
-    const pingInterval = setInterval(() => {
-      if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('REQUEST_SENTINEL_STATUS');
-    }, 5000);
-
-    return () => {
-      navigator.serviceWorker.removeEventListener('message', handleMessage);
-      clearInterval(pingInterval);
-    };
+    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
   }, [playKaching]);
 
   useEffect(() => {
@@ -123,9 +102,23 @@ const AdminApp: React.FC = () => {
     else setLoading(false);
   }, [user, initData]);
 
+  const uploadMedia = async (file: File): Promise<string | null> => {
+    try {
+      const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+      const { data, error } = await adminSupabase.storage.from('products').upload(fileName, file);
+      if (error) throw error;
+      const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
+      return publicUrl;
+    } catch (err) {
+      console.error("Upload Error:", err);
+      return null;
+    }
+  };
+
   const formattedOrders = useMemo((): Order[] => {
     return rawOrders.map(o => ({
       id: o.order_id || String(o.id),
+      dbId: o.id,
       items: typeof o.items === 'string' ? JSON.parse(o.items) : (Array.isArray(o.items) ? o.items : []),
       total: Number(o.total_pkr || o.total || 0),
       status: (o.status ? o.status.charAt(0).toUpperCase() + o.status.slice(1) : 'Pending') as Order['status'],
@@ -153,11 +146,9 @@ const AdminApp: React.FC = () => {
           <AdminDashboard 
             orders={formattedOrders}
             products={products}
-            totalDbCount={totalDbCount}
             user={user}
             isLive={isLive}
             audioReady={audioReady}
-            lastSyncTime={lastSyncTime}
             login={(role: UserRole) => {
               const u: User = { id: 'master', email: 'admin@itx.com', role, name: 'Master' };
               setUser(u);
@@ -172,23 +163,23 @@ const AdminApp: React.FC = () => {
               setAudioReady(true);
             }}
             refreshData={initData}
-            updateStatus={async (id: string, status: string) => {
-              const { error } = await adminSupabase.from('orders').update({ status: status.toLowerCase() }).match({ order_id: id });
+            updateStatus={async (id: string, status: string, dbId: any) => {
+              const { error } = await adminSupabase.from('orders').update({ status: status.toLowerCase() }).or(`id.eq.${dbId},order_id.eq.${id}`);
               if (!error) refreshOrders();
             }}
+            uploadMedia={uploadMedia}
             saveProduct={async (p: any) => {
               const payload = {
                 name: p.name,
                 description: p.description,
                 price_pkr: Number(p.price),
                 image: p.image,
+                images: p.images,
                 category: p.category,
                 inventory: Number(p.inventory),
                 variants: p.variants
               };
-              const { error } = p.id ? 
-                await adminSupabase.from('products').update(payload).eq('id', p.id) :
-                await adminSupabase.from('products').insert([payload]);
+              const { error } = p.id ? await adminSupabase.from('products').update(payload).eq('id', p.id) : await adminSupabase.from('products').insert([payload]);
               if (!error) refreshProducts();
               return !error;
             }}
@@ -196,7 +187,6 @@ const AdminApp: React.FC = () => {
               const { error } = await adminSupabase.from('products').delete().eq('id', id);
               if (!error) refreshProducts();
             }}
-            testAlert={() => playKaching()}
           />
         } />
       </Routes>

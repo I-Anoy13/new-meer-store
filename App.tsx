@@ -21,26 +21,9 @@ const MainLayout: React.FC<{
   cartCount: number;
   user: User | null;
   logout: () => void;
-  isSyncing: boolean;
-  isLive: boolean;
-}> = ({ children, cartCount, user, logout, isSyncing, isLive }) => (
-  <div className="flex flex-col min-h-screen">
+}> = ({ children, cartCount, user, logout }) => (
+  <div className="flex flex-col min-h-screen bg-white">
     <Header cartCount={cartCount} user={user} logout={logout} />
-    
-    {user?.role === UserRole.ADMIN && (
-      <div className="fixed top-20 left-6 z-[1000] flex items-center space-x-2 bg-white/90 backdrop-blur shadow-sm border border-gray-100 px-3 py-1.5 rounded-full scale-90 md:scale-100 origin-left transition-all duration-500">
-        <div className={`w-2 h-2 rounded-full transition-colors duration-500 ${isLive ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">
-          {isLive ? 'Relay Active' : 'Relay Paused'}
-        </span>
-      </div>
-    )}
-
-    {isSyncing && (
-      <div className="fixed top-20 right-6 z-[1000] animate-pulse">
-        <div className="bg-blue-600 text-white text-[8px] font-black uppercase px-3 py-1 rounded-full shadow-lg italic">Signal Sent!</div>
-      </div>
-    )}
     <main className="flex-grow">{children}</main>
     <AIConcierge />
     <Footer />
@@ -54,8 +37,6 @@ const AppContent: React.FC = () => {
   });
   
   const [loading, setLoading] = useState(products.length === 0);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isLive, setIsLive] = useState(false);
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('cart');
     return saved ? JSON.parse(saved) : [];
@@ -69,39 +50,20 @@ const AppContent: React.FC = () => {
   const presenceChannelRef = useRef<any>(null);
 
   const setupActivePresence = useCallback(async () => {
-    if (presenceChannelRef.current) {
-      supabase.removeChannel(presenceChannelRef.current);
-    }
-
-    const channel = supabase.channel('itx_active_sessions_v3', {
-      config: { presence: { key: 'visitor' } }
-    });
-
+    if (presenceChannelRef.current) supabase.removeChannel(presenceChannelRef.current);
+    const channel = supabase.channel('itx_v4_silent', { config: { presence: { key: 'visitor' } } });
     channel.subscribe(async (status) => {
-      setIsLive(status === 'SUBSCRIBED');
       if (status === 'SUBSCRIBED') {
         const userCity = await fetch('https://ipapi.co/json/').then(r => r.json()).then(d => d.city).catch(() => 'Unknown');
-        channel.track({
-          online_at: new Date().toISOString(),
-          city: userCity,
-          role: user?.role || 'CUSTOMER',
-          last_view: window.location.hash
-        });
-        
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage('PING_SENTINEL');
-        }
+        channel.track({ online_at: new Date().toISOString(), city: userCity, role: user?.role || 'CUSTOMER' });
       }
     });
-
     presenceChannelRef.current = channel;
   }, [user]);
 
   useEffect(() => {
     setupActivePresence();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') setupActivePresence();
-    };
+    const handleVisibilityChange = () => { if (document.visibilityState === 'visible') setupActivePresence(); };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -115,10 +77,11 @@ const AppContent: React.FC = () => {
       if (!error && data) {
         setProducts(data.map(row => ({
           id: String(row.id),
-          name: row.name || 'Untitled Item',
+          name: row.name,
           description: row.description || '',
           price: Number(row.price_pkr || row.price || 0),
           image: row.image || row.image_url || 'https://via.placeholder.com/800x1000',
+          images: Array.isArray(row.images) ? row.images : (row.image ? [row.image] : []),
           category: row.category || 'Luxury',
           inventory: Number(row.inventory || 0),
           rating: Number(row.rating || 5),
@@ -146,16 +109,10 @@ const AppContent: React.FC = () => {
   };
 
   const placeOrder = async (order: Order): Promise<boolean> => {
-    setIsSyncing(true);
-    console.log("[Order Engine] Initializing placement for:", order.id);
-    
     try {
       const firstItem = order.items[0];
-      
-      // We use a safe payload structure. If some columns don't exist, we try to be as compatible as possible.
       const payload = {
-        // Use a descriptive order_id, but avoid sending it if the DB uses 'id' as primary int
-        order_id: order.id, 
+        order_id: order.id,
         customer_name: order.customer.name,
         customer_phone: order.customer.phone,
         customer_city: order.customer.city || 'N/A',
@@ -166,33 +123,13 @@ const AppContent: React.FC = () => {
         product_image: firstItem?.product.image || '',
         total_pkr: Math.round(Number(order.total) || 0),
         status: 'pending',
-        items: JSON.stringify(order.items), // Stringify items to ensure compatibility with Text or JSONB columns
-        source: 'ITX_CLEAN_REDUX_V2'
+        items: JSON.stringify(order.items),
+        source: 'ITX_SILENT_V4'
       };
 
-      // 1. Log intended payload for debugging
-      console.log("[Order Engine] Payload prepared:", payload);
+      const { error } = await supabase.from('orders').insert([payload]);
+      if (error) throw error;
 
-      // 2. Insert into Supabase
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([payload])
-        .select();
-
-      if (error) {
-        // CRITICAL: Log the exact Supabase error. 
-        // Likely causes: 
-        // - Table 'orders' does not exist.
-        // - RLS (Row Level Security) is ON but no 'INSERT' policy for 'anon'.
-        // - Missing required columns in the DB that aren't in our payload.
-        console.error("[Order Engine] Supabase Rejection:", error);
-        console.error("DEBUG TIP: Ensure your 'orders' table allows Public/Anon INSERT and check RLS policies.");
-        throw error;
-      }
-
-      console.log("[Order Engine] Placement Successful:", data);
-
-      // 3. Broadcast activity for live updates
       if (presenceChannelRef.current) {
         presenceChannelRef.current.send({
           type: 'broadcast',
@@ -205,10 +142,8 @@ const AppContent: React.FC = () => {
       localStorage.removeItem('cart');
       return true;
     } catch (err) {
-      console.error("[Order Engine] Fatal Exception:", err);
+      console.error("[Order Rejection]", err);
       return false;
-    } finally {
-      setIsSyncing(false);
     }
   };
 
@@ -220,7 +155,7 @@ const AppContent: React.FC = () => {
 
   return (
     <Suspense fallback={null}>
-      <MainLayout cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }} isSyncing={isSyncing} isLive={isLive}>
+      <MainLayout cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }}>
         <Routes>
           <Route path="/" element={<Home products={products} />} />
           <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
