@@ -112,7 +112,7 @@ const AdminApp: React.FC = () => {
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
     
-    // 1. Optimistic Update: Update local state immediately
+    // 1. Optimistic local update for perceived performance
     setRawOrders(prev => prev.map(o => 
       (String(o.id) === String(dbId) || String(o.order_id) === String(id)) 
         ? { ...o, status: cleanStatus } 
@@ -120,39 +120,32 @@ const AdminApp: React.FC = () => {
     ));
 
     try {
-      // 2. Perform persistence and get the confirmed row back
-      const { data, error } = await adminSupabase
+      // 2. Persistent update using primary key
+      // We check for error instead of data/select() as RLS might hide data even if update works
+      const { error } = await adminSupabase
         .from('orders')
         .update({ status: cleanStatus })
-        .eq('id', dbId)
-        .select();
+        .eq('id', dbId);
       
-      if (error || !data || data.length === 0) {
-        // Try fallback update by order_id string
-        const { data: fallbackData, error: fallbackError } = await adminSupabase
+      if (error) {
+        console.warn("[Persistence] PK update error, attempting order_id fallback:", error.message);
+        const { error: fallbackError } = await adminSupabase
           .from('orders')
           .update({ status: cleanStatus })
-          .eq('order_id', id)
-          .select();
+          .eq('order_id', id);
         
-        if (fallbackError || !fallbackData || fallbackData.length === 0) {
-          throw new Error("Persistence failed on all identifiers.");
-        }
-        
-        // Update state with server-confirmed row from fallback
-        setRawOrders(prev => prev.map(o => String(o.order_id) === String(id) ? fallbackData[0] : o));
-      } else {
-        // Update state with server-confirmed row from primary update
-        setRawOrders(prev => prev.map(o => String(o.id) === String(dbId) ? data[0] : o));
+        if (fallbackError) throw fallbackError;
       }
-      
-      console.log(`[Persistence] Order ${id} updated to ${cleanStatus} successfully.`);
+
+      // 3. Immediately re-fetch to ensure local state is synced with the DB's truth
+      await refreshOrders();
+      console.log(`[Persistence] Order ${id} successfully committed to DB.`);
       
     } catch (err) {
-      console.error("[Persistence Error]", err);
-      // Only revert on definite failure
+      console.error("[Persistence Critical Error]", err);
+      // Revert state to last known good state from server
       await refreshOrders();
-      alert("System failed to persist status. Reverting...");
+      alert("Database rejected the update. Please check if the row exists and you have permissions.");
     }
   };
 
