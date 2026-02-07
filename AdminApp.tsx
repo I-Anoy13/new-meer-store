@@ -13,16 +13,12 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 const AdminApp: React.FC = () => {
-  // Use a ref to track very recent local updates to prevent server "overwriting"
   const recentUpdates = useRef<Record<string, { status: string, time: number }>>({});
-
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('itx_admin_orders_cache');
       return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
+    } catch (e) { return []; }
   });
   
   const [products, setProducts] = useState<Product[]>([]);
@@ -37,22 +33,16 @@ const AdminApp: React.FC = () => {
     try {
       const saved = localStorage.getItem('itx_user_session');
       return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   });
 
-  // Global loading timeout safety
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 2500);
+    const timer = setTimeout(() => setLoading(false), 2000);
     return () => clearTimeout(timer);
   }, []);
 
-  // Sync state to localStorage with every change
   const syncToStorage = useCallback((data: any[]) => {
-    try {
-      localStorage.setItem('itx_admin_orders_cache', JSON.stringify(data));
-    } catch (e) {}
+    try { localStorage.setItem('itx_admin_orders_cache', JSON.stringify(data)); } catch (e) {}
   }, []);
 
   const refreshOrders = useCallback(async (isSilent = false) => {
@@ -61,26 +51,23 @@ const AdminApp: React.FC = () => {
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100); 
+        .limit(200); 
       
       if (!error && data) {
-        // Merge server data with recent local "un-synced" intents
         const mergedData = data.map(serverOrder => {
           const id = String(serverOrder.order_id || serverOrder.id);
           const localIntent = recentUpdates.current[id];
-          // If we updated this locally in the last 15 seconds, prioritize local status
-          if (localIntent && (Date.now() - localIntent.time < 15000)) {
+          if (localIntent && (Date.now() - localIntent.time < 30000)) {
             return { ...serverOrder, status: localIntent.status };
           }
           return serverOrder;
         });
-
         setRawOrders(mergedData);
         syncToStorage(mergedData);
         mergedData.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
       }
     } catch (e) {
-      console.error("[Admin App] Data Sync Failed:", e);
+      console.error("[Admin App] Sync Failed:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -117,12 +104,9 @@ const AdminApp: React.FC = () => {
     else setLoading(false);
   }, [user, initData]);
 
-  // Handle App Resume
   useEffect(() => {
     const onResume = () => {
-      if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) {
-        refreshOrders(true);
-      }
+      if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) refreshOrders(true);
     };
     document.addEventListener('visibilitychange', onResume);
     return () => document.removeEventListener('visibilitychange', onResume);
@@ -132,10 +116,10 @@ const AdminApp: React.FC = () => {
     const cleanStatus = status.toLowerCase();
     const orderKey = String(id);
     
-    // 1. Mark as a "Recent Local Update" to prevent sync-overwrites
+    // 1. Mark as local intent
     recentUpdates.current[orderKey] = { status: cleanStatus, time: Date.now() };
 
-    // 2. Optimistic UI & Storage update
+    // 2. Optimistic UI update
     const nextState = rawOrders.map(o => {
       const match = String(o.id) === String(dbId) || String(o.order_id) === orderKey;
       return match ? { ...o, status: cleanStatus } : o;
@@ -144,33 +128,49 @@ const AdminApp: React.FC = () => {
     syncToStorage(nextState);
 
     try {
-      // 3. Precise Database Update
-      // We use .select() here to verify if the update actually hit a row
-      const { data, error } = await adminSupabase
-        .from('orders')
-        .update({ status: cleanStatus })
-        .eq('id', dbId)
-        .select();
+      // Correctly cast dbId: Supabase 'id' is usually an integer
+      const numericDbId = !isNaN(Number(dbId)) ? Number(dbId) : null;
+      
+      let updateResult;
+      
+      // Attempt 1: Using the Numeric Primary Key (id)
+      if (numericDbId !== null) {
+        updateResult = await adminSupabase
+          .from('orders')
+          .update({ status: cleanStatus })
+          .eq('id', numericDbId)
+          .select();
+      }
 
-      // If ID failed, try fallback to order_id
-      if (error || !data || data.length === 0) {
-        const { data: fbData, error: fbError } = await adminSupabase
+      // Attempt 2: Fallback to the String order_id if Attempt 1 failed or wasn't possible
+      if (!updateResult || !updateResult.data || updateResult.data.length === 0) {
+        updateResult = await adminSupabase
           .from('orders')
           .update({ status: cleanStatus })
           .eq('order_id', orderKey)
           .select();
-        
-        if (fbError) throw fbError;
-        if (!fbData || fbData.length === 0) throw new Error("Manifest not found in remote vault.");
       }
 
-      console.log(`[Persistence] Order ${id} successfully locked as ${cleanStatus}`);
+      if (updateResult.error) throw updateResult.error;
+      
+      if (!updateResult.data || updateResult.data.length === 0) {
+        throw new Error("PERMISSION_DENIED_OR_NOT_FOUND");
+      }
+
+      console.log(`[Persistence] Manifest ${id} locked as ${cleanStatus}`);
     } catch (err: any) {
       console.error("[Persistence Critical]", err);
-      // Clean up the "recent update" lock so a refresh can fix the UI
       delete recentUpdates.current[orderKey];
-      alert(`Manifest Update Rejected: ${err.message}\n\nPlease check if Supabase RLS policies allow 'UPDATE' for 'anon' role.`);
-      refreshOrders(true); // Re-sync to true state
+      
+      let msg = "The database rejected this change.";
+      if (err.message === "PERMISSION_DENIED_OR_NOT_FOUND") {
+        msg = "Manifest Update Rejected: Permission Denied.\n\nFIX: Go to Supabase SQL Editor and run:\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;";
+      } else {
+        msg = `System Error: ${err.message}`;
+      }
+      
+      alert(msg);
+      refreshOrders(true);
     }
   };
 
