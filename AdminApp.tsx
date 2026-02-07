@@ -113,48 +113,41 @@ const AdminApp: React.FC = () => {
 
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
+    const previousState = [...rawOrders];
     
-    // 1. Surgical Optimistic Update (Avoids full refresh flicker)
+    // 1. Optimistic UI update
     setRawOrders(prev => prev.map(o => {
       const isMatch = String(o.id) === String(dbId) || String(o.order_id) === String(id);
       return isMatch ? { ...o, status: cleanStatus } : o;
     }));
 
     try {
-      // 2. Persistent update - prefer Primary Key
-      const targetId = isNaN(Number(dbId)) ? dbId : Number(dbId);
-      
-      // We use .select() to get the actual record back from the server as confirmation
-      const { data, error } = await adminSupabase
+      // 2. Persistent update - try order_id (string) first as it's our standard identifier
+      const { error } = await adminSupabase
         .from('orders')
         .update({ status: cleanStatus })
-        .eq('id', targetId)
-        .select();
+        .eq('order_id', id);
       
-      if (error || !data || data.length === 0) {
-        // Fallback to order_id if PK fails
-        const { data: fbData, error: fbError } = await adminSupabase
+      if (error) {
+        // 3. Fallback to Primary Key (integer) if order_id update fails or is ignored
+        const targetId = isNaN(Number(dbId)) ? dbId : Number(dbId);
+        const { error: fbError } = await adminSupabase
           .from('orders')
           .update({ status: cleanStatus })
-          .eq('order_id', id)
-          .select();
+          .eq('id', targetId);
         
-        if (fbError || !fbData || fbData.length === 0) throw fbError || new Error("No rows updated");
-        
-        // Update local state with the actual data returned by the server
-        setRawOrders(prev => prev.map(o => String(o.order_id) === String(id) ? fbData[0] : o));
-      } else {
-        // Update local state with the actual data returned by the server
-        setRawOrders(prev => prev.map(o => String(o.id) === String(dbId) ? data[0] : o));
+        if (fbError) throw fbError;
       }
 
-      console.log(`[Persistence] Success: Status locked to ${cleanStatus}`);
+      console.log(`[Admin] Persistence success for order ${id}`);
+      // Refresh in background to sync any other changes
+      refreshOrders();
       
     } catch (err: any) {
-      console.error("[Persistence Critical Error]", err);
-      // Revert only on actual failure by re-syncing everything
-      await refreshOrders();
-      alert(`System Error: Database rejected the update. (Check RLS Policies). Reason: ${err.message || 'Unknown'}`);
+      console.error("[Admin Critical Error]", err);
+      // Revert UI to previous state on true database rejection
+      setRawOrders(previousState);
+      alert(`Database rejection: ${err.message || 'Unknown error'}. Please check if your Supabase RLS policies allow 'UPDATE' for the anon key on the 'orders' table.`);
     }
   };
 
