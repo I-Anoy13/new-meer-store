@@ -87,7 +87,8 @@ const AppContent: React.FC = () => {
   const placeOrder = async (order: Order): Promise<boolean> => {
     try {
       const firstItem = order.items[0];
-      // Clean payload ensures compatibility with most Supabase order table schemas
+      const roundedTotal = Math.round(Number(order.total) || 0);
+      
       const payload = {
         order_id: order.id,
         customer_name: order.customer.name,
@@ -98,7 +99,8 @@ const AppContent: React.FC = () => {
         product_name: firstItem?.product.name || 'N/A',
         product_price: Number(firstItem?.product.price || 0),
         product_image: firstItem?.product.image || '',
-        total_pkr: Math.round(Number(order.total) || 0),
+        total_pkr: roundedTotal,
+        subtotal_pkr: roundedTotal, // CRITICAL FIX: Added subtotal_pkr to satisfy not-null constraint
         status: 'pending',
         items: JSON.stringify(order.items),
         created_at: new Date().toISOString()
@@ -106,7 +108,7 @@ const AppContent: React.FC = () => {
 
       const { error } = await supabase.from('orders').insert([payload]);
       if (error) {
-        console.error("DB Error:", error.message);
+        console.error("Database Insert Error:", error.message);
         throw error;
       }
 

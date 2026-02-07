@@ -33,6 +33,7 @@ const AdminDashboard = (props: any) => {
   }, [props.orders]);
 
   const copyToClipboard = (text: string) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
     alert('Copied: ' + text);
   };
@@ -58,7 +59,7 @@ const AdminDashboard = (props: any) => {
     setIsUpdatingStatus(true);
     try {
       await props.updateStatus(orderId, newStatus, dbId);
-      if (selectedOrder && selectedOrder.id === orderId) {
+      if (selectedOrder && (selectedOrder.id === orderId || selectedOrder.dbId === dbId)) {
         setSelectedOrder({ ...selectedOrder, status: newStatus as any });
       }
     } catch (e) {
@@ -212,23 +213,31 @@ const AdminDashboard = (props: any) => {
                 <div>
                   <label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Customer Details</label>
                   <div className="space-y-3">
-                    <p className="font-black text-xl flex items-center gap-2">{selectedOrder.customer.name} <button onClick={() => copyToClipboard(selectedOrder.customer.name)} className="text-gray-200 hover:text-black transition"><i className="fas fa-copy text-xs"></i></button></p>
-                    <p className="font-bold text-blue-600 flex items-center gap-2">{selectedOrder.customer.phone} <button onClick={() => copyToClipboard(selectedOrder.customer.phone)} className="text-gray-200 hover:text-black transition"><i className="fas fa-copy text-xs"></i></button></p>
-                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-center justify-between">
+                    <p className="font-black text-xl flex items-center gap-2">
+                      {selectedOrder.customer.name} 
+                      <button onClick={() => copyToClipboard(selectedOrder.customer.name)} className="bg-gray-50 text-gray-400 p-2 rounded-lg hover:text-black transition shadow-sm"><i className="fas fa-copy text-xs"></i></button>
+                    </p>
+                    <p className="font-bold text-blue-600 flex items-center gap-2">
+                      {selectedOrder.customer.phone} 
+                      <button onClick={() => copyToClipboard(selectedOrder.customer.phone)} className="bg-gray-50 text-gray-400 p-2 rounded-lg hover:text-black transition shadow-sm"><i className="fas fa-copy text-xs"></i></button>
+                    </p>
+                    
+                    {/* Standalone City Block */}
+                    <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50 flex items-center justify-between">
                       <div>
                         <span className="text-[8px] font-black uppercase text-gray-400 block mb-1">Target City</span>
-                        <p className="text-xs font-black uppercase text-black">{selectedOrder.customer.city || 'N/A'}</p>
+                        <p className="text-xs font-black uppercase text-black italic tracking-tight">{selectedOrder.customer.city || 'N/A'}</p>
                       </div>
-                      <button onClick={() => copyToClipboard(selectedOrder.customer.city || '')} className="bg-white text-gray-300 p-2 rounded-lg hover:text-blue-600 shadow-sm transition"><i className="fas fa-copy text-xs"></i></button>
+                      <button onClick={() => copyToClipboard(selectedOrder.customer.city || '')} className="bg-white text-blue-600 p-2 rounded-lg hover:bg-blue-600 hover:text-white shadow-sm transition"><i className="fas fa-copy text-xs"></i></button>
                     </div>
                   </div>
                 </div>
                 <div>
                   <label className="text-[9px] font-black uppercase text-gray-400 block mb-2">Shipping Address</label>
-                  <p className="text-sm font-bold text-gray-600 leading-relaxed bg-gray-50 p-4 rounded-2xl italic flex items-start justify-between">
+                  <div className="text-sm font-bold text-gray-600 leading-relaxed bg-gray-50 p-4 rounded-2xl italic flex items-start justify-between">
                     <span>{selectedOrder.customer.address}</span>
-                    <button onClick={() => copyToClipboard(selectedOrder.customer.address)} className="ml-2 text-gray-300 hover:text-black transition shrink-0"><i className="fas fa-copy text-xs"></i></button>
-                  </p>
+                    <button onClick={() => copyToClipboard(selectedOrder.customer.address)} className="ml-2 bg-white text-gray-400 p-2 rounded-lg hover:text-black transition shadow-sm shrink-0"><i className="fas fa-copy text-xs"></i></button>
+                  </div>
                 </div>
               </div>
               <div className="bg-gray-50 p-6 rounded-3xl">
@@ -248,15 +257,16 @@ const AdminDashboard = (props: any) => {
               </div>
             </div>
             
+            {/* Status Action Buttons */}
             <div className="mt-10 pt-8 border-t border-gray-100">
-               <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4 block italic">Update Manifest Status</label>
+               <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6 block italic">Update Manifest Status</label>
                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                  {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
                    <button 
                      key={s}
                      disabled={isUpdatingStatus}
                      onClick={() => handleStatusChange(selectedOrder.id, s, selectedOrder.dbId)}
-                     className={`py-3 rounded-xl font-black uppercase text-[8px] tracking-widest transition-all ${selectedOrder.status === s ? 'bg-black text-white shadow-lg scale-105' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 hover:text-black'}`}
+                     className={`py-4 rounded-2xl font-black uppercase text-[8px] tracking-widest transition-all ${selectedOrder.status === s ? 'bg-black text-white shadow-xl scale-105 z-10' : 'bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-black'}`}
                    >
                      {isUpdatingStatus && selectedOrder.status === s ? <i className="fas fa-circle-notch fa-spin"></i> : s}
                    </button>
@@ -267,9 +277,9 @@ const AdminDashboard = (props: any) => {
             <div className="mt-8">
               <button 
                 onClick={() => { const phone = selectedOrder.customer.phone.replace(/\D/g,''); window.open(`https://wa.me/${phone}?text=Assalam-o-Alaikum ${selectedOrder.customer.name}, ITX MEER SHOP here. Your order #${selectedOrder.id} is confirmed.`, '_blank'); }}
-                className="w-full bg-[#25D366] text-white p-4 rounded-2xl font-black uppercase text-xs shadow-xl hover:scale-[1.02] transition-transform flex items-center justify-center gap-3"
+                className="w-full bg-[#25D366] text-white p-5 rounded-[1.5rem] font-black uppercase text-[10px] shadow-xl hover:scale-[1.02] transition-transform flex items-center justify-center gap-4 italic"
               >
-                <i className="fab fa-whatsapp text-lg"></i> Send Confirmation Message
+                <i className="fab fa-whatsapp text-xl"></i> Send Confirmation to WhatsApp
               </button>
             </div>
           </div>

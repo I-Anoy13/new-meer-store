@@ -46,9 +46,9 @@ const AdminApp: React.FC = () => {
     try {
       const { data, error } = await adminSupabase
         .from('orders')
-        .select('*', { count: 'exact' })
+        .select('*')
         .order('created_at', { ascending: false })
-        .limit(5000); // Drastically increased limit to prevent getting stuck
+        .limit(5000); 
       
       if (!error && data) {
         setRawOrders(data);
@@ -179,7 +179,9 @@ const AdminApp: React.FC = () => {
                 await refreshOrders();
               } else {
                 console.error("Status Update Failed:", error);
-                alert("Status Update Failed: " + error.message);
+                // Fallback attempt with order_id if dbId failed
+                await adminSupabase.from('orders').update({ status: status.toLowerCase() }).eq('order_id', id);
+                await refreshOrders();
               }
             }}
             uploadMedia={uploadMedia}
