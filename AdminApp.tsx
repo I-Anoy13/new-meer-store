@@ -13,13 +13,12 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 });
 
 const AdminApp: React.FC = () => {
-  // Robust localStorage initialization with try-catch
+  // Defensive initialization for rawOrders
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('itx_admin_orders_cache');
       return saved ? JSON.parse(saved) : [];
     } catch (e) {
-      console.error("[Admin State] Failed to load cached orders:", e);
       return [];
     }
   });
@@ -32,6 +31,7 @@ const AdminApp: React.FC = () => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const processedIds = useRef<Set<string>>(new Set());
 
+  // Defensive initialization for user
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('itx_user_session');
@@ -41,10 +41,17 @@ const AdminApp: React.FC = () => {
     }
   });
 
-  // Sync cache to localStorage whenever orders change
+  // Emergency Force-Unblock Loading
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 2000); // If requests take longer than 2s, show what we have (even if empty)
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     try {
-      if (rawOrders && rawOrders.length > 0) {
+      if (rawOrders && Array.isArray(rawOrders) && rawOrders.length > 0) {
         localStorage.setItem('itx_admin_orders_cache', JSON.stringify(rawOrders));
       }
     } catch (e) {}
@@ -80,7 +87,7 @@ const AdminApp: React.FC = () => {
         data.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
       }
     } catch (e) {
-      console.error("[Admin App] Order Fetch Failed:", e);
+      console.error("[Admin App] Sync Failed:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -92,7 +99,7 @@ const AdminApp: React.FC = () => {
       if (!error && data) {
         setProducts(data.map(p => ({
           id: String(p.id),
-          name: p.name,
+          name: p.name || 'Untitled Product',
           description: p.description || '',
           price: Number(p.price_pkr || p.price || 0),
           image: p.image || p.image_url || '',
@@ -104,19 +111,11 @@ const AdminApp: React.FC = () => {
           variants: Array.isArray(p.variants) ? p.variants : []
         })));
       }
-    } catch (e) {
-      console.error("[Admin App] Product Fetch Failed:", e);
-    }
+    } catch (e) {}
   }, []);
 
   const initData = useCallback(async () => {
-    setLoading(true);
-    // Add a safety timeout to ensure the blank screen clears
-    const safetyTimeout = setTimeout(() => setLoading(false), 5000);
-    
     await Promise.allSettled([refreshOrders(), refreshProducts()]);
-    
-    clearTimeout(safetyTimeout);
     setLoading(false);
   }, [refreshOrders, refreshProducts]);
 
@@ -131,24 +130,6 @@ const AdminApp: React.FC = () => {
   }, [user, refreshOrders]);
 
   useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data.type === 'NEW_ORDER_DETECTED') {
-        const newOrder = event.data.order;
-        const id = String(newOrder.order_id || newOrder.id);
-        if (!processedIds.current.has(id)) {
-          processedIds.current.add(id);
-          setRawOrders(prev => [newOrder, ...prev]);
-          playKaching();
-        }
-      }
-      if (event.data.type === 'SENTINEL_ALIVE') setIsLive(true);
-    };
-    navigator.serviceWorker.addEventListener('message', handleMessage);
-    return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
-  }, [playKaching]);
-
-  useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
       initData();
     } else {
@@ -158,55 +139,40 @@ const AdminApp: React.FC = () => {
 
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
-    const previousState = JSON.parse(JSON.stringify(rawOrders));
+    const snapshot = [...rawOrders];
     
     setRawOrders(prev => prev.map(o => {
-      const isMatch = String(o.id) === String(dbId) || String(o.order_id) === String(id);
-      return isMatch ? { ...o, status: cleanStatus } : o;
+      const match = String(o.id) === String(dbId) || String(o.order_id) === String(id);
+      return match ? { ...o, status: cleanStatus } : o;
     }));
 
     try {
       const targetPk = isNaN(Number(dbId)) ? dbId : Number(dbId);
-      const { error } = await adminSupabase
-        .from('orders')
-        .update({ status: cleanStatus })
-        .eq('id', targetPk);
-      
+      const { error } = await adminSupabase.from('orders').update({ status: cleanStatus }).eq('id', targetPk);
       if (error) {
-        const { error: fbError } = await adminSupabase
-          .from('orders')
-          .update({ status: cleanStatus })
-          .eq('order_id', id);
-        
+        const { error: fbError } = await adminSupabase.from('orders').update({ status: cleanStatus }).eq('order_id', id);
         if (fbError) throw fbError;
       }
     } catch (err: any) {
-      console.error("[Admin App] Status Update Failed:", err);
-      setRawOrders(previousState);
-      alert(`Update Failed: ${err.message}`);
+      setRawOrders(snapshot);
+      alert(`Manifest Update Rejected: ${err.message}`);
     }
   };
 
   const formattedOrders = useMemo((): Order[] => {
-    if (!rawOrders) return [];
+    if (!Array.isArray(rawOrders)) return [];
     return rawOrders.map(o => {
       let cleanStatus: Order['status'] = 'Pending';
-      if (o.status) {
-        const s = o.status.toLowerCase();
-        if (s === 'confirmed') cleanStatus = 'Confirmed';
-        else if (s === 'shipped') cleanStatus = 'Shipped';
-        else if (s === 'delivered') cleanStatus = 'Delivered';
-        else if (s === 'cancelled') cleanStatus = 'Cancelled';
-        else cleanStatus = 'Pending';
-      }
+      const s = String(o.status || '').toLowerCase();
+      if (s === 'confirmed') cleanStatus = 'Confirmed';
+      else if (s === 'shipped') cleanStatus = 'Shipped';
+      else if (s === 'delivered') cleanStatus = 'Delivered';
+      else if (s === 'cancelled') cleanStatus = 'Cancelled';
 
-      // Safe JSON parsing for items
       let parsedItems = [];
       try {
         parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : (Array.isArray(o.items) ? o.items : []);
-      } catch (e) {
-        console.warn(`[Admin App] Corrupted items in order ${o.order_id || o.id}`);
-      }
+      } catch (e) {}
 
       return {
         id: o.order_id || String(o.id),
@@ -226,25 +192,12 @@ const AdminApp: React.FC = () => {
     });
   }, [rawOrders]);
 
-  const uploadMedia = async (file: File): Promise<string | null> => {
-    try {
-      const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-      const { data, error } = await adminSupabase.storage.from('products').upload(fileName, file);
-      if (error) throw error;
-      const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
-      return publicUrl;
-    } catch (err) {
-      console.error("[Admin App] Upload Error:", err);
-      return null;
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
         <div className="flex flex-col items-center space-y-4">
-          <div className="w-8 h-8 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-          <p className="text-[10px] font-black uppercase text-white/40 tracking-widest italic">Syncing Manifest...</p>
+          <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+          <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Establishing Link...</p>
         </div>
       </div>
     );
@@ -264,7 +217,7 @@ const AdminApp: React.FC = () => {
               const u: User = { id: 'master', email: 'admin@itx.com', role, name: 'Master' };
               setUser(u);
               localStorage.setItem('itx_user_session', JSON.stringify(u));
-              if (Notification.permission !== 'granted') Notification.requestPermission();
+              if (Notification.permission === 'default') Notification.requestPermission();
               setAudioReady(true);
             }}
             logout={() => { 
@@ -274,23 +227,22 @@ const AdminApp: React.FC = () => {
             }}
             systemPassword={localStorage.getItem('systemPassword') || 'admin123'}
             initAudio={() => {
-              if (Notification.permission !== 'granted') Notification.requestPermission();
+              if (Notification.permission === 'default') Notification.requestPermission();
               setAudioReady(true);
             }}
             refreshData={initData}
             updateStatus={updateOrderStatus}
-            uploadMedia={uploadMedia}
+            uploadMedia={async (file: File) => {
+              try {
+                const name = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+                const { data, error } = await adminSupabase.storage.from('products').upload(name, file);
+                if (error) return null;
+                const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
+                return publicUrl;
+              } catch (e) { return null; }
+            }}
             saveProduct={async (p: any) => {
-              const payload = {
-                name: p.name,
-                description: p.description,
-                price_pkr: Number(p.price),
-                image: p.image,
-                images: p.images,
-                category: p.category,
-                inventory: Number(p.inventory),
-                variants: p.variants
-              };
+              const payload = { name: p.name, description: p.description, price_pkr: Number(p.price), image: p.image, images: p.images, category: p.category, inventory: Number(p.inventory), variants: p.variants };
               const { error } = p.id ? await adminSupabase.from('products').update(payload).eq('id', p.id) : await adminSupabase.from('products').insert([payload]);
               if (!error) refreshProducts();
               return !error;
