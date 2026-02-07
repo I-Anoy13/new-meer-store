@@ -110,33 +110,35 @@ const AdminApp: React.FC = () => {
   }, [user, initData]);
 
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
-    const cleanStatus = status.toLowerCase();
+    const cleanStatus = status.toLowerCase(); // 'confirmed'
     
-    // 1. Optimistic Update: Update local state immediately
+    // 1. Optimistic Update: Update local state immediately for UI responsiveness
     setRawOrders(prev => prev.map(o => 
-      (o.id === dbId || o.order_id === id) ? { ...o, status: cleanStatus } : o
+      (String(o.id) === String(dbId) || String(o.order_id) === String(id)) ? { ...o, status: cleanStatus } : o
     ));
 
     try {
-      // 2. Persist to Server
-      const { error } = await adminSupabase
+      // 2. Persist to Server - We try updating by order_id first as it is the app's unique handle
+      const { error: error1 } = await adminSupabase
         .from('orders')
         .update({ status: cleanStatus })
-        .eq('id', dbId);
+        .eq('order_id', id);
       
-      if (error) {
-        // Fallback to order_id if standard ID fails
-        const { error: fallbackError } = await adminSupabase
+      // Also try updating by internal DB id to be 100% sure
+      if (dbId) {
+        await adminSupabase
           .from('orders')
           .update({ status: cleanStatus })
-          .eq('order_id', id);
-        
-        if (fallbackError) throw fallbackError;
+          .eq('id', dbId);
       }
+
+      // 3. Force server sync to ensure the status is truly locked in
+      await refreshOrders();
+      
     } catch (err) {
       console.error("[Persistence Error] Status update failed:", err);
-      // 3. Revert local state on failure
-      refreshOrders();
+      // Revert local state on failure by refetching
+      await refreshOrders();
       throw err;
     }
   };
@@ -163,6 +165,7 @@ const AdminApp: React.FC = () => {
         else if (s === 'shipped') cleanStatus = 'Shipped';
         else if (s === 'delivered') cleanStatus = 'Delivered';
         else if (s === 'cancelled') cleanStatus = 'Cancelled';
+        else cleanStatus = 'Pending';
       }
 
       return {
