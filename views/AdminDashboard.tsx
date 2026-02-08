@@ -342,11 +342,22 @@ const AdminDashboard = (props: any) => {
 
               <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10">
                 <p className="text-[8px] font-black text-white/20 uppercase tracking-[0.3em] mb-4">Order Summary</p>
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {selectedOrder.items.map((item: any, i: number) => (
-                    <div key={i} className="flex justify-between items-center">
-                      <span className="text-[10px] font-black uppercase truncate max-w-[200px]">{item.product.name}</span>
-                      <span className="text-xs font-black italic">x{item.quantity}</span>
+                    <div key={i} className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-white/5 rounded-xl overflow-hidden border border-white/10 shrink-0">
+                        <img src={item.product?.image || item.product?.image_url} className="w-full h-full object-cover" alt="" />
+                      </div>
+                      <div className="flex-grow min-w-0">
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] font-black uppercase truncate pr-2">{item.product?.name}</span>
+                          <span className="text-[10px] font-black italic whitespace-nowrap">Rs. {(item.product?.price * item.quantity).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center mt-1">
+                          <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest italic">{item.variantName || 'Standard Variant'}</span>
+                          <span className="text-[10px] font-black text-white/40">x{item.quantity}</span>
+                        </div>
+                      </div>
                     </div>
                   ))}
                   <div className="pt-4 mt-4 border-t border-white/5 flex justify-between items-center">
