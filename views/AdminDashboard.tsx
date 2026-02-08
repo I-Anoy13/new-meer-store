@@ -103,7 +103,6 @@ const AdminDashboard = (props: any) => {
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    // Visual feedback could go here, for now using a simple toast-style alert
     const toast = document.createElement('div');
     toast.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest z-[1000] animate-fadeIn shadow-2xl';
     toast.innerText = `${label} COPIED`;
@@ -307,7 +306,7 @@ const AdminDashboard = (props: any) => {
                       <span className="text-[10px] font-black uppercase text-white/40">Name</span>
                       <span className="text-xs font-black">{selectedOrder.customer.name}</span>
                     </div>
-                    <button onClick={() => copyToClipboard(selectedOrder.customer.name, 'NAME')} className="w-8 h-8 bg-blue-600/10 text-blue-500 rounded-lg flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity">
+                    <button onClick={() => copyToClipboard(selectedOrder.customer.name, 'NAME')} className="w-8 h-8 bg-blue-600/20 text-blue-500 rounded-lg flex items-center justify-center transition-all hover:bg-blue-600 hover:text-white shadow-sm border border-blue-500/20">
                       <i className="fas fa-copy text-[10px]"></i>
                     </button>
                   </div>
@@ -316,7 +315,7 @@ const AdminDashboard = (props: any) => {
                       <span className="text-[10px] font-black uppercase text-white/40">Phone</span>
                       <a href={`tel:${selectedOrder.customer.phone}`} className="text-xs font-black text-blue-500 underline">{selectedOrder.customer.phone}</a>
                     </div>
-                    <button onClick={() => copyToClipboard(selectedOrder.customer.phone, 'PHONE')} className="w-8 h-8 bg-blue-600/10 text-blue-500 rounded-lg flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity">
+                    <button onClick={() => copyToClipboard(selectedOrder.customer.phone, 'PHONE')} className="w-8 h-8 bg-blue-600/20 text-blue-500 rounded-lg flex items-center justify-center transition-all hover:bg-blue-600 hover:text-white shadow-sm border border-blue-500/20">
                       <i className="fas fa-copy text-[10px]"></i>
                     </button>
                   </div>
@@ -325,7 +324,7 @@ const AdminDashboard = (props: any) => {
                       <span className="text-[10px] font-black uppercase text-white/40">City</span>
                       <span className="text-xs font-black">{selectedOrder.customer.city || 'N/A'}</span>
                     </div>
-                    <button onClick={() => copyToClipboard(selectedOrder.customer.city || 'N/A', 'CITY')} className="w-8 h-8 bg-blue-600/10 text-blue-500 rounded-lg flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity">
+                    <button onClick={() => copyToClipboard(selectedOrder.customer.city || 'N/A', 'CITY')} className="w-8 h-8 bg-blue-600/20 text-blue-500 rounded-lg flex items-center justify-center transition-all hover:bg-blue-600 hover:text-white shadow-sm border border-blue-500/20">
                       <i className="fas fa-copy text-[10px]"></i>
                     </button>
                   </div>
@@ -334,7 +333,7 @@ const AdminDashboard = (props: any) => {
                         <span className="text-[8px] font-black uppercase text-white/20 block mb-2">Shipping Address</span>
                         <p className="text-[11px] font-medium leading-relaxed text-white/80 pr-4">{selectedOrder.customer.address}</p>
                      </div>
-                     <button onClick={() => copyToClipboard(selectedOrder.customer.address, 'ADDRESS')} className="w-8 h-8 bg-blue-600/10 text-blue-500 rounded-lg flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shrink-0">
+                     <button onClick={() => copyToClipboard(selectedOrder.customer.address, 'ADDRESS')} className="w-8 h-8 bg-blue-600/20 text-blue-500 rounded-lg flex items-center justify-center transition-all hover:bg-blue-600 hover:text-white shadow-sm border border-blue-500/20 shrink-0">
                        <i className="fas fa-copy text-[10px]"></i>
                      </button>
                   </div>
@@ -383,7 +382,7 @@ const AdminDashboard = (props: any) => {
                 const text = `Name: ${selectedOrder.customer.name}\nPhone: ${selectedOrder.customer.phone}\nCity: ${selectedOrder.customer.city || 'N/A'}\nAddress: ${selectedOrder.customer.address}`;
                 copyToClipboard(text, 'ALL DETAILS');
               }}
-              className="w-full py-4 border border-white/10 rounded-2xl font-black uppercase text-[9px] tracking-[0.3em] text-white/40"
+              className="w-full py-4 border border-white/10 rounded-2xl font-black uppercase text-[9px] tracking-[0.3em] text-white/40 hover:text-white transition-colors"
             >
               Copy Full Order Summary
             </button>
