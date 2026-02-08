@@ -75,9 +75,16 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   };
 
   const scrollToImage = (idx: number) => {
+    if (idx < 0) idx = productImages.length - 1;
+    if (idx >= productImages.length) idx = 0;
     setActiveImageIdx(idx);
-    if (galleryRef.current) galleryRef.current.scrollTo({ left: galleryRef.current.offsetWidth * idx, behavior: 'smooth' });
+    if (galleryRef.current) {
+      galleryRef.current.scrollTo({ left: galleryRef.current.offsetWidth * idx, behavior: 'smooth' });
+    }
   };
+
+  const nextImage = () => scrollToImage(activeImageIdx + 1);
+  const prevImage = () => scrollToImage(activeImageIdx - 1);
 
   if (isOrderPortalActive) {
     return (
@@ -125,12 +132,25 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
       <div className="container mx-auto px-4 md:px-12 py-8 lg:py-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20">
           <div className="lg:col-span-7">
-            <div className="relative aspect-[4/5] bg-gray-50 rounded-[2.5rem] overflow-hidden border border-gray-100 shadow-sm">
+            <div className="relative aspect-[4/5] bg-gray-50 rounded-[2.5rem] overflow-hidden border border-gray-100 shadow-sm group">
               <div ref={galleryRef} className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar" onScroll={e => setActiveImageIdx(Math.round(e.currentTarget.scrollLeft / e.currentTarget.offsetWidth))}>
                 {productImages.map((img, i) => (
                   <div key={i} className="w-full h-full shrink-0 snap-center"><img src={img} className="w-full h-full object-cover" /></div>
                 ))}
               </div>
+              
+              {/* Carousel Controls */}
+              {productImages.length > 1 && (
+                <>
+                  <button onClick={prevImage} className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg transition-opacity md:opacity-0 group-hover:opacity-100">
+                    <i className="fas fa-chevron-left text-xs"></i>
+                  </button>
+                  <button onClick={nextImage} className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg transition-opacity md:opacity-0 group-hover:opacity-100">
+                    <i className="fas fa-chevron-right text-xs"></i>
+                  </button>
+                </>
+              )}
+
               <div className="absolute top-6 right-6 bg-red-600 text-white px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest animate-pulse z-10">
                 Flash Sale: {formatTime(timeLeft)}
               </div>
@@ -157,10 +177,30 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               <p className="text-[10px] font-black text-red-600 mb-4 uppercase italic flex items-center"><i className="fas fa-bolt mr-2"></i> Only {unitsLeft} units remaining</p>
               <div className="w-full h-1 bg-white rounded-full overflow-hidden"><div className="h-full bg-red-600 transition-all duration-1000" style={{ width: `${(unitsLeft / 14) * 100}%` }}></div></div>
             </div>
-            <div className="mb-8 flex items-center space-x-3 pl-2">
-              <div className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span></div>
-              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">{viewers} people watching</span>
+            
+            <div className="mb-8 space-y-4">
+              <div className="flex items-center space-x-3 pl-2">
+                <div className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span></div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 italic">{viewers} people watching</span>
+              </div>
+
+              {/* HAPPY CUSTOMER SECTION */}
+              <div className="flex items-center space-x-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100/50">
+                <div className="flex -space-x-2">
+                  {[1, 2, 3].map(i => (
+                    <img key={i} className="inline-block h-8 w-8 rounded-full ring-2 ring-white object-cover shadow-sm" src={`https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=100&h=100&auto=format&fit=crop&sig=${i}`} alt="Customer" />
+                  ))}
+                  <div className="h-8 w-8 rounded-full ring-2 ring-white bg-blue-600 flex items-center justify-center text-[8px] font-black text-white">+12k</div>
+                </div>
+                <div>
+                   <div className="flex text-yellow-500 text-[8px] mb-0.5">
+                     {[1,2,3,4,5].map(i => <i key={i} className="fas fa-star"></i>)}
+                   </div>
+                   <p className="text-[9px] font-black uppercase tracking-widest text-black/60 italic">Trusted by 12,000+ Happy Customers</p>
+                </div>
+              </div>
             </div>
+
             <button onClick={() => setIsOrderPortalActive(true)} className="w-full bg-black text-white font-black text-xs uppercase tracking-widest py-6 rounded-2xl shadow-2xl active:scale-[0.98] transition-all italic">Order Now — Cash On Delivery</button>
             <div className="mt-12 space-y-8">
                <div className="border-l-2 border-black pl-6">

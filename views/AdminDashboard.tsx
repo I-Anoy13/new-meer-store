@@ -101,6 +101,19 @@ const AdminDashboard = (props: any) => {
     );
   };
 
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    // Visual feedback could go here, for now using a simple toast-style alert
+    const toast = document.createElement('div');
+    toast.className = 'fixed bottom-24 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest z-[1000] animate-fadeIn shadow-2xl';
+    toast.innerText = `${label} COPIED`;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('opacity-0');
+      setTimeout(() => document.body.removeChild(toast), 300);
+    }, 2000);
+  };
+
   return (
     <div className="min-h-screen bg-[#050505] text-white pb-32 animate-fadeIn selection:bg-blue-500/30">
       {/* HEADER */}
@@ -289,17 +302,41 @@ const AdminDashboard = (props: any) => {
               <div className="bg-white/5 p-6 rounded-[2rem] border border-white/10">
                 <p className="text-[8px] font-black text-white/20 uppercase tracking-[0.3em] mb-4">Customer Information</p>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-white/40">Name</span>
-                    <span className="text-xs font-black">{selectedOrder.customer.name}</span>
+                  <div className="flex justify-between items-center group/field">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase text-white/40">Name</span>
+                      <span className="text-xs font-black">{selectedOrder.customer.name}</span>
+                    </div>
+                    <button onClick={() => copyToClipboard(selectedOrder.customer.name, 'NAME')} className="w-8 h-8 bg-blue-600/10 text-blue-500 rounded-lg flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity">
+                      <i className="fas fa-copy text-[10px]"></i>
+                    </button>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase text-white/40">Phone</span>
-                    <a href={`tel:${selectedOrder.customer.phone}`} className="text-xs font-black text-blue-500 underline">{selectedOrder.customer.phone}</a>
+                  <div className="flex justify-between items-center group/field">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase text-white/40">Phone</span>
+                      <a href={`tel:${selectedOrder.customer.phone}`} className="text-xs font-black text-blue-500 underline">{selectedOrder.customer.phone}</a>
+                    </div>
+                    <button onClick={() => copyToClipboard(selectedOrder.customer.phone, 'PHONE')} className="w-8 h-8 bg-blue-600/10 text-blue-500 rounded-lg flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity">
+                      <i className="fas fa-copy text-[10px]"></i>
+                    </button>
                   </div>
-                  <div className="pt-4 border-t border-white/5">
-                     <span className="text-[8px] font-black uppercase text-white/20 block mb-2">Shipping Address</span>
-                     <p className="text-[11px] font-medium leading-relaxed text-white/80">{selectedOrder.customer.address}, {selectedOrder.customer.city}</p>
+                  <div className="flex justify-between items-center group/field">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase text-white/40">City</span>
+                      <span className="text-xs font-black">{selectedOrder.customer.city || 'N/A'}</span>
+                    </div>
+                    <button onClick={() => copyToClipboard(selectedOrder.customer.city || 'N/A', 'CITY')} className="w-8 h-8 bg-blue-600/10 text-blue-500 rounded-lg flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity">
+                      <i className="fas fa-copy text-[10px]"></i>
+                    </button>
+                  </div>
+                  <div className="pt-4 border-t border-white/5 group/field flex justify-between items-start">
+                     <div className="flex-grow">
+                        <span className="text-[8px] font-black uppercase text-white/20 block mb-2">Shipping Address</span>
+                        <p className="text-[11px] font-medium leading-relaxed text-white/80 pr-4">{selectedOrder.customer.address}</p>
+                     </div>
+                     <button onClick={() => copyToClipboard(selectedOrder.customer.address, 'ADDRESS')} className="w-8 h-8 bg-blue-600/10 text-blue-500 rounded-lg flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shrink-0">
+                       <i className="fas fa-copy text-[10px]"></i>
+                     </button>
                   </div>
                 </div>
               </div>
@@ -344,12 +381,11 @@ const AdminDashboard = (props: any) => {
             <button 
               onClick={() => {
                 const text = `Name: ${selectedOrder.customer.name}\nPhone: ${selectedOrder.customer.phone}\nCity: ${selectedOrder.customer.city || 'N/A'}\nAddress: ${selectedOrder.customer.address}`;
-                navigator.clipboard.writeText(text);
-                alert('Customer Details Copied to Clipboard');
+                copyToClipboard(text, 'ALL DETAILS');
               }}
               className="w-full py-4 border border-white/10 rounded-2xl font-black uppercase text-[9px] tracking-[0.3em] text-white/40"
             >
-              Copy Customer Details
+              Copy Full Order Summary
             </button>
           </div>
         </div>
