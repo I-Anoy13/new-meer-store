@@ -4,7 +4,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import { UserRole, Order, Product, Variant } from '../types';
 
 const AdminDashboard = (props: any) => {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('analytics');
   const [authKey, setAuthKey] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [editingProduct, setEditingProduct] = useState<any>(null);
@@ -233,23 +233,23 @@ const AdminDashboard = (props: any) => {
       </header>
 
       <main className="px-4 py-6 md:px-6">
-        {/* OVERVIEW TAB */}
-        {activeTab === 'overview' && (
+        {/* ANALYTICS TAB (Renamed from Overview) */}
+        {activeTab === 'analytics' && (
           <div className="space-y-6">
             <section className="flex justify-between items-center px-2">
-              <h3 className="text-sm font-black italic uppercase tracking-tighter">Market Overview</h3>
+              <h3 className="text-sm font-black italic uppercase tracking-tighter">Business Intelligence</h3>
               <button 
                 onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)} 
                 className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border transition-all ${isFilterPanelOpen || (dateFilter.start || dateFilter.end) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-white/40'}`}
               >
                 <i className="fas fa-calendar-alt text-[8px]"></i>
-                <span className="text-[7px] font-black uppercase tracking-widest">{dateFilter.start ? 'Custom Range' : 'Lifetime'}</span>
+                <span className="text-[7px] font-black uppercase tracking-widest">{dateFilter.start ? 'Custom Filter' : 'Select Period'}</span>
               </button>
             </section>
 
             {isFilterPanelOpen && (
               <div className="bg-white/5 border border-white/10 p-5 rounded-[2rem] space-y-4 animate-fadeIn">
-                <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.4em]">Analytics Date Range</p>
+                <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.4em]">Performance Date Range</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[6px] font-black uppercase text-white/10 ml-2">From</label>
@@ -272,49 +272,52 @@ const AdminDashboard = (props: any) => {
                 </div>
                 <button 
                   onClick={() => setDateFilter({ start: '', end: '' })}
-                  className="w-full py-2 bg-white/5 text-[7px] font-black uppercase text-white/20 rounded-lg"
+                  className="w-full py-2 bg-blue-600/10 text-blue-500 border border-blue-500/20 text-[7px] font-black uppercase rounded-lg"
                 >
-                  Reset Analytics Range
+                  Clear Custom Period
                 </button>
               </div>
             )}
 
             <section>
               <div className="grid grid-cols-3 gap-2">
-                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl">
-                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Revenue</p>
-                  <p className="text-xs font-black italic">Rs.{formatCompactNumber(analytics.revenue)}</p>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group transition-all hover:border-blue-500/30">
+                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Total Revenue</p>
+                  <p className="text-sm font-black italic">Rs.{formatCompactNumber(analytics.revenue)}</p>
                 </div>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl">
-                  <p className="text-[6px] font-black text-emerald-500 uppercase tracking-widest mb-1">Orders</p>
-                  <p className="text-xs font-black italic">{analytics.orderCount}</p>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group transition-all hover:border-emerald-500/30">
+                  <p className="text-[6px] font-black text-emerald-500 uppercase tracking-widest mb-1">Order Vol.</p>
+                  <p className="text-sm font-black italic">{formatCompactNumber(analytics.orderCount)}</p>
                 </div>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl">
-                  <p className="text-[6px] font-black text-amber-500 uppercase tracking-widest mb-1">Queue</p>
-                  <p className="text-xs font-black italic">{analytics.pendingCount}</p>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group transition-all hover:border-amber-500/30">
+                  <p className="text-[6px] font-black text-amber-500 uppercase tracking-widest mb-1">Waitlist</p>
+                  <p className="text-sm font-black italic">{analytics.pendingCount}</p>
                 </div>
               </div>
             </section>
 
-            {/* REAL-TIME TRENDS CHART */}
+            {/* REAL-TIME TRENDS CHART (Improved 6-Month Visualization) */}
             <section className="bg-white/5 border border-white/10 p-5 rounded-[2rem]">
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">6-Month Growth</p>
-                  <p className="text-[7px] text-white/10 font-black uppercase tracking-widest mt-0.5">Revenue vs Volume</p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-[10px] font-black uppercase text-white tracking-[0.2em]">Growth Analytics</p>
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
+                  </div>
+                  <p className="text-[7px] text-white/10 font-black uppercase tracking-widest mt-0.5">Monthly performance delta</p>
                 </div>
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
-                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">Revenue</span>
+                    <div className="w-2 h-2 rounded-sm bg-blue-600"></div>
+                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">PKR</span>
                   </div>
                   <div className="flex items-center space-x-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">Orders</span>
+                    <div className="w-2 h-2 rounded-sm bg-emerald-500"></div>
+                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">Qty</span>
                   </div>
                 </div>
               </div>
-              <div className="h-56">
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={analytics.trendData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
@@ -330,7 +333,7 @@ const AdminDashboard = (props: any) => {
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: '#ffffff20', fontSize: 8, fontWeight: 900 }}
-                      tickFormatter={(val) => `Rs.${formatCompactNumber(val)}`}
+                      tickFormatter={(val) => `${formatCompactNumber(val)}`}
                     />
                     <YAxis 
                       yAxisId="right"
@@ -340,27 +343,33 @@ const AdminDashboard = (props: any) => {
                       tick={{ fill: '#ffffff20', fontSize: 8, fontWeight: 900 }}
                     />
                     <Tooltip 
-                      contentStyle={{ backgroundColor: '#0f0f0f', border: '1px solid #ffffff10', borderRadius: '12px' }}
-                      itemStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }}
-                      labelStyle={{ fontSize: '8px', marginBottom: '4px', opacity: 0.3, fontWeight: 900 }}
+                      cursor={{ stroke: '#ffffff10', strokeWidth: 1 }}
+                      contentStyle={{ backgroundColor: '#0f0f0f', border: '1px solid #ffffff10', borderRadius: '16px', padding: '12px' }}
+                      itemStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', padding: '2px 0' }}
+                      labelStyle={{ fontSize: '8px', marginBottom: '6px', opacity: 0.3, fontWeight: 900, letterSpacing: '0.1em' }}
+                      formatter={(value: any, name: string) => [name === 'revenue' ? `Rs. ${value.toLocaleString()}` : value, name.toUpperCase()]}
                     />
                     <Line 
                       yAxisId="left"
                       type="monotone" 
                       dataKey="revenue" 
+                      name="Revenue"
                       stroke="#2563eb" 
-                      strokeWidth={3} 
-                      dot={{ r: 4, fill: '#2563eb', strokeWidth: 0 }}
+                      strokeWidth={4} 
+                      dot={{ r: 0 }}
                       activeDot={{ r: 6, stroke: '#2563eb', strokeWidth: 2, fill: '#fff' }}
+                      animationDuration={1500}
                     />
                     <Line 
                       yAxisId="right"
                       type="monotone" 
                       dataKey="orders" 
+                      name="Volume"
                       stroke="#10b981" 
-                      strokeWidth={3} 
-                      dot={{ r: 4, fill: '#10b981', strokeWidth: 0 }}
+                      strokeWidth={4} 
+                      dot={{ r: 0 }}
                       activeDot={{ r: 6, stroke: '#10b981', strokeWidth: 2, fill: '#fff' }}
+                      animationDuration={1500}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -369,8 +378,8 @@ const AdminDashboard = (props: any) => {
 
             <section>
               <div className="flex justify-between items-center mb-4 px-2">
-                <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Quick Logistics</p>
-                <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">Browse All</button>
+                <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Recent Activity</p>
+                <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">View Stream</button>
               </div>
               <div className="space-y-2">
                 {props.orders.slice(0, 5).map((o: Order) => (
@@ -556,17 +565,17 @@ const AdminDashboard = (props: any) => {
 
       {/* BOTTOM NAVIGATION - COMPACT FOR MOBILE */}
       <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-2xl border border-white/10 h-16 px-6 rounded-full flex items-center space-x-10 z-[200] shadow-2xl shadow-black max-w-[90vw]">
-        <button onClick={() => setActiveTab('overview')} className={`flex flex-col items-center space-y-1 transition-colors ${activeTab === 'overview' ? 'text-blue-500' : 'text-white/20'}`}>
+        <button onClick={() => setActiveTab('analytics')} className={`flex flex-col items-center space-y-1 transition-colors ${activeTab === 'analytics' ? 'text-blue-500' : 'text-white/20'}`}>
           <i className="fas fa-chart-line text-base"></i>
-          <span className="text-[6px] font-black uppercase tracking-widest">Dash</span>
+          <span className="text-[6px] font-black uppercase tracking-widest">Analytics</span>
         </button>
         <button onClick={() => setActiveTab('orders')} className={`flex flex-col items-center space-y-1 transition-colors ${activeTab === 'orders' ? 'text-blue-500' : 'text-white/20'}`}>
           <i className="fas fa-shopping-bag text-base"></i>
-          <span className="text-[6px] font-black uppercase tracking-widest">Orders</span>
+          <span className="text-[6px] font-black uppercase tracking-widest">Logistics</span>
         </button>
         <button onClick={() => setActiveTab('products')} className={`flex flex-col items-center space-y-1 transition-colors ${activeTab === 'products' ? 'text-blue-500' : 'text-white/20'}`}>
           <i className="fas fa-boxes text-base"></i>
-          <span className="text-[6px] font-black uppercase tracking-widest">Stock</span>
+          <span className="text-[6px] font-black uppercase tracking-widest">Storage</span>
         </button>
       </nav>
 
