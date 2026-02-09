@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, Legend } from 'recharts';
 import { UserRole, Order, Product, Variant } from '../types';
 
 const AdminDashboard = (props: any) => {
@@ -31,33 +31,56 @@ const AdminDashboard = (props: any) => {
     }
   }, [props.orders, selectedOrder]);
 
+  // Large Number Formatter (e.g., 100k, 1.2M)
+  const formatCompactNumber = (num: number) => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return num.toString();
+  };
+
   const analytics = useMemo(() => {
     const orders = Array.isArray(props.orders) ? props.orders : [];
-    const valid = orders.filter((o: Order) => o.status !== 'Cancelled');
-    const revenue = valid.reduce((acc: number, o: Order) => acc + (Number(o.total) || 0), 0);
-    const pendingCount = orders.filter((o: Order) => o.status === 'Pending').length;
-    const todayCount = orders.filter((o: Order) => {
-      const d = new Date(o.date);
-      const today = new Date();
-      return d.getDate() === today.getDate() && d.getMonth() === today.getMonth();
-    }).length;
+    
+    // Apply date filter to baseline analytics if set
+    const filteredForStats = orders.filter(o => {
+      if (dateFilter.start || dateFilter.end) {
+        const orderDate = new Date(o.date).getTime();
+        if (dateFilter.start && orderDate < new Date(dateFilter.start).getTime()) return false;
+        if (dateFilter.end && orderDate > new Date(dateFilter.end).setHours(23, 59, 59, 999)) return false;
+      }
+      return true;
+    });
 
-    const chartData = [];
+    const valid = filteredForStats.filter((o: Order) => o.status !== 'Cancelled');
+    const revenue = valid.reduce((acc: number, o: Order) => acc + (Number(o.total) || 0), 0);
+    const pendingCount = filteredForStats.filter((o: Order) => o.status === 'Pending').length;
+    const orderCount = filteredForStats.length;
+
+    // Last 6 Months Trend Data
+    const trendData = [];
     const now = new Date();
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-      const dateStr = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayOrders = orders.filter((o: Order) => {
-        const od = new Date(o.date);
-        return od.getDate() === d.getDate() && od.getMonth() === d.getMonth() && o.status !== 'Cancelled';
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+      const yearLabel = d.getFullYear().toString().slice(-2);
+      
+      const startOfMonth = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+      const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+      
+      const monthOrders = orders.filter(o => {
+        const od = new Date(o.date).getTime();
+        return od >= startOfMonth && od <= endOfMonth && o.status !== 'Cancelled';
       });
-      chartData.push({ 
-        name: dateStr, 
-        revenue: dayOrders.reduce((sum: number, o: Order) => sum + (Number(o.total) || 0), 0) 
+
+      trendData.push({
+        name: `${monthLabel} '${yearLabel}`,
+        revenue: monthOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0),
+        orders: monthOrders.length
       });
     }
-    return { revenue, pendingCount, todayCount, chartData };
-  }, [props.orders]);
+
+    return { revenue, pendingCount, orderCount, trendData };
+  }, [props.orders, dateFilter]);
 
   const filteredOrders = useMemo(() => {
     return props.orders.filter((o: Order) => {
@@ -213,42 +236,140 @@ const AdminDashboard = (props: any) => {
         {/* OVERVIEW TAB */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
-            <section>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white/5 border border-white/10 p-5 rounded-[2rem]">
-                  <p className="text-[7px] font-black text-blue-500 uppercase tracking-widest mb-1">Total Sales</p>
-                  <p className="text-lg font-black italic">Rs. {analytics.revenue.toLocaleString()}</p>
+            <section className="flex justify-between items-center px-2">
+              <h3 className="text-sm font-black italic uppercase tracking-tighter">Market Overview</h3>
+              <button 
+                onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)} 
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border transition-all ${isFilterPanelOpen || (dateFilter.start || dateFilter.end) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-white/40'}`}
+              >
+                <i className="fas fa-calendar-alt text-[8px]"></i>
+                <span className="text-[7px] font-black uppercase tracking-widest">{dateFilter.start ? 'Custom Range' : 'Lifetime'}</span>
+              </button>
+            </section>
+
+            {isFilterPanelOpen && (
+              <div className="bg-white/5 border border-white/10 p-5 rounded-[2rem] space-y-4 animate-fadeIn">
+                <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.4em]">Analytics Date Range</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[6px] font-black uppercase text-white/10 ml-2">From</label>
+                    <input 
+                      type="date" 
+                      className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white/60 outline-none"
+                      value={dateFilter.start}
+                      onChange={(e) => setDateFilter({...dateFilter, start: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[6px] font-black uppercase text-white/10 ml-2">To</label>
+                    <input 
+                      type="date" 
+                      className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-[10px] text-white/60 outline-none"
+                      value={dateFilter.end}
+                      onChange={(e) => setDateFilter({...dateFilter, end: e.target.value})}
+                    />
+                  </div>
                 </div>
-                <div className="bg-white/5 border border-white/10 p-5 rounded-[2rem]">
-                  <p className="text-[7px] font-black text-emerald-500 uppercase tracking-widest mb-1">Total Orders</p>
-                  <p className="text-lg font-black italic">{props.orders.length}</p>
+                <button 
+                  onClick={() => setDateFilter({ start: '', end: '' })}
+                  className="w-full py-2 bg-white/5 text-[7px] font-black uppercase text-white/20 rounded-lg"
+                >
+                  Reset Analytics Range
+                </button>
+              </div>
+            )}
+
+            <section>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl">
+                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Revenue</p>
+                  <p className="text-xs font-black italic">Rs.{formatCompactNumber(analytics.revenue)}</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl">
+                  <p className="text-[6px] font-black text-emerald-500 uppercase tracking-widest mb-1">Orders</p>
+                  <p className="text-xs font-black italic">{analytics.orderCount}</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl">
+                  <p className="text-[6px] font-black text-amber-500 uppercase tracking-widest mb-1">Queue</p>
+                  <p className="text-xs font-black italic">{analytics.pendingCount}</p>
                 </div>
               </div>
             </section>
 
+            {/* REAL-TIME TRENDS CHART */}
             <section className="bg-white/5 border border-white/10 p-5 rounded-[2rem]">
               <div className="flex justify-between items-center mb-6">
-                <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">Live Trends</p>
-                <span className="text-[8px] font-black text-emerald-500 uppercase bg-emerald-500/10 px-2 py-1 rounded-md">Realtime</span>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">6-Month Growth</p>
+                  <p className="text-[7px] text-white/10 font-black uppercase tracking-widest mt-0.5">Revenue vs Volume</p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center space-x-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
+                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">Revenue</span>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">Orders</span>
+                  </div>
+                </div>
               </div>
-              <div className="h-40">
+              <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics.chartData}>
-                    <defs>
-                      <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="revenue" stroke="#2563eb" strokeWidth={3} fill="url(#colorRev)" />
-                  </AreaChart>
+                  <LineChart data={analytics.trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#ffffff20', fontSize: 8, fontWeight: 900 }} 
+                      dy={10}
+                    />
+                    <YAxis 
+                      yAxisId="left"
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#ffffff20', fontSize: 8, fontWeight: 900 }}
+                      tickFormatter={(val) => `Rs.${formatCompactNumber(val)}`}
+                    />
+                    <YAxis 
+                      yAxisId="right"
+                      orientation="right"
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#ffffff20', fontSize: 8, fontWeight: 900 }}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f0f0f', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                      itemStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }}
+                      labelStyle={{ fontSize: '8px', marginBottom: '4px', opacity: 0.3, fontWeight: 900 }}
+                    />
+                    <Line 
+                      yAxisId="left"
+                      type="monotone" 
+                      dataKey="revenue" 
+                      stroke="#2563eb" 
+                      strokeWidth={3} 
+                      dot={{ r: 4, fill: '#2563eb', strokeWidth: 0 }}
+                      activeDot={{ r: 6, stroke: '#2563eb', strokeWidth: 2, fill: '#fff' }}
+                    />
+                    <Line 
+                      yAxisId="right"
+                      type="monotone" 
+                      dataKey="orders" 
+                      stroke="#10b981" 
+                      strokeWidth={3} 
+                      dot={{ r: 4, fill: '#10b981', strokeWidth: 0 }}
+                      activeDot={{ r: 6, stroke: '#10b981', strokeWidth: 2, fill: '#fff' }}
+                    />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </section>
 
             <section>
               <div className="flex justify-between items-center mb-4 px-2">
-                <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Quick Look</p>
+                <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Quick Logistics</p>
                 <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">Browse All</button>
               </div>
               <div className="space-y-2">
