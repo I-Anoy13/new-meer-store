@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { createClient } from '@supabase/supabase-js';
@@ -12,17 +11,28 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false }
 });
 
+export interface SystemLog {
+  id: number;
+  timestamp: string;
+  type: 'error' | 'success' | 'info' | 'warning';
+  module: string;
+  message: string;
+  details?: any;
+}
+
 interface AdminToast {
   id: number;
   message: string;
   orderId?: string;
   type?: 'success' | 'error' | 'info';
+  persistent?: boolean;
 }
 
 const DEFAULT_ALERT_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
 
 const AdminApp: React.FC = () => {
   const recentUpdates = useRef<Record<string, { status: string, time: number }>>({});
+  const [logs, setLogs] = useState<SystemLog[]>([]);
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
     try {
       const saved = localStorage.getItem('itx_admin_orders_cache');
@@ -48,28 +58,45 @@ const AdminApp: React.FC = () => {
     } catch (e) { return null; }
   });
 
+  const addLog = useCallback((type: SystemLog['type'], module: string, message: string, details?: any) => {
+    const newLog: SystemLog = {
+      id: Date.now(),
+      timestamp: new Date().toLocaleTimeString(),
+      type,
+      module,
+      message,
+      details
+    };
+    setLogs(prev => [newLog, ...prev].slice(0, 50));
+    console.log(`[${module}] ${message}`, details || '');
+  }, []);
+
+  const addAdminToast = useCallback((message: string, orderId?: string, type: AdminToast['type'] = 'info', persistent = false) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, orderId, type, persistent }]);
+    if (!persistent) {
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, 10000);
+    }
+  }, []);
+
+  const removeToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   const playNotificationSound = useCallback(() => {
     if (!audioEnabled) return;
     try {
       const soundSrc = customSound || DEFAULT_ALERT_URL;
       const audio = new Audio(soundSrc);
-      audio.play().catch(e => console.warn('[Admin] Audio playback blocked. Interaction required.'));
+      audio.play().catch(e => {
+        addLog('warning', 'Audio', 'Playback blocked by browser settings');
+      });
     } catch (e) {
-      console.error('[Admin] Sound playback error:', e);
+      addLog('error', 'Audio', 'Sound engine failure', e);
     }
-  }, [audioEnabled, customSound]);
-
-  const addAdminToast = useCallback((message: string, orderId?: string, type: AdminToast['type'] = 'info') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, orderId, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 10000);
-  }, []);
-
-  const syncToStorage = useCallback((data: any[]) => {
-    try { localStorage.setItem('itx_admin_orders_cache', JSON.stringify(data)); } catch (e) {}
-  }, []);
+  }, [audioEnabled, customSound, addLog]);
 
   const refreshOrders = useCallback(async (isSilent = false) => {
     try {
@@ -77,184 +104,77 @@ const AdminApp: React.FC = () => {
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(1000); 
+        .limit(100); 
       
-      if (!error && data) {
+      if (error) throw error;
+      if (data) {
         if (!isSilent && rawOrders.length > 0) {
           const currentIds = new Set(rawOrders.map(o => String(o.order_id || o.id)));
           const newOrders = data.filter(o => !currentIds.has(String(o.order_id || o.id)));
-          
           if (newOrders.length > 0) {
             playNotificationSound();
-            newOrders.forEach(o => {
-              addAdminToast(`New Order from ${o.customer_name}`, o.order_id || String(o.id), 'success');
-            });
+            newOrders.forEach(o => addAdminToast(`New Order: ${o.customer_name}`, o.order_id || String(o.id), 'success'));
           }
         }
-
-        const mergedData = data.map(serverOrder => {
-          const id = String(serverOrder.order_id || serverOrder.id);
-          const localIntent = recentUpdates.current[id];
-          if (localIntent && (Date.now() - localIntent.time < 30000)) {
-            return { ...serverOrder, status: localIntent.status };
-          }
-          return serverOrder;
-        });
-
-        setRawOrders(mergedData);
-        syncToStorage(mergedData);
+        setRawOrders(data);
       }
-    } catch (e) {
-      console.error("[Admin] Order Sync Failure:", e);
+    } catch (e: any) {
+      addLog('error', 'Orders', 'Sync failed', e.message);
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [syncToStorage, rawOrders, playNotificationSound, addAdminToast]);
+  }, [rawOrders, playNotificationSound, addAdminToast, addLog]);
 
   const refreshProducts = useCallback(async () => {
     try {
       const { data, error } = await adminSupabase.from('products').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        setProducts(data.map(p => {
-          let parsedImages = [];
-          try {
-            parsedImages = typeof p.images === 'string' ? JSON.parse(p.images) : (Array.isArray(p.images) ? p.images : []);
-          } catch(e) { parsedImages = []; }
-
-          let parsedVariants = [];
-          try {
-            parsedVariants = typeof p.variants === 'string' ? JSON.parse(p.variants) : (Array.isArray(p.variants) ? p.variants : []);
-          } catch(e) { parsedVariants = []; }
-
-          return {
-            id: String(p.id),
-            name: p.name || 'Untitled Product',
-            description: p.description || '',
-            price: Number(p.price || p.price_pkr || 0),
-            image: p.image || p.image_url || parsedImages[0] || '',
-            images: parsedImages.length > 0 ? parsedImages : (p.image ? [p.image] : []),
-            category: p.category || 'Luxury',
-            inventory: Number(p.inventory || 0),
-            rating: Number(p.rating || 5),
-            reviews: [],
-            variants: parsedVariants
-          };
-        }));
+      if (error) throw error;
+      if (data) {
+        setProducts(data.map(p => ({
+          id: String(p.id),
+          name: p.name || 'Untitled',
+          description: p.description || '',
+          price: Number(p.price || p.price_pkr || 0),
+          image: p.image || p.image_url || '',
+          images: typeof p.images === 'string' ? JSON.parse(p.images) : (Array.isArray(p.images) ? p.images : []),
+          category: p.category || 'Luxury',
+          inventory: Number(p.inventory || 0),
+          variants: typeof p.variants === 'string' ? JSON.parse(p.variants) : (Array.isArray(p.variants) ? p.variants : []),
+          rating: 5,
+          reviews: []
+        })));
+        addLog('success', 'Catalog', `Refreshed ${data.length} items`);
       }
-    } catch (e) {
-      console.error("[Admin] Catalog Refresh Error:", e);
+    } catch (e: any) {
+      addLog('error', 'Catalog', 'Sync failed', e.message);
     }
-  }, []);
+  }, [addLog]);
 
   const initData = useCallback(async () => {
+    addLog('info', 'System', 'Initializing secure data sync...');
     await Promise.allSettled([refreshOrders(), refreshProducts()]);
     setLoading(false);
-  }, [refreshOrders, refreshProducts]);
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      const handleMessage = (event: MessageEvent) => {
-        if (event.data?.type === 'NEW_ORDER_DETECTED') {
-          const order = event.data.order;
-          addAdminToast(`New Order Detected: ${order.customer_name}`, order.order_id || String(order.id), 'success');
-          playNotificationSound();
-          refreshOrders(true);
-        }
-      };
-      navigator.serviceWorker.addEventListener('message', handleMessage);
-      return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
-    }
-  }, [refreshOrders, playNotificationSound, addAdminToast]);
+  }, [refreshOrders, refreshProducts, addLog]);
 
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
       initData();
-      const interval = setInterval(() => refreshOrders(true), 30000);
-      return () => clearInterval(interval);
     } else {
       setLoading(false);
     }
-  }, [user, initData, refreshOrders]);
-
-  const updateOrderStatus = async (id: string, status: string, dbId: any) => {
-    const cleanStatus = status.toLowerCase();
-    const orderKey = String(id);
-    recentUpdates.current[orderKey] = { status: cleanStatus, time: Date.now() };
-
-    const nextState = rawOrders.map(o => {
-      const match = String(o.id) === String(dbId) || String(o.order_id) === orderKey;
-      return match ? { ...o, status: cleanStatus } : o;
-    });
-    setRawOrders(nextState);
-    syncToStorage(nextState);
-
-    try {
-      const numericDbId = !isNaN(Number(dbId)) ? Number(dbId) : null;
-      let updateResult;
-      if (numericDbId !== null) {
-        updateResult = await adminSupabase.from('orders').update({ status: cleanStatus }).eq('id', numericDbId).select();
-      }
-      if (!updateResult || !updateResult.data || updateResult.data.length === 0) {
-        updateResult = await adminSupabase.from('orders').update({ status: cleanStatus }).eq('order_id', orderKey).select();
-      }
-      if (updateResult.error) throw updateResult.error;
-    } catch (err: any) {
-      console.error("[Admin] Update failed:", err);
-      delete recentUpdates.current[orderKey];
-      refreshOrders(true);
-    }
-  };
-
-  const formattedOrders = useMemo((): Order[] => {
-    return rawOrders.map(o => {
-      let cleanStatus: Order['status'] = 'Pending';
-      const s = String(o.status || '').toLowerCase();
-      if (s === 'confirmed') cleanStatus = 'Confirmed';
-      else if (s === 'shipped') cleanStatus = 'Shipped';
-      else if (s === 'delivered') cleanStatus = 'Delivered';
-      else if (s === 'cancelled') cleanStatus = 'Cancelled';
-
-      let parsedItems = [];
-      try {
-        parsedItems = typeof o.items === 'string' ? JSON.parse(o.items) : (Array.isArray(o.items) ? o.items : []);
-      } catch (e) {}
-
-      return {
-        id: o.order_id || String(o.id),
-        dbId: o.id,
-        items: parsedItems,
-        total: Number(o.total_pkr || o.total || 0),
-        status: cleanStatus,
-        customer: { 
-          name: o.customer_name || 'Customer', 
-          email: '', 
-          phone: o.customer_phone || '', 
-          address: o.customer_address || '', 
-          city: o.customer_city || '' 
-        },
-        date: o.created_at || new Date().toISOString()
-      };
-    });
-  }, [rawOrders]);
-
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-      <div className="flex flex-col items-center space-y-4">
-        <div className="w-8 h-8 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin"></div>
-        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em]">Establishing Secure Link...</p>
-      </div>
-    </div>
-  );
+  }, [user, initData]);
 
   return (
     <HashRouter>
       <Routes>
         <Route path="*" element={
           <AdminDashboard 
-            orders={formattedOrders}
+            logs={logs}
+            orders={rawOrders} // Pass raw orders for mapping in dashboard if needed
             products={products}
             user={user}
             toasts={toasts}
+            removeToast={removeToast}
             audioEnabled={audioEnabled}
             customSound={customSound}
             setCustomSound={(base64: string | null) => {
@@ -267,7 +187,6 @@ const AdminApp: React.FC = () => {
                 setAudioEnabled(true);
                 localStorage.setItem('itx_admin_audio_enabled', 'true');
                 playNotificationSound();
-                if (Notification.permission === 'default') Notification.requestPermission();
             }}
             disableAudio={() => {
                 setAudioEnabled(false);
@@ -277,41 +196,51 @@ const AdminApp: React.FC = () => {
               const u: User = { id: 'admin', email: 'admin@itx.com', role, name: 'Store Manager' };
               setUser(u);
               localStorage.setItem('itx_user_session', JSON.stringify(u));
-              if (Notification.permission === 'default') Notification.requestPermission();
+              addLog('success', 'Auth', 'Admin access granted');
             }}
             logout={() => { 
               setUser(null); 
               localStorage.removeItem('itx_user_session');
-              localStorage.removeItem('itx_admin_orders_cache');
             }}
             systemPassword={localStorage.getItem('systemPassword') || 'admin123'}
             refreshData={initData}
-            updateStatus={updateOrderStatus}
             uploadMedia={async (file: File) => {
+              addLog('info', 'Upload', `Attempting cloud upload: ${file.name} (${Math.round(file.size/1024)}KB)`);
               try {
-                const name = `prod-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-                const { data, error } = await adminSupabase.storage.from('products').upload(name, file, {
-                  cacheControl: '3600',
-                  upsert: true
-                });
+                const name = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+                const { data, error } = await adminSupabase.storage.from('products').upload(name, file);
                 
-                if (error) throw error;
+                if (error) {
+                  addLog('warning', 'Upload', `Supabase Storage error: ${error.message}. Checking bucket...`, error);
+                  throw error;
+                }
+
                 const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
+                addLog('success', 'Upload', 'Cloud storage upload successful', publicUrl);
                 return publicUrl;
-              } catch (e) { 
+              } catch (e: any) {
+                addLog('warning', 'Upload', 'Cloud failure. Falling back to local Base64 encoding.', e.message);
                 return new Promise((resolve) => {
                   const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.onloadend = () => {
+                    const base64 = reader.result as string;
+                    if (base64.length > 2000000) {
+                      addAdminToast("Warning: Image is very large. May fail database save.", undefined, 'error', true);
+                    }
+                    resolve(base64);
+                  };
                   reader.readAsDataURL(file);
                 });
               }
             }}
             saveProduct={async (p: any) => {
+              // Fix: Changed undefined setIsLoading to setLoading and ensuring it is reset in finally block
+              setLoading(true);
+              addLog('info', 'Database', 'Publishing item update...');
               try {
                 const productImages = Array.isArray(p.images) ? p.images : [];
                 const primaryImage = p.image || productImages[0] || '';
 
-                // Unified payload with explicit stringification for compatibility
                 const payload = { 
                   name: p.name, 
                   description: p.description, 
@@ -335,18 +264,17 @@ const AdminApp: React.FC = () => {
 
                 if (result.error) throw result.error;
                 
+                addLog('success', 'Database', 'Publish successful');
                 await refreshProducts();
-                addAdminToast("Product Published Successfully", undefined, 'success');
+                addAdminToast("Product Published", undefined, 'success');
                 return true;
               } catch (e: any) {
-                console.error("[Admin] Product Save Failure:", e);
-                addAdminToast(`Save Failed: ${e.message || 'Database error'}`, undefined, 'error');
+                addLog('error', 'Database', `Save failed: ${e.message}`, e);
+                addAdminToast(`Save Error: ${e.message}`, undefined, 'error', true);
                 return false;
+              } finally {
+                setLoading(false);
               }
-            }}
-            deleteProduct={async (id: string) => {
-              const { error } = await adminSupabase.from('products').delete().eq('id', id);
-              if (!error) refreshProducts();
             }}
           />
         } />
