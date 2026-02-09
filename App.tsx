@@ -16,15 +16,49 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import AIConcierge from './components/AIConcierge';
 
+interface Toast {
+  id: number;
+  message: string;
+  type: 'success' | 'info' | 'error';
+}
+
 const MainLayout: React.FC<{
   children: React.ReactNode;
   cartCount: number;
   user: User | null;
   logout: () => void;
-}> = ({ children, cartCount, user, logout }) => (
+  toasts: Toast[];
+  removeToast: (id: number) => void;
+}> = ({ children, cartCount, user, logout, toasts, removeToast }) => (
   <div className="flex flex-col min-h-screen bg-white">
     <Header cartCount={cartCount} user={user} logout={logout} />
     <main className="flex-grow">{children}</main>
+    
+    {/* Toast Notifications */}
+    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center space-y-3 pointer-events-none">
+      {toasts.map((toast) => (
+        <div 
+          key={toast.id}
+          className="bg-black text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 animate-fadeIn pointer-events-auto border border-white/10 min-w-[280px]"
+        >
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+            toast.type === 'success' ? 'bg-green-500' : toast.type === 'error' ? 'bg-red-500' : 'bg-blue-600'
+          }`}>
+            <i className={`fas ${
+              toast.type === 'success' ? 'fa-check' : toast.type === 'error' ? 'fa-exclamation-triangle' : 'fa-info'
+            } text-[10px]`}></i>
+          </div>
+          <div className="flex-grow">
+            <p className="text-[10px] font-black uppercase tracking-widest italic">{toast.message}</p>
+          </div>
+          <button onClick={() => removeToast(toast.id)} className="text-white/40 hover:text-white transition p-2">
+            <i className="fas fa-times text-[10px]"></i>
+          </button>
+          <div className="absolute bottom-0 left-0 h-0.5 bg-blue-600 animate-progress w-full"></div>
+        </div>
+      ))}
+    </div>
+
     <AIConcierge />
     <Footer />
   </div>
@@ -46,6 +80,20 @@ const AppContent: React.FC = () => {
     const saved = localStorage.getItem('itx_user_session');
     return saved ? JSON.parse(saved) : null;
   });
+
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const addToast = (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      removeToast(id);
+    }, 4000);
+  };
+
+  const removeToast = (id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -76,9 +124,14 @@ const AppContent: React.FC = () => {
       if (existing) return prev.map(item => item.product.id === product.id && item.variantId === variantId ? { ...item, quantity: item.quantity + quantity } : item);
       return [...prev, { product, quantity, variantId, variantName: product.variants?.find(v => v.id === variantId)?.name || 'Standard' }];
     });
+    addToast('Item added to your bag', 'success');
   };
 
-  const removeFromCart = (productId: string, variantId?: string) => setCart(prev => prev.filter(item => !(item.product.id === productId && item.variantId === variantId)));
+  const removeFromCart = (productId: string, variantId?: string) => {
+    setCart(prev => prev.filter(item => !(item.product.id === productId && item.variantId === variantId)));
+    addToast('Item removed from bag', 'info');
+  };
+
   const updateQuantity = (productId: string, quantity: number, variantId?: string) => {
     if (quantity <= 0) return removeFromCart(productId, variantId);
     setCart(prev => prev.map(item => item.product.id === productId && item.variantId === variantId ? { ...item, quantity } : item));
@@ -100,7 +153,7 @@ const AppContent: React.FC = () => {
         product_price: Number(firstItem?.product.price || 0),
         product_image: firstItem?.product.image || '',
         total_pkr: roundedTotal,
-        subtotal_pkr: roundedTotal, // CRITICAL FIX: Added subtotal_pkr to satisfy not-null constraint
+        subtotal_pkr: roundedTotal,
         status: 'pending',
         items: JSON.stringify(order.items),
         created_at: new Date().toISOString()
@@ -114,9 +167,11 @@ const AppContent: React.FC = () => {
 
       setCart([]);
       localStorage.removeItem('cart');
+      addToast('Order placed successfully!', 'success');
       return true;
     } catch (err) {
       console.error("[CRITICAL] Order Placement Failed:", err);
+      addToast('Failed to place order. Try again.', 'error');
       return false;
     }
   };
@@ -129,7 +184,13 @@ const AppContent: React.FC = () => {
 
   return (
     <Suspense fallback={null}>
-      <MainLayout cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} user={user} logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }}>
+      <MainLayout 
+        cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)} 
+        user={user} 
+        logout={() => { setUser(null); localStorage.removeItem('itx_user_session'); }}
+        toasts={toasts}
+        removeToast={removeToast}
+      >
         <Routes>
           <Route path="/" element={<Home products={products} />} />
           <Route path="/product/:id" element={<ProductDetail products={products} addToCart={addToCart} placeOrder={placeOrder} />} />
