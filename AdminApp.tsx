@@ -79,7 +79,7 @@ const AdminApp: React.FC = () => {
           if (newOrders.length > 0) {
             playNotificationSound();
             newOrders.forEach(o => {
-              addAdminToast(`New order from ${o.customer_name}`, o.order_id || String(o.id));
+              addAdminToast(`New order placed by ${o.customer_name}`, o.order_id || String(o.id));
             });
           }
         }
@@ -97,7 +97,7 @@ const AdminApp: React.FC = () => {
         syncToStorage(mergedData);
       }
     } catch (e) {
-      console.error("[Admin] Sync Failed:", e);
+      console.error("[Admin] Order Sync Failed:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -134,7 +134,7 @@ const AdminApp: React.FC = () => {
         }));
       }
     } catch (e) {
-      console.error("[Admin] Fetch Products Error:", e);
+      console.error("[Admin] Product Fetch Error:", e);
     }
   }, []);
 
@@ -148,7 +148,7 @@ const AdminApp: React.FC = () => {
       const handleMessage = (event: MessageEvent) => {
         if (event.data?.type === 'NEW_ORDER_DETECTED') {
           const order = event.data.order;
-          addAdminToast(`New Order: ${order.customer_name}`, order.order_id || String(order.id));
+          addAdminToast(`New Order Received: ${order.customer_name}`, order.order_id || String(order.id));
           playNotificationSound();
           refreshOrders(true);
         }
@@ -191,7 +191,7 @@ const AdminApp: React.FC = () => {
       }
       if (updateResult.error) throw updateResult.error;
     } catch (err: any) {
-      console.error("[Update Failed]", err);
+      console.error("[Admin] Status Update Failed:", err);
       delete recentUpdates.current[orderKey];
       refreshOrders(true);
     }
@@ -218,7 +218,7 @@ const AdminApp: React.FC = () => {
         total: Number(o.total_pkr || o.total || 0),
         status: cleanStatus,
         customer: { 
-          name: o.customer_name || 'Customer', 
+          name: o.customer_name || 'Anonymous Customer', 
           email: '', 
           phone: o.customer_phone || '', 
           address: o.customer_address || '', 
@@ -299,7 +299,7 @@ const AdminApp: React.FC = () => {
                   price_pkr: Number(p.price), 
                   image: primaryImage,
                   image_url: primaryImage, 
-                  images: productImages, 
+                  images: productImages, // Supabase handles JSON arrays directly if the column is JSONB
                   category: p.category, 
                   inventory: Number(p.inventory), 
                   variants: Array.isArray(p.variants) ? p.variants : []
@@ -316,7 +316,7 @@ const AdminApp: React.FC = () => {
                 await refreshProducts();
                 return true;
               } catch (e) {
-                console.error("[Admin] Save Product Error:", e);
+                console.error("[Admin] Product Save Failure:", e);
                 return false;
               }
             }}
