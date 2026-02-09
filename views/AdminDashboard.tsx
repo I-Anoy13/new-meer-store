@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { UserRole, Order, Product } from '../types';
+import { UserRole, Order, Product, Variant } from '../types';
 
 const AdminDashboard = (props: any) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -137,6 +137,25 @@ const AdminDashboard = (props: any) => {
       toast.classList.add('opacity-0');
       setTimeout(() => document.body.removeChild(toast), 300);
     }, 2000);
+  };
+
+  const handleAddVariant = () => {
+    const variants = editingProduct.variants || [];
+    setEditingProduct({
+      ...editingProduct,
+      variants: [...variants, { id: `VAR-${Date.now()}`, name: '', price: editingProduct.price, inventory: 0 }]
+    });
+  };
+
+  const handleUpdateVariant = (index: number, field: string, value: any) => {
+    const variants = [...(editingProduct.variants || [])];
+    variants[index] = { ...variants[index], [field]: value };
+    setEditingProduct({ ...editingProduct, variants });
+  };
+
+  const handleRemoveVariant = (index: number) => {
+    const variants = (editingProduct.variants || []).filter((_: any, i: number) => i !== index);
+    setEditingProduct({ ...editingProduct, variants });
   };
 
   if (!props.user) {
@@ -497,7 +516,10 @@ const AdminDashboard = (props: any) => {
                           <span className="text-[9px] font-black italic text-blue-500 whitespace-nowrap">Rs. {(item.product?.price * item.quantity).toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between items-center mt-0.5">
-                          <span className="text-[7px] font-black text-white/30 uppercase tracking-widest">{item.variantName || 'Base'}</span>
+                          <div className="flex flex-col">
+                             <span className="text-[7px] font-black text-white/30 uppercase tracking-widest">{item.variantName || 'Standard Edition'}</span>
+                             {item.variantId && <span className="text-[6px] text-white/20 font-mono">#{item.variantId.slice(-4)}</span>}
+                          </div>
                           <span className="text-[9px] font-black text-white/60">x{item.quantity}</span>
                         </div>
                       </div>
@@ -603,17 +625,68 @@ const AdminDashboard = (props: any) => {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[7px] font-black uppercase text-white/30 ml-2">Price (PKR)</label>
+                    <label className="text-[7px] font-black uppercase text-white/30 ml-2">Base Price (PKR)</label>
                     <input type="number" className="w-full p-4 bg-white/5 rounded-xl font-black outline-none text-[10px] border border-white/5" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: Number(e.target.value)})} />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[7px] font-black uppercase text-white/30 ml-2">Inventory</label>
+                    <label className="text-[7px] font-black uppercase text-white/30 ml-2">Total Inventory</label>
                     <input type="number" className="w-full p-4 bg-white/5 rounded-xl font-black outline-none text-[10px] border border-white/5" value={editingProduct.inventory} onChange={e => setEditingProduct({...editingProduct, inventory: Number(e.target.value)})} />
                   </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-[7px] font-black uppercase text-white/30 ml-2">Manifest</label>
                   <textarea placeholder="Technical specifications..." className="w-full p-4 bg-white/5 rounded-xl font-black outline-none h-28 resize-none text-[10px] border border-white/5" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} />
+                </div>
+
+                {/* VARIANTS MANAGEMENT SECTION */}
+                <div className="space-y-3 pt-4 border-t border-white/5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[8px] font-black uppercase text-blue-500 ml-2 tracking-widest">Manage Variants</label>
+                    <button onClick={handleAddVariant} className="bg-blue-600 px-3 py-1 rounded-lg text-[8px] font-black uppercase text-white shadow-lg shadow-blue-600/20 active:scale-95 transition-transform">+ Add Option</button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {editingProduct.variants?.map((v: Variant, idx: number) => (
+                      <div key={v.id} className="bg-white/5 border border-white/5 p-4 rounded-2xl space-y-3 animate-fadeIn">
+                        <div className="flex justify-between items-center">
+                          <input 
+                            type="text" 
+                            placeholder="Variant Name (e.g. Gold Link)" 
+                            className="bg-transparent border-none font-black text-[10px] outline-none w-full mr-4 text-white placeholder:text-white/10"
+                            value={v.name}
+                            onChange={(e) => handleUpdateVariant(idx, 'name', e.target.value)}
+                          />
+                          <button onClick={() => handleRemoveVariant(idx)} className="text-red-500/40 hover:text-red-500 transition-colors p-2"><i className="fas fa-trash text-[8px]"></i></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[6px] font-black uppercase text-white/20 ml-2">Final Price</label>
+                            <input 
+                              type="number" 
+                              className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] font-black outline-none focus:border-blue-500/30"
+                              value={v.price}
+                              onChange={(e) => handleUpdateVariant(idx, 'price', Number(e.target.value))}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[6px] font-black uppercase text-white/20 ml-2">Stock Level</label>
+                            <input 
+                              type="number" 
+                              className="w-full bg-black/40 border border-white/5 rounded-lg px-3 py-2 text-[9px] font-black outline-none focus:border-blue-500/30"
+                              value={v.inventory || 0}
+                              onChange={(e) => handleUpdateVariant(idx, 'inventory', Number(e.target.value))}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(!editingProduct.variants || editingProduct.variants.length === 0) && (
+                      <div className="py-6 text-center border border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
+                        <p className="text-[8px] font-black uppercase text-white/10 tracking-[0.3em]">No Variants Available</p>
+                        <p className="text-[6px] text-white/5 font-black uppercase mt-1">Add options like size or material for this item</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

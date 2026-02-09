@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Product, Order } from '../types';
+import { Product, Order, Variant } from '../types';
 import { TRUST_BADGES, PLACEHOLDER_IMAGE } from '../constants';
 
 interface ProductDetailProps {
@@ -20,7 +20,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const productImages = product?.images && product.images.length > 0 ? product.images : [product?.image || PLACEHOLDER_IMAGE];
 
   const [activeImageIdx, setActiveImageIdx] = useState(0);
-  const [selectedVariant, setSelectedVariant] = useState(product?.variants?.[0]?.id || '');
+  const [selectedVariantId, setSelectedVariantId] = useState(product?.variants?.[0]?.id || '');
   const [isOrderPortalActive, setIsOrderPortalActive] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<{ id: string } | null>(null);
   const [viewers, setViewers] = useState(25 + Math.floor(Math.random() * 15));
@@ -28,6 +28,13 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
   const [formData, setFormData] = useState({ name: '', phone: '', city: '', address: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Sync variant ID if product changes or variants load
+  useEffect(() => {
+    if (product?.variants && product.variants.length > 0 && !selectedVariantId) {
+        setSelectedVariantId(product.variants[0].id);
+    }
+  }, [product]);
+
   // Flash Sale Timer (1 Hour)
   const [timeLeft, setTimeLeft] = useState(3600); 
 
@@ -53,8 +60,9 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     </div>
   );
 
-  const variantObj = product.variants?.find(v => v.id === selectedVariant);
+  const variantObj = product.variants?.find(v => v.id === selectedVariantId);
   const currentPrice = variantObj?.price || product.price;
+  const currentVariantStock = variantObj?.inventory !== undefined ? variantObj.inventory : product.inventory;
 
   const handleQuickOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,7 +71,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
     const newOrderId = `ORD-${Date.now().toString().slice(-6)}`;
     const newOrder: Order = {
       id: newOrderId,
-      items: [{ product, quantity: 1, variantId: selectedVariant, variantName: variantObj?.name || 'Standard' }],
+      items: [{ product, quantity: 1, variantId: selectedVariantId, variantName: variantObj?.name || 'Standard' }],
       total: currentPrice,
       status: 'Pending',
       customer: { name: formData.name, email: '', phone: formData.phone, address: formData.address, city: formData.city },
@@ -102,6 +110,7 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
                   <img src={product.image} className="w-16 h-16 rounded-2xl object-cover border shadow-sm" />
                   <div>
                     <h3 className="text-xs font-black text-black uppercase">{product.name}</h3>
+                    {variantObj && <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest italic mt-0.5">{variantObj.name}</p>}
                     <p className="text-black font-black text-lg italic mt-1">Rs. {currentPrice.toLocaleString()}</p>
                   </div>
                 </div>
@@ -168,14 +177,39 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
           </div>
           <div className="lg:col-span-5 flex flex-col justify-center">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 italic">{product.category}</p>
-            <h1 className="text-3xl lg:text-4xl font-black leading-none italic uppercase tracking-tighter mb-6">{product.name}</h1>
-            <div className="flex items-center space-x-6 mb-10">
+            <h1 className="text-3xl lg:text-4xl font-black leading-none italic uppercase tracking-tighter mb-4">{product.name}</h1>
+            
+            <div className="flex items-center space-x-6 mb-6">
               <span className="text-3xl font-black italic">Rs. {currentPrice.toLocaleString()}</span>
               <span className="text-[9px] font-black text-green-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-100 uppercase italic">Free Delivery</span>
             </div>
+
+            {/* PRODUCT VARIANTS SELECTOR */}
+            {product.variants && product.variants.length > 0 && (
+              <div className="mb-8">
+                <p className="text-[10px] font-black uppercase text-gray-400 mb-3 italic tracking-widest">Select Configuration</p>
+                <div className="flex flex-wrap gap-3">
+                  {product.variants.map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => setSelectedVariantId(v.id)}
+                      className={`px-4 py-3 rounded-2xl border font-black text-[10px] uppercase tracking-widest transition-all ${
+                        selectedVariantId === v.id
+                          ? 'bg-black text-white border-black shadow-lg scale-95'
+                          : 'bg-white text-black/60 border-gray-100 hover:border-gray-300'
+                      }`}
+                    >
+                      {v.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mb-10 bg-gray-50 p-6 rounded-[2rem] border border-gray-100">
               <p className="text-[10px] font-black text-red-600 mb-4 uppercase italic flex items-center"><i className="fas fa-bolt mr-2"></i> Only {unitsLeft} units remaining</p>
               <div className="w-full h-1 bg-white rounded-full overflow-hidden"><div className="h-full bg-red-600 transition-all duration-1000" style={{ width: `${(unitsLeft / 14) * 100}%` }}></div></div>
+              <p className="text-[8px] font-black uppercase text-gray-300 mt-2 tracking-widest italic">Item ID: {product.id}{selectedVariantId ? `-${selectedVariantId.slice(-4)}` : ''}</p>
             </div>
             
             <div className="mb-8 space-y-4">
@@ -201,7 +235,13 @@ const ProductDetail: React.FC<ProductDetailProps> = ({ products, addToCart, plac
               </div>
             </div>
 
-            <button onClick={() => setIsOrderPortalActive(true)} className="w-full bg-black text-white font-black text-xs uppercase tracking-widest py-6 rounded-2xl shadow-2xl active:scale-[0.98] transition-all italic">Order Now — Cash On Delivery</button>
+            <button 
+                onClick={() => setIsOrderPortalActive(true)} 
+                className="w-full bg-black text-white font-black text-xs uppercase tracking-widest py-6 rounded-2xl shadow-2xl active:scale-[0.98] transition-all italic"
+            >
+                Order {variantObj?.name || 'Now'} — Cash On Delivery
+            </button>
+
             <div className="mt-12 space-y-8">
                <div className="border-l-2 border-black pl-6">
                  <h3 className="text-[10px] font-black uppercase text-gray-400 mb-3 italic">Item Specification</h3>

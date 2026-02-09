@@ -18,6 +18,7 @@ export interface Variant {
   id: string;
   name: string;
   price: number;
+  inventory?: number;
 }
 
 export interface Review {
