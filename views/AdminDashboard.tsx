@@ -136,7 +136,28 @@ const AdminDashboard = (props: any) => {
   };
 
   const handleMediaClick = () => {
-    fileInputRef.current?.click();
+    if (fileInputRef.current && !isUploading) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleAddVariant = () => {
+    const variants = editingProduct.variants || [];
+    setEditingProduct({
+      ...editingProduct,
+      variants: [...variants, { id: `VAR-${Date.now()}`, name: '', price: editingProduct.price, inventory: 0 }]
+    });
+  };
+
+  const handleUpdateVariant = (index: number, field: string, value: any) => {
+    const variants = [...(editingProduct.variants || [])];
+    variants[index] = { ...variants[index], [field]: value };
+    setEditingProduct({ ...editingProduct, variants });
+  };
+
+  const handleRemoveVariant = (index: number) => {
+    const variants = (editingProduct.variants || []).filter((_: any, i: number) => i !== index);
+    setEditingProduct({ ...editingProduct, variants });
   };
 
   if (!props.user) {
@@ -398,9 +419,14 @@ const AdminDashboard = (props: any) => {
               {props.products.map((p: Product) => (
                 <div key={p.id} className="bg-white/5 border border-white/10 rounded-[2.2rem] overflow-hidden group">
                   <div className="h-40 relative">
-                    <img src={p.image} className="w-full h-full object-cover" />
+                    <img src={p.image || 'https://via.placeholder.com/400'} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                     <div className="absolute bottom-3 left-3 px-3 py-1 bg-black/40 backdrop-blur-md rounded-xl text-[8px] font-black uppercase tracking-widest border border-white/10">STOCK: {p.inventory}</div>
+                    {p.variants && p.variants.length > 0 && (
+                      <div className="absolute top-3 right-3 px-2 py-0.5 bg-blue-600/80 backdrop-blur-md rounded-lg text-[7px] font-black uppercase tracking-widest border border-white/10">
+                        {p.variants.length} VARIANTS
+                      </div>
+                    )}
                   </div>
                   <div className="p-4 space-y-3">
                     <p className="text-[10px] font-black uppercase truncate tracking-tight">{p.name}</p>
@@ -495,7 +521,13 @@ const AdminDashboard = (props: any) => {
             <div className="flex justify-between items-center"><h4 className="text-xl font-black italic uppercase tracking-tighter">{editingProduct.id ? 'Modify Record' : 'Inject Arrival'}</h4><button onClick={() => setEditingProduct(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/5"><i className="fas fa-times text-sm"></i></button></div>
             <div className="space-y-6">
               <div className="flex space-x-4 overflow-x-auto py-2 no-scrollbar">
-                <button type="button" onClick={handleMediaClick} className="w-20 h-20 bg-white/5 border border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center text-white/20 shrink-0 active:scale-95 transition-all hover:bg-white/10">
+                {/* FIXED: Improved clickable area for Add Media */}
+                <button 
+                  type="button" 
+                  onClick={handleMediaClick} 
+                  disabled={isUploading}
+                  className="w-20 h-20 bg-white/5 border border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center text-white/20 shrink-0 active:scale-95 transition-all hover:bg-white/10 disabled:opacity-50"
+                >
                   <i className={`fas ${isUploading ? 'fa-spinner fa-spin' : 'fa-camera'} text-lg mb-1`}></i>
                   <span className="text-[7px] font-black uppercase">Media</span>
                 </button>
@@ -505,15 +537,38 @@ const AdminDashboard = (props: any) => {
                     <button onClick={() => setEditingProduct({...editingProduct, images: editingProduct.images.filter((_:any,idx:number)=>idx!==i)})} className="absolute inset-0 bg-red-600/80 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"><i className="fas fa-trash text-sm"></i></button>
                   </div>
                 ))}
-                <input type="file" multiple ref={fileInputRef} className="hidden" accept="image/*" onChange={async (e) => {
-                  const files = e.target.files; if(!files || files.length === 0) return;
-                  setIsUploading(true);
-                  const uploadResults = [];
-                  for(let i=0; i<files.length; i++) { const url = await props.uploadMedia(files[i]); if(url) uploadResults.push(url); }
-                  if (uploadResults.length > 0) setEditingProduct({ ...editingProduct, images: [...(editingProduct.images || []), ...uploadResults], image: editingProduct.image || uploadResults[0] });
-                  setIsUploading(false);
-                  if (e.target) e.target.value = '';
-                }} />
+                {/* HIDDEN FILE INPUT */}
+                <input 
+                  type="file" 
+                  multiple 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*" 
+                  onChange={async (e) => {
+                    const files = e.target.files; 
+                    if(!files || files.length === 0) return;
+                    setIsUploading(true);
+                    
+                    const uploadResults = [];
+                    for(let i=0; i<files.length; i++) { 
+                      const url = await props.uploadMedia(files[i]); 
+                      if(url) uploadResults.push(url); 
+                    }
+                    
+                    if (uploadResults.length > 0) {
+                      const updatedImages = [...(editingProduct.images || []), ...uploadResults];
+                      setEditingProduct({ 
+                        ...editingProduct, 
+                        images: updatedImages, 
+                        // Automatically set main image if current is empty or not present
+                        image: editingProduct.image || uploadResults[0] 
+                      });
+                    }
+                    
+                    setIsUploading(false);
+                    if (e.target) e.target.value = '';
+                  }} 
+                />
               </div>
               <div className="space-y-4 pb-20">
                 <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Subject Name</label><input type="text" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} /></div>
@@ -522,7 +577,62 @@ const AdminDashboard = (props: any) => {
                   <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Stock Limit</label><input type="number" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.inventory} onChange={e => setEditingProduct({...editingProduct, inventory: Number(e.target.value)})} /></div>
                 </div>
                 <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Manifest Log</label><textarea className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none h-32 resize-none text-[12px] border border-white/5" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} /></div>
-                <div className="flex gap-4 pt-4"><button onClick={() => setEditingProduct(null)} className="flex-grow py-5 rounded-2xl font-black uppercase text-[10px] text-white/40 border border-white/10">Abort</button><button onClick={async () => { if(await props.saveProduct(editingProduct)) setEditingProduct(null); }} className="flex-grow py-5 bg-blue-600 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-600/30">Commit Changes</button></div>
+                
+                {/* VARIANTS SECTION */}
+                <div className="space-y-4 border-t border-white/10 pt-6">
+                  <div className="flex justify-between items-center">
+                    <h5 className="text-[10px] font-black uppercase tracking-widest italic text-blue-500">Variants & Configurations</h5>
+                    <button 
+                      type="button" 
+                      onClick={handleAddVariant} 
+                      className="bg-blue-600 px-4 py-1.5 rounded-xl text-[8px] font-black uppercase text-white shadow-lg active:scale-95 transition-all"
+                    >
+                      + Add Option
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    {(editingProduct.variants || []).map((v: Variant, idx: number) => (
+                      <div key={v.id || idx} className="bg-white/5 p-4 rounded-[1.5rem] border border-white/5 space-y-3 animate-fadeIn">
+                        <div className="flex justify-between items-center">
+                          <input 
+                            type="text" 
+                            placeholder="Variant Name (e.g. Gold link)" 
+                            className="bg-transparent font-black text-[10px] outline-none w-full mr-4 text-white placeholder:text-white/20"
+                            value={v.name}
+                            onChange={(e) => handleUpdateVariant(idx, 'name', e.target.value)}
+                          />
+                          <button onClick={() => handleRemoveVariant(idx)} className="text-red-500 hover:scale-110 transition-transform"><i className="fas fa-trash text-[10px]"></i></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[7px] font-black uppercase text-white/20">Price Offset</label>
+                            <input 
+                              type="number" 
+                              className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-[10px] font-black outline-none"
+                              value={v.price}
+                              onChange={(e) => handleUpdateVariant(idx, 'price', Number(e.target.value))}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[7px] font-black uppercase text-white/20">Specific Inventory</label>
+                            <input 
+                              type="number" 
+                              className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-[10px] font-black outline-none"
+                              value={v.inventory || 0}
+                              onChange={(e) => handleUpdateVariant(idx, 'inventory', Number(e.target.value))}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-4 pt-10 pb-20">
+                  <button onClick={() => setEditingProduct(null)} className="flex-grow py-5 rounded-2xl font-black uppercase text-[10px] text-white/40 border border-white/10">Abort</button>
+                  <button onClick={async () => { if(await props.saveProduct(editingProduct)) setEditingProduct(null); }} className="flex-grow py-5 bg-blue-600 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-600/30">Commit Changes</button>
+                </div>
               </div>
             </div>
           </div>

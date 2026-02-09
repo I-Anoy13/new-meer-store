@@ -121,7 +121,9 @@ const AdminApp: React.FC = () => {
           variants: Array.isArray(p.variants) ? p.variants : []
         })));
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Admin App] Fetch Products Error:", e);
+    }
   }, []);
 
   const initData = useCallback(async () => {
@@ -135,7 +137,6 @@ const AdminApp: React.FC = () => {
         if (event.data?.type === 'NEW_ORDER_DETECTED') {
           console.log('[Realtime] Instant order pulse received');
           const order = event.data.order;
-          // Optimistically show toast and play sound immediately before re-fetch finishes
           addAdminToast(`New Order: ${order.customer_name}`, order.order_id || String(order.id));
           playNotificationSound();
           refreshOrders(true);
@@ -273,33 +274,59 @@ const AdminApp: React.FC = () => {
             uploadMedia={async (file: File) => {
               try {
                 const name = `prod-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-                const { data, error } = await adminSupabase.storage.from('products').upload(name, file);
-                if (error) throw error;
+                const { data, error } = await adminSupabase.storage.from('products').upload(name, file, {
+                  cacheControl: '3600',
+                  upsert: true
+                });
+                
+                if (error) {
+                  console.error("[Supabase Storage] Upload Error:", error);
+                  return null;
+                }
+                
                 const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
                 return publicUrl;
               } catch (e) { 
-                console.error("Upload error", e);
+                console.error("[Upload] Media upload exception:", e);
                 return null; 
               }
             }}
             saveProduct={async (p: any) => {
-              const payload = { 
-                name: p.name, 
-                description: p.description, 
-                price_pkr: Number(p.price), 
-                image: p.image || (p.images && p.images[0]) || '', 
-                images: p.images || [], 
-                category: p.category, 
-                inventory: Number(p.inventory), 
-                variants: p.variants 
-              };
-              const { error } = p.id ? await adminSupabase.from('products').update(payload).eq('id', p.id) : await adminSupabase.from('products').insert([payload]);
-              if (!error) refreshProducts();
-              return !error;
+              try {
+                const payload = { 
+                  name: p.name, 
+                  description: p.description, 
+                  price_pkr: Number(p.price), 
+                  image: p.image || (p.images && p.images[0]) || '', 
+                  images: Array.isArray(p.images) ? p.images : [], 
+                  category: p.category, 
+                  inventory: Number(p.inventory), 
+                  variants: Array.isArray(p.variants) ? p.variants : []
+                };
+
+                let response;
+                if (p.id) {
+                  response = await adminSupabase.from('products').update(payload).eq('id', p.id);
+                } else {
+                  response = await adminSupabase.from('products').insert([payload]);
+                }
+
+                if (response.error) {
+                  console.error("[Admin App] Save Product Error:", response.error);
+                  return false;
+                }
+
+                await refreshProducts();
+                return true;
+              } catch (e) {
+                console.error("[Admin App] Save Product Exception:", e);
+                return false;
+              }
             }}
             deleteProduct={async (id: string) => {
               const { error } = await adminSupabase.from('products').delete().eq('id', id);
               if (!error) refreshProducts();
+              else console.error("[Admin App] Delete Product Error:", error);
             }}
           />
         } />
