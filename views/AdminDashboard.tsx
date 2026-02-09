@@ -9,8 +9,10 @@ const AdminDashboard = (props: any) => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const soundInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   // Search and Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,10 +99,29 @@ const AdminDashboard = (props: any) => {
     );
   };
 
-  const handleMediaClick = () => {
+  const handleMediaClick = (e: React.MouseEvent) => {
+    e.preventDefault();
     if (fileInputRef.current && !isUploading) {
       fileInputRef.current.click();
     }
+  };
+
+  const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Sound file must be under 2MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      props.setCustomSound(base64);
+      alert("Custom notification sound updated.");
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleAddVariant = () => {
@@ -120,6 +141,23 @@ const AdminDashboard = (props: any) => {
   const handleRemoveVariant = (index: number) => {
     const variants = (editingProduct.variants || []).filter((_: any, i: number) => i !== index);
     setEditingProduct({ ...editingProduct, variants });
+  };
+
+  const handleSaveProduct = async () => {
+    if (!editingProduct.name || !editingProduct.price) {
+      alert("Please enter at least a name and price.");
+      return;
+    }
+    
+    setIsSavingProduct(true);
+    const success = await props.saveProduct(editingProduct);
+    setIsSavingProduct(false);
+    
+    if (success) {
+      setEditingProduct(null);
+    } else {
+      alert("Could not save product. Please try again.");
+    }
   };
 
   if (!props.user) {
@@ -157,10 +195,10 @@ const AdminDashboard = (props: any) => {
 
   return (
     <div className="min-h-screen bg-[#050505] text-white pb-32 animate-fadeIn selection:bg-blue-500/30">
-      {/* GLOBAL NOTIFICATIONS */}
+      {/* GLOBAL NOTIFICATIONS TOASTS */}
       <div className="fixed top-24 left-0 right-0 z-[500] px-6 pointer-events-none flex flex-col items-center space-y-3">
         {props.toasts?.map((toast: any) => (
-          <div key={toast.id} className="pointer-events-auto bg-blue-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-4 animate-slideInTop border border-white/10 max-w-md w-full">
+          <div key={toast.id} className="pointer-events-auto bg-blue-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center space-x-4 animate-slideInTop border border-white/10 max-w-md w-full ring-4 ring-blue-500/30">
             <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0">
               <i className="fas fa-shopping-cart text-xs"></i>
             </div>
@@ -190,21 +228,24 @@ const AdminDashboard = (props: any) => {
       </header>
 
       <main className="px-4 py-6 md:px-6">
-        {/* DASHBOARD TAB - ANALYTICS */}
+        {/* PERFORMANCE TAB (DASHBOARD) */}
         {activeTab === 'analytics' && (
           <div className="space-y-6">
             <section className="flex flex-col md:flex-row md:justify-between md:items-center space-y-4 md:space-y-0 px-2">
-              <div className="flex items-center space-x-4">
+              <div className="flex flex-col space-y-1">
+                <h3 className="text-sm font-black italic uppercase tracking-tighter">Store Performance</h3>
                 <div className="flex items-center space-x-2">
-                    <h3 className="text-sm font-black italic uppercase tracking-tighter">Store Performance</h3>
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ring-4 ring-emerald-500/20"></div>
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ring-4 ring-emerald-500/20"></div>
+                  <span className="text-[8px] font-black uppercase text-white/40 tracking-widest">Real-time Sentinel Active</span>
                 </div>
+              </div>
+              <div className="flex items-center space-x-2">
                 <button 
                   onClick={props.audioEnabled ? props.disableAudio : props.enableAudio} 
-                  className={`flex items-center space-x-1.5 px-3 py-1 border rounded-full transition-all ${props.audioEnabled ? 'bg-blue-600/10 border-blue-500/20 text-blue-500' : 'bg-white/5 border-white/10 text-white/20'}`}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 border rounded-full transition-all ${props.audioEnabled ? 'bg-blue-600/10 border-blue-500/20 text-blue-500' : 'bg-white/5 border-white/10 text-white/20'}`}
                 >
                     <i className={`fas ${props.audioEnabled ? 'fa-volume-up' : 'fa-volume-mute'} text-[8px]`}></i>
-                    <span className="text-[7px] font-black uppercase tracking-widest">{props.audioEnabled ? 'Alerts Active' : 'Silent Mode'}</span>
+                    <span className="text-[7px] font-black uppercase tracking-widest">{props.audioEnabled ? 'Alerts On' : 'Silent'}</span>
                 </button>
               </div>
             </section>
@@ -213,7 +254,7 @@ const AdminDashboard = (props: any) => {
             <section>
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-white/5 border border-white/10 p-5 rounded-3xl">
-                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Gross Revenue</p>
+                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Total Sales</p>
                   <p className="text-sm font-black italic">Rs.{formatCompactNumber(analytics.revenue)}</p>
                 </div>
                 <div className="bg-white/5 border border-white/10 p-5 rounded-3xl">
@@ -227,9 +268,9 @@ const AdminDashboard = (props: any) => {
               </div>
             </section>
 
-            {/* SALES TREND CHART */}
+            {/* CHART */}
             <section className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem]">
-              <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em] mb-8">Sales Trends</p>
+              <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em] mb-8">Sales Velocity</p>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={analytics.trendData}>
@@ -243,10 +284,53 @@ const AdminDashboard = (props: any) => {
               </div>
             </section>
 
+            {/* NOTIFICATION SOUND SETTINGS */}
+            <section className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] space-y-6">
+              <div className="flex justify-between items-center">
+                 <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">Notification Settings</p>
+                 <i className="fas fa-bell text-blue-500/50 text-[10px]"></i>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-center justify-between bg-black/40 p-4 rounded-2xl border border-white/5">
+                   <div>
+                     <p className="text-[9px] font-black uppercase tracking-widest text-white/80">Alert Sound</p>
+                     <p className="text-[7px] font-black uppercase text-white/20 mt-1">{props.customSound ? 'Custom File Active' : 'Default Professional'}</p>
+                   </div>
+                   <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={() => props.playTestSound()} 
+                        className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center hover:bg-white/10 transition-colors"
+                        title="Test Current Sound"
+                      >
+                         <i className="fas fa-play text-[10px]"></i>
+                      </button>
+                      <button 
+                        onClick={() => soundInputRef.current?.click()} 
+                        className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-500 transition-colors"
+                        title="Upload New Sound"
+                      >
+                         <i className="fas fa-upload text-[10px]"></i>
+                      </button>
+                      {props.customSound && (
+                        <button 
+                          onClick={() => props.setCustomSound(null)} 
+                          className="w-10 h-10 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-500/20 transition-colors"
+                          title="Reset to Default"
+                        >
+                           <i className="fas fa-trash text-[10px]"></i>
+                        </button>
+                      )}
+                      <input type="file" ref={soundInputRef} className="hidden" accept="audio/*" onChange={handleSoundUpload} />
+                   </div>
+                </div>
+              </div>
+            </section>
+
             <section>
               <div className="flex justify-between items-center mb-4 px-2">
                 <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.3em]">Recent Transactions</p>
-                <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">View Full History</button>
+                <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">Order History</button>
               </div>
               <div className="space-y-3">
                 {props.orders.slice(0, 5).map((o: Order) => (
@@ -266,15 +350,15 @@ const AdminDashboard = (props: any) => {
           </div>
         )}
 
-        {/* ORDERS TAB */}
+        {/* ORDERS TAB (LOGISTICS) */}
         {activeTab === 'orders' && (
           <div className="space-y-4 animate-fadeIn">
             <div className="flex justify-between items-center px-2 mb-6">
-              <h3 className="text-xl font-black italic uppercase tracking-tighter">Order History</h3>
+              <h3 className="text-xl font-black italic uppercase tracking-tighter">Order Management</h3>
               <div className="relative w-48">
                  <input 
                     type="text" 
-                    placeholder="Search orders..." 
+                    placeholder="Filter by ID or Name..." 
                     className="w-full bg-white/5 border border-white/10 rounded-xl pl-8 pr-4 py-2 text-[10px] outline-none"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -288,13 +372,13 @@ const AdminDashboard = (props: any) => {
                 <div key={o.id} onClick={() => setSelectedOrder(o)} className="bg-white/5 border border-white/10 p-6 rounded-[2rem] space-y-5 active:scale-[0.98] transition-transform">
                   <div className="flex justify-between items-start">
                     <div className="min-w-0 pr-4">
-                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1.5">Record ID: {o.id}</p>
+                      <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1.5">ID: {o.id}</p>
                       <p className="text-sm font-black uppercase truncate">{o.customer.name}</p>
                     </div>
                     <StatusBadge status={o.status} />
                   </div>
                   <div className="flex justify-between items-end pt-5 border-t border-white/5">
-                    <div><p className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-1">Customer Location</p><p className="text-[10px] font-black uppercase text-white/50">{o.customer.city || 'Standard Area'}</p></div>
+                    <div><p className="text-[8px] font-black text-white/20 uppercase tracking-widest mb-1">Shipping Destination</p><p className="text-[10px] font-black uppercase text-white/50">{o.customer.city || 'Standard Area'}</p></div>
                     <p className="text-sm font-black italic text-white">Rs. {o.total.toLocaleString()}</p>
                   </div>
                 </div>
@@ -302,18 +386,18 @@ const AdminDashboard = (props: any) => {
             ) : (
               <div className="py-24 text-center">
                 <i className="fas fa-search text-white/5 text-5xl mb-6"></i>
-                <p className="text-[11px] font-black text-white/20 uppercase tracking-[0.4em]">Zero Search Results</p>
+                <p className="text-[11px] font-black text-white/20 uppercase tracking-[0.4em]">Zero search matches</p>
               </div>
             )}
           </div>
         )}
 
-        {/* PRODUCTS TAB */}
+        {/* INVENTORY TAB (PRODUCTS) */}
         {activeTab === 'products' && (
           <div className="space-y-6 animate-fadeIn">
             <div className="flex justify-between items-center px-2">
-              <h3 className="text-xl font-black italic uppercase tracking-tighter">Product Catalog</h3>
-              <button onClick={() => setEditingProduct({ name: '', description: '', price: 0, image: '', images: [], category: 'Luxury', inventory: 10, variants: [] })} className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-600/30 active:scale-95 transition-all">
+              <h3 className="text-xl font-black italic uppercase tracking-tighter">Product Inventory</h3>
+              <button onClick={() => setEditingProduct({ name: '', description: '', price: 0, image: '', images: [], category: 'Luxury Artisan', inventory: 10, variants: [] })} className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-600/30 active:scale-95 transition-all">
                 <i className="fas fa-plus text-sm"></i>
               </button>
             </div>
@@ -325,7 +409,7 @@ const AdminDashboard = (props: any) => {
                     <img src={p.image || 'https://via.placeholder.com/400'} className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                     <div className={`absolute bottom-3 left-3 px-3 py-1 backdrop-blur-md rounded-xl text-[8px] font-black uppercase tracking-widest border border-white/10 ${p.inventory <= 0 ? 'bg-red-600 text-white' : 'bg-black/40 text-white/80'}`}>
-                        {p.inventory <= 0 ? 'Out of Stock' : `Inventory: ${p.inventory}`}
+                        {p.inventory <= 0 ? 'Out of Stock' : `Stock: ${p.inventory}`}
                     </div>
                   </div>
                   <div className="p-4 space-y-3">
@@ -366,42 +450,42 @@ const AdminDashboard = (props: any) => {
             <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-2"></div>
             <div className="flex justify-between items-start">
                <div className="min-w-0 pr-8">
-                  <h4 className="text-2xl font-black italic uppercase tracking-tighter">Order Summary</h4>
-                  <p className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] mt-1 truncate">Transaction ID: #{selectedOrder.id}</p>
+                  <h4 className="text-2xl font-black italic uppercase tracking-tighter">Order Details</h4>
+                  <p className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] mt-1 truncate">ID: #{selectedOrder.id}</p>
                </div>
                <button onClick={() => setSelectedOrder(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/10 shrink-0"><i className="fas fa-times text-sm"></i></button>
             </div>
             <div className="space-y-6">
               <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-5">
-                <div className="flex justify-between items-center mb-2"><p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Customer Information</p><StatusBadge status={selectedOrder.status} /></div>
-                {[{ label: 'Full Name', value: selectedOrder.customer.name }, { label: 'Contact Number', value: selectedOrder.customer.phone, isPhone: true }, { label: 'Shipping City', value: selectedOrder.customer.city || 'N/A' }].map((field, idx) => (
+                <div className="flex justify-between items-center mb-2"><p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Customer Profile</p><StatusBadge status={selectedOrder.status} /></div>
+                {[{ label: 'Consignee', value: selectedOrder.customer.name }, { label: 'Phone', value: selectedOrder.customer.phone, isPhone: true }, { label: 'Station', value: selectedOrder.customer.city || 'N/A' }].map((field, idx) => (
                   <div key={idx} className="flex justify-between items-center">
                     <div className="flex flex-col min-w-0 pr-4"><span className="text-[9px] font-black uppercase text-white/20">{field.label}</span>{field.isPhone ? <a href={`tel:${field.value}`} className="text-sm font-black text-blue-500 underline truncate">{field.value}</a> : <span className="text-sm font-black truncate">{field.value}</span>}</div>
                     <button onClick={() => { navigator.clipboard.writeText(field.value); }} className="w-8 h-8 bg-blue-600/20 text-blue-500 rounded-xl flex items-center justify-center shrink-0 border border-blue-500/10 active:bg-blue-600 active:text-white transition-all"><i className="fas fa-copy text-[10px]"></i></button>
                   </div>
                 ))}
                 <div className="pt-5 border-t border-white/5">
-                  <span className="text-[8px] font-black uppercase text-white/20 block mb-1.5">Shipping Address Details</span>
+                  <span className="text-[8px] font-black uppercase text-white/20 block mb-1.5">Shipping Address</span>
                   <p className="text-xs font-medium leading-relaxed text-white/80">{selectedOrder.customer.address}</p>
                 </div>
               </div>
               <div className="bg-white/5 p-6 rounded-[2.5rem] border border-white/10 space-y-5">
-                <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Items Manifest</p>
+                <p className="text-[8px] font-black text-white/30 uppercase tracking-[0.2em]">Manifest Items</p>
                 <div className="space-y-4">
                   {selectedOrder.items.map((item: any, i: number) => (
                     <div key={i} className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-white/5 rounded-2xl overflow-hidden border border-white/10 shrink-0"><img src={item.product?.image} className="w-full h-full object-cover" /></div>
                       <div className="flex-grow min-w-0">
                         <div className="flex justify-between items-start"><span className="text-[10px] font-black uppercase truncate pr-2">{item.product?.name}</span><span className="text-[10px] font-black italic text-blue-500">Rs. {(item.product?.price * item.quantity).toLocaleString()}</span></div>
-                        <div className="flex justify-between items-center mt-1"><span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{item.variantName || 'Standard Edition'}</span><span className="text-[10px] font-black text-white/60">Qty: {item.quantity}</span></div>
+                        <div className="flex justify-between items-center mt-1"><span className="text-[8px] font-black text-white/30 uppercase tracking-widest">{item.variantName || 'Standard'}</span><span className="text-[10px] font-black text-white/60">x{item.quantity}</span></div>
                       </div>
                     </div>
                   ))}
-                  <div className="pt-5 mt-2 border-t border-white/5 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-blue-400">Grand Total</span><span className="text-xl font-black italic">Rs. {selectedOrder.total.toLocaleString()}</span></div>
+                  <div className="pt-5 mt-2 border-t border-white/5 flex justify-between items-center"><span className="text-[10px] font-black uppercase text-blue-400">Total Settlement</span><span className="text-xl font-black italic">Rs. {selectedOrder.total.toLocaleString()}</span></div>
                 </div>
               </div>
               <div className="space-y-3">
-                <p className="text-[9px] font-black text-center uppercase text-white/20 tracking-[0.3em]">Update Order Status</p>
+                <p className="text-[9px] font-black text-center uppercase text-white/20 tracking-[0.3em]">Update Status</p>
                 <div className="grid grid-cols-2 gap-2 pb-10">
                   {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
                     <button key={s} disabled={isUpdatingStatus} onClick={async () => { setIsUpdatingStatus(true); await props.updateStatus(selectedOrder.id, s, selectedOrder.dbId); setIsUpdatingStatus(false); }} className={`py-4 rounded-2xl font-black uppercase text-[9px] tracking-widest transition-all border ${selectedOrder.status === s ? 'bg-blue-600 text-white border-blue-500' : 'bg-white/5 text-white/30 border-white/5'}`}>{s}</button>
@@ -418,10 +502,9 @@ const AdminDashboard = (props: any) => {
         <div className="fixed inset-0 bg-black/95 backdrop-blur-2xl z-[600] flex flex-col justify-end animate-fadeIn">
           <div className="absolute inset-0" onClick={() => setEditingProduct(null)}></div>
           <div className="bg-[#0a0a0a] w-full rounded-t-[3rem] p-8 space-y-8 relative animate-slideInTop overflow-y-auto max-h-[95vh] border-t border-white/10 custom-scrollbar">
-            <div className="flex justify-between items-center"><h4 className="text-xl font-black italic uppercase tracking-tighter">{editingProduct.id ? 'Edit Product Details' : 'Add New Product'}</h4><button onClick={() => setEditingProduct(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/5 shrink-0"><i className="fas fa-times text-sm"></i></button></div>
+            <div className="flex justify-between items-center"><h4 className="text-xl font-black italic uppercase tracking-tighter">{editingProduct.id ? 'Edit Product' : 'New Product'}</h4><button onClick={() => setEditingProduct(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/5 shrink-0"><i className="fas fa-times text-sm"></i></button></div>
             <div className="space-y-6">
               <div className="flex space-x-4 overflow-x-auto py-2 no-scrollbar">
-                {/* Product Image Gallery Management */}
                 <button 
                   type="button" 
                   onClick={handleMediaClick} 
@@ -437,7 +520,6 @@ const AdminDashboard = (props: any) => {
                     <button onClick={() => setEditingProduct({...editingProduct, images: editingProduct.images.filter((_:any,idx:number)=>idx!==i)})} className="absolute inset-0 bg-red-600/80 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"><i className="fas fa-trash text-sm"></i></button>
                   </div>
                 ))}
-                {/* Hidden File Input supporting multiple files */}
                 <input 
                   type="file" 
                   multiple 
@@ -474,14 +556,13 @@ const AdminDashboard = (props: any) => {
                 <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Product Title</label><input type="text" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} /></div>
                 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Base Retail Price (PKR)</label><input type="number" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: Number(e.target.value)})} /></div>
-                  <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Inventory Level</label><input type="number" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.inventory} onChange={e => setEditingProduct({...editingProduct, inventory: Number(e.target.value)})} /></div>
+                  <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Price (PKR)</label><input type="number" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: Number(e.target.value)})} /></div>
+                  <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Stock Units</label><input type="number" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.inventory} onChange={e => setEditingProduct({...editingProduct, inventory: Number(e.target.value)})} /></div>
                 </div>
                 
-                <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Collection Category</label><input type="text" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.category} onChange={e => setEditingProduct({...editingProduct, category: e.target.value})} /></div>
-                <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Product Description</label><textarea className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none h-32 resize-none text-[12px] border border-white/5" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} /></div>
+                <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Category</label><input type="text" className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none text-[12px] border border-white/5" value={editingProduct.category} onChange={e => setEditingProduct({...editingProduct, category: e.target.value})} /></div>
+                <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Description</label><textarea className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none h-32 resize-none text-[12px] border border-white/5" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} /></div>
                 
-                {/* Variant Configuration Management */}
                 <div className="space-y-4 border-t border-white/10 pt-6">
                   <div className="flex justify-between items-center">
                     <h5 className="text-[10px] font-black uppercase tracking-widest italic text-blue-500">Variants & Options</h5>
@@ -503,11 +584,11 @@ const AdminDashboard = (props: any) => {
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="text-[7px] font-black uppercase text-white/20">Retail Price (PKR)</label>
+                            <label className="text-[7px] font-black uppercase text-white/20">Price (PKR)</label>
                             <input type="number" className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-[10px] font-black outline-none" value={v.price} onChange={(e) => handleUpdateVariant(idx, 'price', Number(e.target.value))} />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-[7px] font-black uppercase text-white/20">Variant Stock</label>
+                            <label className="text-[7px] font-black uppercase text-white/20">Stock</label>
                             <input type="number" className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-[10px] font-black outline-none" value={v.inventory || 0} onChange={(e) => handleUpdateVariant(idx, 'inventory', Number(e.target.value))} />
                           </div>
                         </div>
@@ -518,7 +599,13 @@ const AdminDashboard = (props: any) => {
 
                 <div className="flex gap-4 pt-10 pb-20">
                   <button onClick={() => setEditingProduct(null)} className="flex-grow py-5 rounded-2xl font-black uppercase text-[10px] text-white/40 border border-white/10 active:bg-white/5 transition-colors">Discard</button>
-                  <button onClick={async () => { if(await props.saveProduct(editingProduct)) setEditingProduct(null); }} className="flex-grow py-5 bg-blue-600 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-600/30 active:scale-95 transition-all">Publish Product</button>
+                  <button 
+                    onClick={handleSaveProduct} 
+                    disabled={isSavingProduct}
+                    className="flex-grow py-5 bg-blue-600 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-blue-600/30 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {isSavingProduct ? <i className="fas fa-spinner fa-spin mr-2"></i> : 'Publish Product'}
+                  </button>
                 </div>
               </div>
             </div>

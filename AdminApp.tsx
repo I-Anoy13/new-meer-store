@@ -18,6 +18,8 @@ interface AdminToast {
   orderId?: string;
 }
 
+const DEFAULT_ALERT_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
+
 const AdminApp: React.FC = () => {
   const recentUpdates = useRef<Record<string, { status: string, time: number }>>({});
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
@@ -34,6 +36,10 @@ const AdminApp: React.FC = () => {
     return localStorage.getItem('itx_admin_audio_enabled') === 'true';
   });
   
+  const [customSound, setCustomSound] = useState<string | null>(() => {
+    return localStorage.getItem('itx_admin_custom_sound');
+  });
+  
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('itx_user_session');
@@ -44,19 +50,21 @@ const AdminApp: React.FC = () => {
   const playNotificationSound = useCallback(() => {
     if (!audioEnabled) return;
     try {
-      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      audio.play().catch(e => console.warn('[Audio] Feedback play blocked'));
+      // Use custom sound if available, otherwise default
+      const soundSrc = customSound || DEFAULT_ALERT_URL;
+      const audio = new Audio(soundSrc);
+      audio.play().catch(e => console.warn('[Admin] Audio playback blocked by browser policies. Interaction required.'));
     } catch (e) {
-      console.error('[Audio] Alert failed', e);
+      console.error('[Admin] Sound playback error:', e);
     }
-  }, [audioEnabled]);
+  }, [audioEnabled, customSound]);
 
   const addAdminToast = useCallback((message: string, orderId?: string) => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, orderId }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 8000);
+    }, 10000); // Extended toast duration for better visibility
   }, []);
 
   const syncToStorage = useCallback((data: any[]) => {
@@ -69,17 +77,17 @@ const AdminApp: React.FC = () => {
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(5000); 
+        .limit(1000); 
       
       if (!error && data) {
-        if (rawOrders.length > 0) {
+        if (!isSilent && rawOrders.length > 0) {
           const currentIds = new Set(rawOrders.map(o => String(o.order_id || o.id)));
           const newOrders = data.filter(o => !currentIds.has(String(o.order_id || o.id)));
           
           if (newOrders.length > 0) {
             playNotificationSound();
             newOrders.forEach(o => {
-              addAdminToast(`New order placed by ${o.customer_name}`, o.order_id || String(o.id));
+              addAdminToast(`New Order from ${o.customer_name}`, o.order_id || String(o.id));
             });
           }
         }
@@ -97,7 +105,7 @@ const AdminApp: React.FC = () => {
         syncToStorage(mergedData);
       }
     } catch (e) {
-      console.error("[Admin] Order Sync Failed:", e);
+      console.error("[Admin] Sync Failure:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -120,12 +128,12 @@ const AdminApp: React.FC = () => {
 
           return {
             id: String(p.id),
-            name: p.name || 'Untitled Product',
+            name: p.name || 'Product',
             description: p.description || '',
-            price: Number(p.price_pkr || p.price || 0),
+            price: Number(p.price || p.price_pkr || 0),
             image: p.image || p.image_url || parsedImages[0] || '',
             images: parsedImages.length > 0 ? parsedImages : (p.image ? [p.image] : []),
-            category: p.category || 'General',
+            category: p.category || 'Luxury',
             inventory: Number(p.inventory || 0),
             rating: Number(p.rating || 5),
             reviews: [],
@@ -134,7 +142,7 @@ const AdminApp: React.FC = () => {
         }));
       }
     } catch (e) {
-      console.error("[Admin] Product Fetch Error:", e);
+      console.error("[Admin] Product Refresh Error:", e);
     }
   }, []);
 
@@ -148,7 +156,8 @@ const AdminApp: React.FC = () => {
       const handleMessage = (event: MessageEvent) => {
         if (event.data?.type === 'NEW_ORDER_DETECTED') {
           const order = event.data.order;
-          addAdminToast(`New Order Received: ${order.customer_name}`, order.order_id || String(order.id));
+          console.log('[Realtime] Instant order detected:', order.id);
+          addAdminToast(`New Order from ${order.customer_name}`, order.order_id || String(order.id));
           playNotificationSound();
           refreshOrders(true);
         }
@@ -191,7 +200,7 @@ const AdminApp: React.FC = () => {
       }
       if (updateResult.error) throw updateResult.error;
     } catch (err: any) {
-      console.error("[Admin] Status Update Failed:", err);
+      console.error("[Admin] Update failed:", err);
       delete recentUpdates.current[orderKey];
       refreshOrders(true);
     }
@@ -218,7 +227,7 @@ const AdminApp: React.FC = () => {
         total: Number(o.total_pkr || o.total || 0),
         status: cleanStatus,
         customer: { 
-          name: o.customer_name || 'Anonymous Customer', 
+          name: o.customer_name || 'Customer', 
           email: '', 
           phone: o.customer_phone || '', 
           address: o.customer_address || '', 
@@ -233,7 +242,7 @@ const AdminApp: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
       <div className="flex flex-col items-center space-y-4">
         <div className="w-8 h-8 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin"></div>
-        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em]">Loading Store Admin...</p>
+        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em]">Syncing Store Data...</p>
       </div>
     </div>
   );
@@ -248,6 +257,13 @@ const AdminApp: React.FC = () => {
             user={user}
             toasts={toasts}
             audioEnabled={audioEnabled}
+            customSound={customSound}
+            setCustomSound={(base64: string | null) => {
+              setCustomSound(base64);
+              if (base64) localStorage.setItem('itx_admin_custom_sound', base64);
+              else localStorage.removeItem('itx_admin_custom_sound');
+            }}
+            playTestSound={() => playNotificationSound()}
             enableAudio={() => {
                 setAudioEnabled(true);
                 localStorage.setItem('itx_admin_audio_enabled', 'true');
@@ -296,17 +312,19 @@ const AdminApp: React.FC = () => {
                 const payload = { 
                   name: p.name, 
                   description: p.description, 
+                  price: Number(p.price),
                   price_pkr: Number(p.price), 
                   image: primaryImage,
                   image_url: primaryImage, 
-                  images: productImages, // Supabase handles JSON arrays directly if the column is JSONB
+                  images: productImages, 
                   category: p.category, 
                   inventory: Number(p.inventory), 
-                  variants: Array.isArray(p.variants) ? p.variants : []
+                  variants: Array.isArray(p.variants) ? p.variants : [],
+                  updated_at: new Date().toISOString()
                 };
 
                 let result;
-                if (p.id) {
+                if (p.id && p.id !== 'undefined') {
                   result = await adminSupabase.from('products').update(payload).eq('id', p.id);
                 } else {
                   result = await adminSupabase.from('products').insert([payload]);
