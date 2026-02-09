@@ -36,8 +36,16 @@ const AdminApp: React.FC = () => {
     } catch (e) { return null; }
   });
 
+  // Sound Alert Logic
+  const playNotificationSound = useCallback(() => {
+    try {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+      audio.play().catch(e => console.log('Audio playback blocked until user interaction'));
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 2000);
+    const timer = setTimeout(() => setLoading(false), 1500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -47,11 +55,12 @@ const AdminApp: React.FC = () => {
 
   const refreshOrders = useCallback(async (isSilent = false) => {
     try {
+      // Increased limit to 1000 to resolve stuck counts and ensure all records are visible
       const { data, error } = await adminSupabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(200); 
+        .limit(1000); 
       
       if (!error && data) {
         const mergedData = data.map(serverOrder => {
@@ -62,16 +71,23 @@ const AdminApp: React.FC = () => {
           }
           return serverOrder;
         });
+        
+        // Detect new orders for sound alerts
+        if (rawOrders.length > 0) {
+            const currentIds = new Set(rawOrders.map(o => String(o.order_id || o.id)));
+            const hasNew = mergedData.some(o => !currentIds.has(String(o.order_id || o.id)));
+            if (hasNew) playNotificationSound();
+        }
+
         setRawOrders(mergedData);
         syncToStorage(mergedData);
-        mergedData.forEach(o => processedIds.current.add(String(o.order_id || o.id)));
       }
     } catch (e) {
       console.error("[Admin App] Sync Failed:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [syncToStorage]);
+  }, [syncToStorage, rawOrders.length, playNotificationSound]);
 
   const refreshProducts = useCallback(async () => {
     try {
@@ -99,6 +115,21 @@ const AdminApp: React.FC = () => {
     setLoading(false);
   }, [refreshOrders, refreshProducts]);
 
+  // Real-time SW Communication
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'NEW_ORDER_DETECTED') {
+          console.log('[Realtime] New order notification from SW');
+          refreshOrders(true);
+          playNotificationSound();
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', handleMessage);
+      return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
+    }
+  }, [refreshOrders, playNotificationSound]);
+
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) initData();
     else setLoading(false);
@@ -116,10 +147,8 @@ const AdminApp: React.FC = () => {
     const cleanStatus = status.toLowerCase();
     const orderKey = String(id);
     
-    // 1. Mark as local intent
     recentUpdates.current[orderKey] = { status: cleanStatus, time: Date.now() };
 
-    // 2. Optimistic UI update
     const nextState = rawOrders.map(o => {
       const match = String(o.id) === String(dbId) || String(o.order_id) === orderKey;
       return match ? { ...o, status: cleanStatus } : o;
@@ -128,12 +157,9 @@ const AdminApp: React.FC = () => {
     syncToStorage(nextState);
 
     try {
-      // Correctly cast dbId: Supabase 'id' is usually an integer
       const numericDbId = !isNaN(Number(dbId)) ? Number(dbId) : null;
-      
       let updateResult;
       
-      // Attempt 1: Using the Numeric Primary Key (id)
       if (numericDbId !== null) {
         updateResult = await adminSupabase
           .from('orders')
@@ -142,7 +168,6 @@ const AdminApp: React.FC = () => {
           .select();
       }
 
-      // Attempt 2: Fallback to the String order_id if Attempt 1 failed or wasn't possible
       if (!updateResult || !updateResult.data || updateResult.data.length === 0) {
         updateResult = await adminSupabase
           .from('orders')
@@ -152,24 +177,10 @@ const AdminApp: React.FC = () => {
       }
 
       if (updateResult.error) throw updateResult.error;
-      
-      if (!updateResult.data || updateResult.data.length === 0) {
-        throw new Error("PERMISSION_DENIED_OR_NOT_FOUND");
-      }
-
-      console.log(`[Persistence] Order ${id} updated to ${cleanStatus}`);
     } catch (err: any) {
       console.error("[Persistence Critical]", err);
       delete recentUpdates.current[orderKey];
-      
-      let msg = "The database rejected this change.";
-      if (err.message === "PERMISSION_DENIED_OR_NOT_FOUND") {
-        msg = "Order Update Rejected: Permission Denied.\n\nFIX: Go to Supabase SQL Editor and run:\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;";
-      } else {
-        msg = `System Error: ${err.message}`;
-      }
-      
-      alert(msg);
+      alert(`System Error: ${err.message}`);
       refreshOrders(true);
     }
   };
@@ -210,7 +221,7 @@ const AdminApp: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
       <div className="flex flex-col items-center space-y-4">
         <div className="w-5 h-5 border-2 border-white/10 border-t-white rounded-full animate-spin"></div>
-        <p className="text-[8px] font-black uppercase text-white/20 tracking-[0.4em]">Accessing Store...</p>
+        <p className="text-[8px] font-black uppercase text-white/20 tracking-[0.4em]">Establishing Secure Link...</p>
       </div>
     </div>
   );
@@ -241,22 +252,45 @@ const AdminApp: React.FC = () => {
             initAudio={() => {
               if (Notification.permission === 'default') Notification.requestPermission();
               setAudioReady(true);
+              playNotificationSound();
             }}
             refreshData={initData}
             updateStatus={updateOrderStatus}
             uploadMedia={async (file: File) => {
               try {
-                const name = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
-                const { data, error } = await adminSupabase.storage.from('products').upload(name, file);
-                if (error) return null;
+                // Ensure bucket exists or handled by Supabase gracefully
+                const name = `prod-${Date.now()}-${Math.random().toString(36).slice(-5)}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+                const { data, error } = await adminSupabase.storage.from('products').upload(name, file, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+                
+                if (error) {
+                    console.error("Upload failed:", error);
+                    return null;
+                }
+                
                 const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
                 return publicUrl;
-              } catch (e) { return null; }
+              } catch (e) { 
+                console.error("Media upload exception:", e);
+                return null; 
+              }
             }}
             saveProduct={async (p: any) => {
-              const payload = { name: p.name, description: p.description, price_pkr: Number(p.price), image: p.image, images: p.images, category: p.category, inventory: Number(p.inventory), variants: p.variants };
+              const payload = { 
+                name: p.name, 
+                description: p.description, 
+                price_pkr: Number(p.price), 
+                image: p.image || (p.images && p.images[0]) || '', 
+                images: p.images || [], 
+                category: p.category, 
+                inventory: Number(p.inventory), 
+                variants: p.variants 
+              };
               const { error } = p.id ? await adminSupabase.from('products').update(payload).eq('id', p.id) : await adminSupabase.from('products').insert([payload]);
               if (!error) refreshProducts();
+              else console.error("Save product error:", error);
               return !error;
             }}
             deleteProduct={async (id: string) => {

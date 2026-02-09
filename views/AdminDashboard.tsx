@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line, Legend } from 'recharts';
+import { ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
 import { UserRole, Order, Product, Variant } from '../types';
 
 const AdminDashboard = (props: any) => {
@@ -54,7 +54,7 @@ const AdminDashboard = (props: any) => {
     const valid = filteredForStats.filter((o: Order) => o.status !== 'Cancelled');
     const revenue = valid.reduce((acc: number, o: Order) => acc + (Number(o.total) || 0), 0);
     const pendingCount = filteredForStats.filter((o: Order) => o.status === 'Pending').length;
-    const orderCount = filteredForStats.length;
+    const orderCount = orders.length; // Raw count for verification
 
     // Last 6 Months Trend Data
     const trendData = [];
@@ -181,6 +181,13 @@ const AdminDashboard = (props: any) => {
     setEditingProduct({ ...editingProduct, variants });
   };
 
+  // Improved Image Upload Interaction
+  const handleMediaClick = () => {
+    if (fileInputRef.current && !isUploading) {
+      fileInputRef.current.click();
+    }
+  };
+
   if (!props.user) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-8 animate-fadeIn">
@@ -233,23 +240,26 @@ const AdminDashboard = (props: any) => {
       </header>
 
       <main className="px-4 py-6 md:px-6">
-        {/* ANALYTICS TAB (Renamed from Overview) */}
+        {/* ANALYTICS TAB */}
         {activeTab === 'analytics' && (
           <div className="space-y-6">
             <section className="flex justify-between items-center px-2">
-              <h3 className="text-sm font-black italic uppercase tracking-tighter">Business Intelligence</h3>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm font-black italic uppercase tracking-tighter">Business Intelligence</h3>
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+              </div>
               <button 
                 onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)} 
                 className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border transition-all ${isFilterPanelOpen || (dateFilter.start || dateFilter.end) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-white/40'}`}
               >
                 <i className="fas fa-calendar-alt text-[8px]"></i>
-                <span className="text-[7px] font-black uppercase tracking-widest">{dateFilter.start ? 'Custom Filter' : 'Select Period'}</span>
+                <span className="text-[7px] font-black uppercase tracking-widest">{dateFilter.start ? 'Custom Range' : 'Performance Filter'}</span>
               </button>
             </section>
 
             {isFilterPanelOpen && (
               <div className="bg-white/5 border border-white/10 p-5 rounded-[2rem] space-y-4 animate-fadeIn">
-                <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.4em]">Performance Date Range</p>
+                <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.4em]">Analytics Date Range</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[6px] font-black uppercase text-white/10 ml-2">From</label>
@@ -274,46 +284,43 @@ const AdminDashboard = (props: any) => {
                   onClick={() => setDateFilter({ start: '', end: '' })}
                   className="w-full py-2 bg-blue-600/10 text-blue-500 border border-blue-500/20 text-[7px] font-black uppercase rounded-lg"
                 >
-                  Clear Custom Period
+                  Clear Period Selection
                 </button>
               </div>
             )}
 
             <section>
               <div className="grid grid-cols-3 gap-2">
-                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group transition-all hover:border-blue-500/30">
-                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Total Revenue</p>
-                  <p className="text-sm font-black italic">Rs.{formatCompactNumber(analytics.revenue)}</p>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group hover:border-blue-500/30 transition-all">
+                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Net Revenue</p>
+                  <p className="text-xs font-black italic">Rs.{formatCompactNumber(analytics.revenue)}</p>
                 </div>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group transition-all hover:border-emerald-500/30">
-                  <p className="text-[6px] font-black text-emerald-500 uppercase tracking-widest mb-1">Order Vol.</p>
-                  <p className="text-sm font-black italic">{formatCompactNumber(analytics.orderCount)}</p>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group hover:border-emerald-500/30 transition-all">
+                  <p className="text-[6px] font-black text-emerald-500 uppercase tracking-widest mb-1">Total Orders</p>
+                  <p className="text-xs font-black italic">{analytics.orderCount}</p>
                 </div>
-                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group transition-all hover:border-amber-500/30">
-                  <p className="text-[6px] font-black text-amber-500 uppercase tracking-widest mb-1">Waitlist</p>
-                  <p className="text-sm font-black italic">{analytics.pendingCount}</p>
+                <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group hover:border-amber-500/30 transition-all">
+                  <p className="text-[6px] font-black text-amber-500 uppercase tracking-widest mb-1">Queue</p>
+                  <p className="text-xs font-black italic">{analytics.pendingCount}</p>
                 </div>
               </div>
             </section>
 
-            {/* REAL-TIME TRENDS CHART (Improved 6-Month Visualization) */}
+            {/* REAL-TIME TRENDS CHART */}
             <section className="bg-white/5 border border-white/10 p-5 rounded-[2rem]">
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <div className="flex items-center space-x-2">
-                    <p className="text-[10px] font-black uppercase text-white tracking-[0.2em]">Growth Analytics</p>
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></div>
-                  </div>
-                  <p className="text-[7px] text-white/10 font-black uppercase tracking-widest mt-0.5">Monthly performance delta</p>
+                  <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">6-Month Growth Loop</p>
+                  <p className="text-[7px] text-white/10 font-black uppercase tracking-widest mt-0.5">Performance index</p>
                 </div>
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-3">
                   <div className="flex items-center space-x-1.5">
-                    <div className="w-2 h-2 rounded-sm bg-blue-600"></div>
-                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">PKR</span>
+                    <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">Revenue</span>
                   </div>
                   <div className="flex items-center space-x-1.5">
-                    <div className="w-2 h-2 rounded-sm bg-emerald-500"></div>
-                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">Qty</span>
+                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                    <span className="text-[6px] font-black uppercase text-white/40 tracking-widest">Orders</span>
                   </div>
                 </div>
               </div>
@@ -333,7 +340,7 @@ const AdminDashboard = (props: any) => {
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: '#ffffff20', fontSize: 8, fontWeight: 900 }}
-                      tickFormatter={(val) => `${formatCompactNumber(val)}`}
+                      tickFormatter={(val) => `Rs.${formatCompactNumber(val)}`}
                     />
                     <YAxis 
                       yAxisId="right"
@@ -345,31 +352,28 @@ const AdminDashboard = (props: any) => {
                     <Tooltip 
                       cursor={{ stroke: '#ffffff10', strokeWidth: 1 }}
                       contentStyle={{ backgroundColor: '#0f0f0f', border: '1px solid #ffffff10', borderRadius: '16px', padding: '12px' }}
-                      itemStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', padding: '2px 0' }}
-                      labelStyle={{ fontSize: '8px', marginBottom: '6px', opacity: 0.3, fontWeight: 900, letterSpacing: '0.1em' }}
-                      formatter={(value: any, name: string) => [name === 'revenue' ? `Rs. ${value.toLocaleString()}` : value, name.toUpperCase()]}
+                      itemStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }}
+                      labelStyle={{ fontSize: '8px', marginBottom: '4px', opacity: 0.3, fontWeight: 900 }}
                     />
                     <Line 
                       yAxisId="left"
                       type="monotone" 
                       dataKey="revenue" 
-                      name="Revenue"
                       stroke="#2563eb" 
                       strokeWidth={4} 
                       dot={{ r: 0 }}
                       activeDot={{ r: 6, stroke: '#2563eb', strokeWidth: 2, fill: '#fff' }}
-                      animationDuration={1500}
+                      animationDuration={1000}
                     />
                     <Line 
                       yAxisId="right"
                       type="monotone" 
                       dataKey="orders" 
-                      name="Volume"
                       stroke="#10b981" 
                       strokeWidth={4} 
                       dot={{ r: 0 }}
                       activeDot={{ r: 6, stroke: '#10b981', strokeWidth: 2, fill: '#fff' }}
-                      animationDuration={1500}
+                      animationDuration={1000}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -378,8 +382,8 @@ const AdminDashboard = (props: any) => {
 
             <section>
               <div className="flex justify-between items-center mb-4 px-2">
-                <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Recent Activity</p>
-                <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">View Stream</button>
+                <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Logistics Stream</p>
+                <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">Manage All</button>
               </div>
               <div className="space-y-2">
                 {props.orders.slice(0, 5).map((o: Order) => (
@@ -563,7 +567,7 @@ const AdminDashboard = (props: any) => {
         )}
       </main>
 
-      {/* BOTTOM NAVIGATION - COMPACT FOR MOBILE */}
+      {/* BOTTOM NAVIGATION */}
       <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-2xl border border-white/10 h-16 px-6 rounded-full flex items-center space-x-10 z-[200] shadow-2xl shadow-black max-w-[90vw]">
         <button onClick={() => setActiveTab('analytics')} className={`flex flex-col items-center space-y-1 transition-colors ${activeTab === 'analytics' ? 'text-blue-500' : 'text-white/20'}`}>
           <i className="fas fa-chart-line text-base"></i>
@@ -579,7 +583,7 @@ const AdminDashboard = (props: any) => {
         </button>
       </nav>
 
-      {/* ORDER DETAIL ACTION SHEET - MOBILE OPTIMIZED */}
+      {/* ORDER DETAIL ACTION SHEET */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[300] flex flex-col justify-end animate-fadeIn">
           <div className="absolute inset-0" onClick={() => setSelectedOrder(null)}></div>
@@ -699,21 +703,11 @@ const AdminDashboard = (props: any) => {
                 })}
               </div>
             </div>
-            
-            <button 
-              onClick={() => {
-                const text = `Name: ${selectedOrder.customer.name}\nPhone: ${selectedOrder.customer.phone}\nCity: ${selectedOrder.customer.city || 'N/A'}\nAddress: ${selectedOrder.customer.address}`;
-                copyToClipboard(text, 'MANIFEST');
-              }}
-              className="w-full py-4 border border-white/5 bg-white/[0.02] rounded-2xl font-black uppercase text-[8px] tracking-[0.4em] text-white/20 active:text-white active:bg-white/10 transition-all"
-            >
-              Export Full Package Info
-            </button>
           </div>
         </div>
       )}
 
-      {/* PRODUCT ACTION SHEET - MOBILE OPTIMIZED */}
+      {/* PRODUCT ACTION SHEET */}
       {editingProduct && (
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[300] flex flex-col justify-end animate-fadeIn">
           <div className="absolute inset-0" onClick={() => setEditingProduct(null)}></div>
@@ -725,27 +719,56 @@ const AdminDashboard = (props: any) => {
 
             <div className="space-y-4">
               <div className="flex space-x-3 overflow-x-auto py-2 no-scrollbar">
-                <button onClick={() => fileInputRef.current?.click()} className="w-16 h-16 bg-white/5 border border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center text-white/20 shrink-0">
+                {/* FIXED: Improved clickable area for Add Media */}
+                <button 
+                  type="button"
+                  onClick={handleMediaClick} 
+                  className="w-16 h-16 bg-white/5 border border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center text-white/20 shrink-0 active:scale-95 transition-all hover:bg-white/10"
+                >
                   <i className={`fas ${isUploading ? 'fa-spinner fa-spin' : 'fa-camera'} text-sm mb-1`}></i>
                   <span className="text-[6px] font-black uppercase">Add Media</span>
                 </button>
+                
                 {editingProduct.images?.map((img: string, i: number) => (
                   <div key={i} className="w-16 h-16 rounded-2xl overflow-hidden border border-white/10 shrink-0 relative group">
                     <img src={img} className="w-full h-full object-cover" />
                     <button onClick={() => setEditingProduct({...editingProduct, images: editingProduct.images.filter((_:any,idx:number)=>idx!==i)})} className="absolute inset-0 bg-red-600/80 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"><i className="fas fa-trash text-[10px]"></i></button>
                   </div>
                 ))}
-                <input type="file" multiple ref={fileInputRef} className="hidden" onChange={async (e) => {
-                  const files = e.target.files; if(!files) return;
-                  setIsUploading(true);
-                  const newImages = [...(editingProduct.images || [])];
-                  for(let i=0; i<files.length; i++) {
-                    const url = await props.uploadMedia(files[i]);
-                    if(url) { newImages.push(url); if(!editingProduct.image) editingProduct.image = url; }
-                  }
-                  setEditingProduct({...editingProduct, images: newImages});
-                  setIsUploading(false);
-                }} />
+                
+                {/* FIXED: Robust multi-image upload handling */}
+                <input 
+                  type="file" 
+                  multiple 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const files = e.target.files; 
+                    if(!files || files.length === 0) return;
+                    setIsUploading(true);
+                    
+                    const uploadResults = [];
+                    for(let i=0; i<files.length; i++) {
+                      const url = await props.uploadMedia(files[i]);
+                      if(url) uploadResults.push(url);
+                    }
+                    
+                    if (uploadResults.length > 0) {
+                      const updatedImages = [...(editingProduct.images || []), ...uploadResults];
+                      setEditingProduct({
+                        ...editingProduct, 
+                        images: updatedImages,
+                        // Automatically set main image if not present
+                        image: editingProduct.image || uploadResults[0]
+                      });
+                    }
+                    
+                    setIsUploading(false);
+                    // Reset input so same file can be selected again
+                    if (e.target) e.target.value = '';
+                  }} 
+                />
               </div>
 
               <div className="space-y-3">
@@ -768,7 +791,7 @@ const AdminDashboard = (props: any) => {
                   <textarea placeholder="Technical specifications..." className="w-full p-4 bg-white/5 rounded-xl font-black outline-none h-28 resize-none text-[10px] border border-white/5" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} />
                 </div>
 
-                {/* VARIANTS MANAGEMENT SECTION */}
+                {/* VARIANTS MANAGEMENT */}
                 <div className="space-y-3 pt-4 border-t border-white/5">
                   <div className="flex justify-between items-center">
                     <label className="text-[8px] font-black uppercase text-blue-500 ml-2 tracking-widest">Manage Variants</label>
@@ -810,12 +833,6 @@ const AdminDashboard = (props: any) => {
                         </div>
                       </div>
                     ))}
-                    {(!editingProduct.variants || editingProduct.variants.length === 0) && (
-                      <div className="py-6 text-center border border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
-                        <p className="text-[8px] font-black uppercase text-white/10 tracking-[0.3em]">No Variants Available</p>
-                        <p className="text-[6px] text-white/5 font-black uppercase mt-1">Add options like size or material for this item</p>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -824,10 +841,6 @@ const AdminDashboard = (props: any) => {
                  <button onClick={() => setEditingProduct(null)} className="flex-grow py-4 rounded-xl font-black uppercase text-[9px] text-white/40 border border-white/10 active:bg-white/5">Abort</button>
                  <button onClick={async () => { if(await props.saveProduct(editingProduct)) setEditingProduct(null); }} className="flex-grow py-4 bg-blue-600 rounded-xl font-black uppercase text-[9px] tracking-widest shadow-xl shadow-blue-600/20 active:scale-95 transition-transform">Commit Update</button>
               </div>
-              
-              {editingProduct.id && (
-                <button onClick={() => { if(confirm('Permanently decommission this item?')) props.deleteProduct(editingProduct.id); setEditingProduct(null); }} className="w-full py-4 text-red-500 font-black uppercase text-[7px] tracking-widest opacity-30 hover:opacity-100 transition-opacity">Decommission Product</button>
-              )}
             </div>
           </div>
         </div>

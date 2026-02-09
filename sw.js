@@ -15,19 +15,21 @@ function initRealtime() {
   channel = supabase.channel('order-sentinel')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
       const order = payload.new;
+      console.log('[SW Sentinel] New order detected:', order.id);
       
-      // 1. Trigger OS Notification (The most reliable way to notify)
+      // 1. Trigger OS Notification
       self.registration.showNotification('💰 NEW ORDER RECEIVED', {
         body: `Order #${order.order_id || order.id} - Rs. ${order.total_pkr || order.total} from ${order.customer_name}`,
         icon: NOTIFY_ICON,
         badge: NOTIFY_ICON,
-        vibrate: [200, 100, 200],
+        vibrate: [500, 110, 500, 110, 450, 110, 200, 110, 170, 40, 450, 110, 200, 110, 170, 40],
         tag: 'new-order-' + (order.order_id || order.id),
-        data: { url: '/admin.html' }
+        data: { url: '/admin.html' },
+        requireInteraction: true
       });
 
-      // 2. Broadcast to any open Admin windows for instant UI update
-      self.clients.matchAll().then(clients => {
+      // 2. Broadcast to any open Admin windows for instant UI update and sound
+      self.clients.matchAll({ type: 'window' }).then(clients => {
         clients.forEach(client => {
           client.postMessage({
             type: 'NEW_ORDER_DETECTED',
@@ -37,9 +39,9 @@ function initRealtime() {
       });
     })
     .subscribe((status) => {
-      console.log('[SW Sentinel] Status:', status);
+      console.log('[SW Sentinel] Connection status:', status);
       if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-        setTimeout(initRealtime, 5000); // Robust reconnection
+        setTimeout(initRealtime, 5000); 
       }
     });
 }
@@ -49,7 +51,6 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim().then(() => initRealtime()));
 });
 
-// Re-init on any interaction or ping from UI
 self.addEventListener('message', (event) => {
   if (event.data === 'REQUEST_SENTINEL_STATUS') {
     if (!channel) initRealtime();
