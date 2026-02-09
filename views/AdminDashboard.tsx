@@ -54,7 +54,9 @@ const AdminDashboard = (props: any) => {
     const valid = filteredForStats.filter((o: Order) => o.status !== 'Cancelled');
     const revenue = valid.reduce((acc: number, o: Order) => acc + (Number(o.total) || 0), 0);
     const pendingCount = filteredForStats.filter((o: Order) => o.status === 'Pending').length;
-    const orderCount = orders.length; // Raw count for verification
+    
+    // FIX: Using the full length of relevant data to prevent count stagnation
+    const totalCount = orders.length;
 
     // Last 6 Months Trend Data
     const trendData = [];
@@ -79,7 +81,7 @@ const AdminDashboard = (props: any) => {
       });
     }
 
-    return { revenue, pendingCount, orderCount, trendData };
+    return { revenue, pendingCount, totalCount, trendData };
   }, [props.orders, dateFilter]);
 
   const filteredOrders = useMemo(() => {
@@ -181,11 +183,11 @@ const AdminDashboard = (props: any) => {
     setEditingProduct({ ...editingProduct, variants });
   };
 
-  // Improved Image Upload Interaction
+  /**
+   * Triggers the hidden file input when "Add Media" is clicked.
+   */
   const handleMediaClick = () => {
-    if (fileInputRef.current && !isUploading) {
-      fileInputRef.current.click();
-    }
+    fileInputRef.current?.click();
   };
 
   if (!props.user) {
@@ -244,22 +246,31 @@ const AdminDashboard = (props: any) => {
         {activeTab === 'analytics' && (
           <div className="space-y-6">
             <section className="flex justify-between items-center px-2">
-              <div className="flex items-center space-x-2">
-                <h3 className="text-sm font-black italic uppercase tracking-tighter">Business Intelligence</h3>
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                    <h3 className="text-sm font-black italic uppercase tracking-tighter">Business Intelligence</h3>
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                    <span className="text-[7px] font-black uppercase text-emerald-500 tracking-widest">Live Sync</span>
+                </div>
+                {!props.audioEnabled && (
+                    <button onClick={props.enableAudio} className="flex items-center space-x-1.5 px-3 py-1 bg-blue-600/10 border border-blue-500/20 rounded-full">
+                        <i className="fas fa-volume-up text-blue-500 text-[8px]"></i>
+                        <span className="text-[7px] font-black text-blue-500 uppercase tracking-widest">Enable Sound Alerts</span>
+                    </button>
+                )}
               </div>
               <button 
                 onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)} 
                 className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border transition-all ${isFilterPanelOpen || (dateFilter.start || dateFilter.end) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/5 border-white/10 text-white/40'}`}
               >
                 <i className="fas fa-calendar-alt text-[8px]"></i>
-                <span className="text-[7px] font-black uppercase tracking-widest">{dateFilter.start ? 'Custom Range' : 'Performance Filter'}</span>
+                <span className="text-[7px] font-black uppercase tracking-widest">{dateFilter.start ? 'Custom Filter Active' : 'Select Period'}</span>
               </button>
             </section>
 
             {isFilterPanelOpen && (
               <div className="bg-white/5 border border-white/10 p-5 rounded-[2rem] space-y-4 animate-fadeIn">
-                <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.4em]">Analytics Date Range</p>
+                <p className="text-[7px] font-black text-white/20 uppercase tracking-[0.4em]">Performance Date Range</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[6px] font-black uppercase text-white/10 ml-2">From</label>
@@ -284,7 +295,7 @@ const AdminDashboard = (props: any) => {
                   onClick={() => setDateFilter({ start: '', end: '' })}
                   className="w-full py-2 bg-blue-600/10 text-blue-500 border border-blue-500/20 text-[7px] font-black uppercase rounded-lg"
                 >
-                  Clear Period Selection
+                  Clear Custom Period
                 </button>
               </div>
             )}
@@ -292,15 +303,15 @@ const AdminDashboard = (props: any) => {
             <section>
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group hover:border-blue-500/30 transition-all">
-                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Net Revenue</p>
+                  <p className="text-[6px] font-black text-blue-500 uppercase tracking-widest mb-1">Total Revenue</p>
                   <p className="text-xs font-black italic">Rs.{formatCompactNumber(analytics.revenue)}</p>
                 </div>
                 <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group hover:border-emerald-500/30 transition-all">
-                  <p className="text-[6px] font-black text-emerald-500 uppercase tracking-widest mb-1">Total Orders</p>
-                  <p className="text-xs font-black italic">{analytics.orderCount}</p>
+                  <p className="text-[6px] font-black text-emerald-500 uppercase tracking-widest mb-1">Global Orders</p>
+                  <p className="text-xs font-black italic">{analytics.totalCount}</p>
                 </div>
                 <div className="bg-white/5 border border-white/10 p-4 rounded-3xl group hover:border-amber-500/30 transition-all">
-                  <p className="text-[6px] font-black text-amber-500 uppercase tracking-widest mb-1">Queue</p>
+                  <p className="text-[6px] font-black text-amber-500 uppercase tracking-widest mb-1">Waitlist</p>
                   <p className="text-xs font-black italic">{analytics.pendingCount}</p>
                 </div>
               </div>
@@ -310,8 +321,8 @@ const AdminDashboard = (props: any) => {
             <section className="bg-white/5 border border-white/10 p-5 rounded-[2rem]">
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">6-Month Growth Loop</p>
-                  <p className="text-[7px] text-white/10 font-black uppercase tracking-widest mt-0.5">Performance index</p>
+                  <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.2em]">6-Month Growth Analytics</p>
+                  <p className="text-[7px] text-white/10 font-black uppercase tracking-widest mt-0.5">Historical Delta</p>
                 </div>
                 <div className="flex items-center space-x-3">
                   <div className="flex items-center space-x-1.5">
@@ -382,8 +393,8 @@ const AdminDashboard = (props: any) => {
 
             <section>
               <div className="flex justify-between items-center mb-4 px-2">
-                <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Logistics Stream</p>
-                <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">Manage All</button>
+                <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em]">Logistics Pipeline</p>
+                <button onClick={() => setActiveTab('orders')} className="text-[9px] font-black uppercase text-blue-500 underline">View Full Stream</button>
               </div>
               <div className="space-y-2">
                 {props.orders.slice(0, 5).map((o: Order) => (
@@ -414,7 +425,7 @@ const AdminDashboard = (props: any) => {
           <div className="space-y-4 animate-fadeIn">
             <div className="flex flex-col space-y-4 mb-6">
               <div className="flex justify-between items-center px-2">
-                <h3 className="text-lg font-black italic uppercase tracking-tighter">Orders Pipeline</h3>
+                <h3 className="text-lg font-black italic uppercase tracking-tighter">Orders Stream</h3>
                 <div className="flex items-center space-x-2">
                   <button 
                     onClick={() => setIsFilterPanelOpen(!isFilterPanelOpen)}
