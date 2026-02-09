@@ -85,22 +85,44 @@ const AdminDashboard = (props: any) => {
   }, [props.orders, searchQuery, statusFilter, dateFilter]);
 
   const StatusBadge = ({ status, minimal = false }: { status: string, minimal?: boolean }) => {
-    const styles: any = {
-      Pending: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-      Confirmed: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-      Shipped: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-      Delivered: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-      Cancelled: "bg-red-500/10 text-red-500 border-red-500/20"
+    const configs: any = {
+      Pending: {
+        style: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+        icon: "fa-clock",
+        dot: "bg-amber-500"
+      },
+      Confirmed: {
+        style: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+        icon: "fa-check-circle",
+        dot: "bg-blue-500"
+      },
+      Shipped: {
+        style: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+        icon: "fa-truck-fast",
+        dot: "bg-purple-500"
+      },
+      Delivered: {
+        style: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+        icon: "fa-box-check",
+        dot: "bg-emerald-500"
+      },
+      Cancelled: {
+        style: "bg-red-500/10 text-red-500 border-red-500/20",
+        icon: "fa-times-circle",
+        dot: "bg-red-500"
+      }
     };
-    const style = styles[status] || styles.Pending;
+    
+    const config = configs[status] || configs.Pending;
     
     if (minimal) {
-        return <span className={`w-2 h-2 rounded-full border ${style.split(' ')[2]} ${style.split(' ')[0]} mr-2`}></span>;
+        return <span className={`w-2 h-2 rounded-full border border-white/10 ${config.dot} mr-2`}></span>;
     }
 
     return (
-      <span className={`px-2.5 py-0.5 rounded-full text-[7px] font-black uppercase tracking-[0.1em] border ${style}`}>
-        {status}
+      <span className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[7px] font-black uppercase tracking-[0.1em] border ${config.style}`}>
+        <i className={`fas ${config.icon}`}></i>
+        <span>{status}</span>
       </span>
     );
   };
@@ -425,7 +447,10 @@ const AdminDashboard = (props: any) => {
 
             <div className="space-y-4">
               <div className="bg-white/5 p-5 rounded-3xl border border-white/10">
-                <p className="text-[7px] font-black text-white/30 uppercase tracking-[0.2em] mb-4">Shipment Details</p>
+                <div className="flex justify-between items-center mb-4">
+                  <p className="text-[7px] font-black text-white/30 uppercase tracking-[0.2em]">Shipment Details</p>
+                  <StatusBadge status={selectedOrder.status} />
+                </div>
                 <div className="space-y-4">
                   {[
                     { label: 'Name', value: selectedOrder.customer.name, copyLabel: 'NAME' },
@@ -489,20 +514,37 @@ const AdminDashboard = (props: any) => {
             <div className="space-y-3 pt-2">
               <p className="text-[8px] font-black text-center uppercase text-white/20 tracking-[0.3em]">Logistics Update</p>
               <div className="grid grid-cols-2 gap-2">
-                {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => (
-                  <button 
-                    key={s}
-                    disabled={isUpdatingStatus}
-                    onClick={async () => {
-                      setIsUpdatingStatus(true);
-                      await props.updateStatus(selectedOrder.id, s, selectedOrder.dbId);
-                      setIsUpdatingStatus(false);
-                    }}
-                    className={`py-3.5 rounded-xl font-black uppercase text-[8px] tracking-widest transition-all ${selectedOrder.status === s ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)] border-transparent' : 'bg-white/5 text-white/30 border border-white/5'}`}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {['Pending', 'Confirmed', 'Shipped', 'Delivered', 'Cancelled'].map(s => {
+                  const configs: any = {
+                    Pending: "hover:bg-amber-500/20 text-amber-500 border-amber-500/10",
+                    Confirmed: "hover:bg-blue-500/20 text-blue-500 border-blue-500/10",
+                    Shipped: "hover:bg-purple-500/20 text-purple-500 border-purple-500/10",
+                    Delivered: "hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/10",
+                    Cancelled: "hover:bg-red-500/20 text-red-500 border-red-500/10"
+                  };
+                  const activeConfigs: any = {
+                    Pending: "bg-amber-500 text-white shadow-amber-500/30",
+                    Confirmed: "bg-blue-500 text-white shadow-blue-500/30",
+                    Shipped: "bg-purple-500 text-white shadow-purple-500/30",
+                    Delivered: "bg-emerald-500 text-white shadow-emerald-500/30",
+                    Cancelled: "bg-red-500 text-white shadow-red-500/30"
+                  };
+                  
+                  return (
+                    <button 
+                      key={s}
+                      disabled={isUpdatingStatus}
+                      onClick={async () => {
+                        setIsUpdatingStatus(true);
+                        await props.updateStatus(selectedOrder.id, s, selectedOrder.dbId);
+                        setIsUpdatingStatus(false);
+                      }}
+                      className={`py-3.5 rounded-xl font-black uppercase text-[8px] tracking-widest transition-all border ${selectedOrder.status === s ? activeConfigs[s] + ' shadow-lg scale-95' : configs[s] + ' bg-white/5 opacity-50'}`}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             
