@@ -16,6 +16,7 @@ interface AdminToast {
   id: number;
   message: string;
   orderId?: string;
+  type?: 'success' | 'error' | 'info';
 }
 
 const DEFAULT_ALERT_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
@@ -50,21 +51,20 @@ const AdminApp: React.FC = () => {
   const playNotificationSound = useCallback(() => {
     if (!audioEnabled) return;
     try {
-      // Use custom sound if available, otherwise default
       const soundSrc = customSound || DEFAULT_ALERT_URL;
       const audio = new Audio(soundSrc);
-      audio.play().catch(e => console.warn('[Admin] Audio playback blocked by browser policies. Interaction required.'));
+      audio.play().catch(e => console.warn('[Admin] Audio playback blocked. Interaction required.'));
     } catch (e) {
       console.error('[Admin] Sound playback error:', e);
     }
   }, [audioEnabled, customSound]);
 
-  const addAdminToast = useCallback((message: string, orderId?: string) => {
+  const addAdminToast = useCallback((message: string, orderId?: string, type: AdminToast['type'] = 'info') => {
     const id = Date.now();
-    setToasts(prev => [...prev, { id, message, orderId }]);
+    setToasts(prev => [...prev, { id, message, orderId, type }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 10000); // Extended toast duration for better visibility
+    }, 10000);
   }, []);
 
   const syncToStorage = useCallback((data: any[]) => {
@@ -87,7 +87,7 @@ const AdminApp: React.FC = () => {
           if (newOrders.length > 0) {
             playNotificationSound();
             newOrders.forEach(o => {
-              addAdminToast(`New Order from ${o.customer_name}`, o.order_id || String(o.id));
+              addAdminToast(`New Order from ${o.customer_name}`, o.order_id || String(o.id), 'success');
             });
           }
         }
@@ -105,7 +105,7 @@ const AdminApp: React.FC = () => {
         syncToStorage(mergedData);
       }
     } catch (e) {
-      console.error("[Admin] Sync Failure:", e);
+      console.error("[Admin] Order Sync Failure:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -128,7 +128,7 @@ const AdminApp: React.FC = () => {
 
           return {
             id: String(p.id),
-            name: p.name || 'Product',
+            name: p.name || 'Untitled Product',
             description: p.description || '',
             price: Number(p.price || p.price_pkr || 0),
             image: p.image || p.image_url || parsedImages[0] || '',
@@ -142,7 +142,7 @@ const AdminApp: React.FC = () => {
         }));
       }
     } catch (e) {
-      console.error("[Admin] Product Refresh Error:", e);
+      console.error("[Admin] Catalog Refresh Error:", e);
     }
   }, []);
 
@@ -156,8 +156,7 @@ const AdminApp: React.FC = () => {
       const handleMessage = (event: MessageEvent) => {
         if (event.data?.type === 'NEW_ORDER_DETECTED') {
           const order = event.data.order;
-          console.log('[Realtime] Instant order detected:', order.id);
-          addAdminToast(`New Order from ${order.customer_name}`, order.order_id || String(order.id));
+          addAdminToast(`New Order Detected: ${order.customer_name}`, order.order_id || String(order.id), 'success');
           playNotificationSound();
           refreshOrders(true);
         }
@@ -242,7 +241,7 @@ const AdminApp: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
       <div className="flex flex-col items-center space-y-4">
         <div className="w-8 h-8 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin"></div>
-        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em]">Syncing Store Data...</p>
+        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em]">Establishing Secure Link...</p>
       </div>
     </div>
   );
@@ -290,18 +289,26 @@ const AdminApp: React.FC = () => {
             updateStatus={updateOrderStatus}
             uploadMedia={async (file: File) => {
               try {
+                // Try standard Supabase Storage first
                 const name = `prod-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
                 const { data, error } = await adminSupabase.storage.from('products').upload(name, file, {
                   cacheControl: '3600',
                   upsert: true
                 });
                 
-                if (error) throw error;
+                if (error) {
+                   console.warn("[Upload] Supabase Storage unavailable. Falling back to local encoding.");
+                   throw error;
+                }
                 const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
                 return publicUrl;
               } catch (e) { 
-                console.error("[Upload] Error:", e);
-                return null; 
+                // Reliable Fallback: Base64 Data URI
+                return new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result as string);
+                  reader.readAsDataURL(file);
+                });
               }
             }}
             saveProduct={async (p: any) => {
@@ -309,6 +316,7 @@ const AdminApp: React.FC = () => {
                 const productImages = Array.isArray(p.images) ? p.images : [];
                 const primaryImage = p.image || productImages[0] || '';
 
+                // Highly redundant payload to ensure compatibility with various DB column configurations
                 const payload = { 
                   name: p.name, 
                   description: p.description, 
@@ -324,17 +332,21 @@ const AdminApp: React.FC = () => {
                 };
 
                 let result;
-                if (p.id && p.id !== 'undefined') {
+                if (p.id && p.id !== 'undefined' && p.id !== '') {
                   result = await adminSupabase.from('products').update(payload).eq('id', p.id);
                 } else {
                   result = await adminSupabase.from('products').insert([payload]);
                 }
 
                 if (result.error) throw result.error;
+                
+                // Force immediate local refresh
                 await refreshProducts();
+                addAdminToast("Product Published Successfully", undefined, 'success');
                 return true;
-              } catch (e) {
+              } catch (e: any) {
                 console.error("[Admin] Product Save Failure:", e);
+                addAdminToast(`Save Failed: ${e.message || 'Database error'}`, undefined, 'error');
                 return false;
               }
             }}
