@@ -34,7 +34,6 @@ const MainLayout: React.FC<{
     <Header cartCount={cartCount} user={user} logout={logout} />
     <main className="flex-grow">{children}</main>
     
-    {/* Toast Notifications */}
     <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center space-y-3 pointer-events-none">
       {toasts.map((toast) => (
         <div 
@@ -99,21 +98,39 @@ const AppContent: React.FC = () => {
     try {
       const { data, error } = await supabase.from('products').select('*');
       if (!error && data) {
-        setProducts(data.map(row => ({
-          id: String(row.id),
-          name: row.name,
-          description: row.description || '',
-          price: Number(row.price_pkr || row.price || 0),
-          image: row.image || row.image_url || 'https://via.placeholder.com/800x1000',
-          images: Array.isArray(row.images) ? row.images : (row.image ? [row.image] : []),
-          category: row.category || 'Luxury',
-          inventory: Number(row.inventory || 0),
-          rating: Number(row.rating || 5),
-          reviews: [],
-          variants: Array.isArray(row.variants) ? row.variants : []
-        })));
+        const mapped = data.map(row => {
+          let parsedImages = [];
+          try {
+            parsedImages = typeof row.images === 'string' ? JSON.parse(row.images) : (Array.isArray(row.images) ? row.images : []);
+          } catch(e) { parsedImages = []; }
+
+          let parsedVariants = [];
+          try {
+            parsedVariants = typeof row.variants === 'string' ? JSON.parse(row.variants) : (Array.isArray(row.variants) ? row.variants : []);
+          } catch(e) { parsedVariants = []; }
+
+          const primaryImage = row.image || row.image_url || parsedImages[0] || 'https://via.placeholder.com/800x1000';
+
+          return {
+            id: String(row.id),
+            name: row.name,
+            description: row.description || '',
+            price: Number(row.price_pkr || row.price || 0),
+            image: primaryImage,
+            images: parsedImages.length > 0 ? parsedImages : [primaryImage],
+            category: row.category || 'Luxury',
+            inventory: Number(row.inventory || 0),
+            rating: Number(row.rating || 5),
+            reviews: [],
+            variants: parsedVariants
+          };
+        });
+        setProducts(mapped);
+        localStorage.setItem('itx_cached_products', JSON.stringify(mapped));
       }
-    } catch (e) {} finally { setLoading(false); }
+    } catch (e) {
+      console.error("[Fetch] Critical Catalog Error:", e);
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchProducts(); }, [fetchProducts]);
@@ -160,10 +177,7 @@ const AppContent: React.FC = () => {
       };
 
       const { error } = await supabase.from('orders').insert([payload]);
-      if (error) {
-        console.error("Database Insert Error:", error.message);
-        throw error;
-      }
+      if (error) throw error;
 
       setCart([]);
       localStorage.removeItem('cart');

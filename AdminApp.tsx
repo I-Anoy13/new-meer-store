@@ -289,21 +289,16 @@ const AdminApp: React.FC = () => {
             updateStatus={updateOrderStatus}
             uploadMedia={async (file: File) => {
               try {
-                // Try standard Supabase Storage first
                 const name = `prod-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
                 const { data, error } = await adminSupabase.storage.from('products').upload(name, file, {
                   cacheControl: '3600',
                   upsert: true
                 });
                 
-                if (error) {
-                   console.warn("[Upload] Supabase Storage unavailable. Falling back to local encoding.");
-                   throw error;
-                }
+                if (error) throw error;
                 const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
                 return publicUrl;
               } catch (e) { 
-                // Reliable Fallback: Base64 Data URI
                 return new Promise((resolve) => {
                   const reader = new FileReader();
                   reader.onloadend = () => resolve(reader.result as string);
@@ -316,7 +311,7 @@ const AdminApp: React.FC = () => {
                 const productImages = Array.isArray(p.images) ? p.images : [];
                 const primaryImage = p.image || productImages[0] || '';
 
-                // Highly redundant payload to ensure compatibility with various DB column configurations
+                // Unified payload with explicit stringification for compatibility
                 const payload = { 
                   name: p.name, 
                   description: p.description, 
@@ -324,10 +319,10 @@ const AdminApp: React.FC = () => {
                   price_pkr: Number(p.price), 
                   image: primaryImage,
                   image_url: primaryImage, 
-                  images: productImages, 
+                  images: JSON.stringify(productImages), 
                   category: p.category, 
                   inventory: Number(p.inventory), 
-                  variants: Array.isArray(p.variants) ? p.variants : [],
+                  variants: JSON.stringify(Array.isArray(p.variants) ? p.variants : []),
                   updated_at: new Date().toISOString()
                 };
 
@@ -340,7 +335,6 @@ const AdminApp: React.FC = () => {
 
                 if (result.error) throw result.error;
                 
-                // Force immediate local refresh
                 await refreshProducts();
                 addAdminToast("Product Published Successfully", undefined, 'success');
                 return true;
