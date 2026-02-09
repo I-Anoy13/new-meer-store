@@ -107,19 +107,32 @@ const AdminApp: React.FC = () => {
     try {
       const { data, error } = await adminSupabase.from('products').select('*').order('created_at', { ascending: false });
       if (!error && data) {
-        setProducts(data.map(p => ({
-          id: String(p.id),
-          name: p.name || 'Product',
-          description: p.description || '',
-          price: Number(p.price_pkr || p.price || 0),
-          image: p.image || p.image_url || '',
-          images: Array.isArray(p.images) ? p.images : (p.image ? [p.image] : []),
-          category: p.category || 'Luxury',
-          inventory: Number(p.inventory || 0),
-          rating: Number(p.rating || 5),
-          reviews: [],
-          variants: Array.isArray(p.variants) ? p.variants : []
-        })));
+        setProducts(data.map(p => {
+          // Robust parsing for potentially stringified JSON columns
+          let parsedImages = [];
+          try {
+            parsedImages = typeof p.images === 'string' ? JSON.parse(p.images) : (Array.isArray(p.images) ? p.images : []);
+          } catch(e) { parsedImages = []; }
+
+          let parsedVariants = [];
+          try {
+            parsedVariants = typeof p.variants === 'string' ? JSON.parse(p.variants) : (Array.isArray(p.variants) ? p.variants : []);
+          } catch(e) { parsedVariants = []; }
+
+          return {
+            id: String(p.id),
+            name: p.name || 'Product',
+            description: p.description || '',
+            price: Number(p.price_pkr || p.price || 0),
+            image: p.image || p.image_url || (parsedImages[0]) || '',
+            images: parsedImages.length > 0 ? parsedImages : (p.image ? [p.image] : []),
+            category: p.category || 'Luxury',
+            inventory: Number(p.inventory || 0),
+            rating: Number(p.rating || 5),
+            reviews: [],
+            variants: parsedVariants
+          };
+        }));
       }
     } catch (e) {
       console.error("[Admin App] Fetch Products Error:", e);
@@ -293,12 +306,16 @@ const AdminApp: React.FC = () => {
             }}
             saveProduct={async (p: any) => {
               try {
+                const productImages = Array.isArray(p.images) ? p.images : [];
+                const primaryImage = p.image || productImages[0] || '';
+
                 const payload = { 
                   name: p.name, 
                   description: p.description, 
                   price_pkr: Number(p.price), 
-                  image: p.image || (p.images && p.images[0]) || '', 
-                  images: Array.isArray(p.images) ? p.images : [], 
+                  image: primaryImage,
+                  image_url: primaryImage, // Redundancy for older schemas
+                  images: productImages, 
                   category: p.category, 
                   inventory: Number(p.inventory), 
                   variants: Array.isArray(p.variants) ? p.variants : []

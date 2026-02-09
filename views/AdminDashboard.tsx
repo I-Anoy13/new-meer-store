@@ -521,7 +521,7 @@ const AdminDashboard = (props: any) => {
             <div className="flex justify-between items-center"><h4 className="text-xl font-black italic uppercase tracking-tighter">{editingProduct.id ? 'Modify Record' : 'Inject Arrival'}</h4><button onClick={() => setEditingProduct(null)} className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center border border-white/5"><i className="fas fa-times text-sm"></i></button></div>
             <div className="space-y-6">
               <div className="flex space-x-4 overflow-x-auto py-2 no-scrollbar">
-                {/* FIXED: Improved clickable area for Add Media */}
+                {/* IMPROVED: Clickable Media Upload Area */}
                 <button 
                   type="button" 
                   onClick={handleMediaClick} 
@@ -537,7 +537,7 @@ const AdminDashboard = (props: any) => {
                     <button onClick={() => setEditingProduct({...editingProduct, images: editingProduct.images.filter((_:any,idx:number)=>idx!==i)})} className="absolute inset-0 bg-red-600/80 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"><i className="fas fa-trash text-sm"></i></button>
                   </div>
                 ))}
-                {/* HIDDEN FILE INPUT */}
+                {/* REFINED: Hidden File Input with multi-upload logic */}
                 <input 
                   type="file" 
                   multiple 
@@ -560,7 +560,7 @@ const AdminDashboard = (props: any) => {
                       setEditingProduct({ 
                         ...editingProduct, 
                         images: updatedImages, 
-                        // Automatically set main image if current is empty or not present
+                        // Update primary image if missing
                         image: editingProduct.image || uploadResults[0] 
                       });
                     }
@@ -578,7 +578,7 @@ const AdminDashboard = (props: any) => {
                 </div>
                 <div className="space-y-1.5"><label className="text-[9px] font-black uppercase text-white/30 ml-3">Manifest Log</label><textarea className="w-full p-5 bg-white/5 rounded-2xl font-black outline-none h-32 resize-none text-[12px] border border-white/5" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} /></div>
                 
-                {/* VARIANTS SECTION */}
+                {/* REFINED: Variants Configuration Section */}
                 <div className="space-y-4 border-t border-white/10 pt-6">
                   <div className="flex justify-between items-center">
                     <h5 className="text-[10px] font-black uppercase tracking-widest italic text-blue-500">Variants & Configurations</h5>
@@ -606,7 +606,7 @@ const AdminDashboard = (props: any) => {
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
-                            <label className="text-[7px] font-black uppercase text-white/20">Price Offset</label>
+                            <label className="text-[7px] font-black uppercase text-white/20">Price Value</label>
                             <input 
                               type="number" 
                               className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-[10px] font-black outline-none"
