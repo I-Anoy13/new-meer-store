@@ -12,6 +12,12 @@ const adminSupabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false }
 });
 
+interface AdminToast {
+  id: number;
+  message: string;
+  orderId?: string;
+}
+
 const AdminApp: React.FC = () => {
   const recentUpdates = useRef<Record<string, { status: string, time: number }>>({});
   const [rawOrders, setRawOrders] = useState<any[]>(() => {
@@ -23,8 +29,10 @@ const AdminApp: React.FC = () => {
   
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isLive, setIsLive] = useState(true);
-  const [audioEnabled, setAudioEnabled] = useState(false);
+  const [toasts, setToasts] = useState<AdminToast[]>([]);
+  const [audioEnabled, setAudioEnabled] = useState(() => {
+    return localStorage.getItem('itx_admin_audio_enabled') === 'true';
+  });
   
   const [user, setUser] = useState<User | null>(() => {
     try {
@@ -33,16 +41,23 @@ const AdminApp: React.FC = () => {
     } catch (e) { return null; }
   });
 
-  // Sound Alert Logic - Uses a high-visibility mixkit alert
   const playNotificationSound = useCallback(() => {
     if (!audioEnabled) return;
     try {
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      audio.play().catch(e => console.warn('[Audio] Playback blocked - user interaction required'));
+      audio.play().catch(e => console.warn('[Audio] Background play blocked - interaction needed'));
     } catch (e) {
       console.error('[Audio] Alert failed', e);
     }
   }, [audioEnabled]);
+
+  const addAdminToast = useCallback((message: string, orderId?: string) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, orderId }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 8000);
+  }, []);
 
   const syncToStorage = useCallback((data: any[]) => {
     try { localStorage.setItem('itx_admin_orders_cache', JSON.stringify(data)); } catch (e) {}
@@ -50,7 +65,6 @@ const AdminApp: React.FC = () => {
 
   const refreshOrders = useCallback(async (isSilent = false) => {
     try {
-      // FIX: Increased limit and removed potential query constraints to ensure full sync
       const { data, error } = await adminSupabase
         .from('orders')
         .select('*')
@@ -58,17 +72,15 @@ const AdminApp: React.FC = () => {
         .limit(5000); 
       
       if (!error && data) {
-        // Detect new orders by comparing with current state
         if (rawOrders.length > 0) {
           const currentIds = new Set(rawOrders.map(o => String(o.order_id || o.id)));
-          const hasNew = data.some(o => !currentIds.has(String(o.order_id || o.id)));
-          if (hasNew) {
-            console.log('[Realtime] New order detected in fetch loop');
+          const newOrders = data.filter(o => !currentIds.has(String(o.order_id || o.id)));
+          
+          if (newOrders.length > 0) {
             playNotificationSound();
-            // Show local browser notification if permitted
-            if (Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-               new Notification('💰 New Order Received', { body: 'A new order has just been placed!' });
-            }
+            newOrders.forEach(o => {
+              addAdminToast(`New Order from ${o.customer_name}`, o.order_id || String(o.id));
+            });
           }
         }
 
@@ -85,11 +97,11 @@ const AdminApp: React.FC = () => {
         syncToStorage(mergedData);
       }
     } catch (e) {
-      console.error("[Admin App] Order Sync Failed:", e);
+      console.error("[Admin App] Sync Failed:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [syncToStorage, rawOrders, playNotificationSound]);
+  }, [syncToStorage, rawOrders, playNotificationSound, addAdminToast]);
 
   const refreshProducts = useCallback(async () => {
     try {
@@ -117,33 +129,33 @@ const AdminApp: React.FC = () => {
     setLoading(false);
   }, [refreshOrders, refreshProducts]);
 
-  // FIX: Robust Service Worker Message Listener for background order detection
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       const handleMessage = (event: MessageEvent) => {
         if (event.data?.type === 'NEW_ORDER_DETECTED') {
-          console.log('[Sentinel] Real-time signal received from Service Worker');
-          refreshOrders(true);
+          console.log('[Realtime] Instant order pulse received');
+          const order = event.data.order;
+          // Optimistically show toast and play sound immediately before re-fetch finishes
+          addAdminToast(`New Order: ${order.customer_name}`, order.order_id || String(order.id));
           playNotificationSound();
+          refreshOrders(true);
         }
       };
       navigator.serviceWorker.addEventListener('message', handleMessage);
       return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
     }
-  }, [refreshOrders, playNotificationSound]);
+  }, [refreshOrders, playNotificationSound, addAdminToast]);
 
   useEffect(() => {
     if (user?.role === UserRole.ADMIN) {
       initData();
-      // Periodical fallback sync every 60 seconds
-      const interval = setInterval(() => refreshOrders(true), 60000);
+      const interval = setInterval(() => refreshOrders(true), 30000);
       return () => clearInterval(interval);
     } else {
       setLoading(false);
     }
   }, [user, initData, refreshOrders]);
 
-  // Handle Page Visibility Changes (Resume sync)
   useEffect(() => {
     const onResume = () => {
       if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) {
@@ -157,7 +169,6 @@ const AdminApp: React.FC = () => {
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
     const orderKey = String(id);
-    
     recentUpdates.current[orderKey] = { status: cleanStatus, time: Date.now() };
 
     const nextState = rawOrders.map(o => {
@@ -170,26 +181,15 @@ const AdminApp: React.FC = () => {
     try {
       const numericDbId = !isNaN(Number(dbId)) ? Number(dbId) : null;
       let updateResult;
-      
       if (numericDbId !== null) {
-        updateResult = await adminSupabase
-          .from('orders')
-          .update({ status: cleanStatus })
-          .eq('id', numericDbId)
-          .select();
+        updateResult = await adminSupabase.from('orders').update({ status: cleanStatus }).eq('id', numericDbId).select();
       }
-
       if (!updateResult || !updateResult.data || updateResult.data.length === 0) {
-        updateResult = await adminSupabase
-          .from('orders')
-          .update({ status: cleanStatus })
-          .eq('order_id', orderKey)
-          .select();
+        updateResult = await adminSupabase.from('orders').update({ status: cleanStatus }).eq('order_id', orderKey).select();
       }
-
       if (updateResult.error) throw updateResult.error;
     } catch (err: any) {
-      console.error("[Update Critical]", err);
+      console.error("[Update Failed]", err);
       delete recentUpdates.current[orderKey];
       refreshOrders(true);
     }
@@ -231,7 +231,7 @@ const AdminApp: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
       <div className="flex flex-col items-center space-y-4">
         <div className="w-8 h-8 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin"></div>
-        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em] animate-pulse">Syncing Global Orders...</p>
+        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em]">Establishing Secure Console...</p>
       </div>
     </div>
   );
@@ -244,12 +244,17 @@ const AdminApp: React.FC = () => {
             orders={formattedOrders}
             products={products}
             user={user}
-            isLive={isLive}
+            toasts={toasts}
             audioEnabled={audioEnabled}
             enableAudio={() => {
                 setAudioEnabled(true);
+                localStorage.setItem('itx_admin_audio_enabled', 'true');
                 playNotificationSound();
                 if (Notification.permission === 'default') Notification.requestPermission();
+            }}
+            disableAudio={() => {
+                setAudioEnabled(false);
+                localStorage.setItem('itx_admin_audio_enabled', 'false');
             }}
             login={(role: UserRole) => {
               const u: User = { id: 'master', email: 'admin@itx.com', role, name: 'Master' };
