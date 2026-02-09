@@ -45,7 +45,7 @@ const AdminApp: React.FC = () => {
     if (!audioEnabled) return;
     try {
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-      audio.play().catch(e => console.warn('[Audio] Background play blocked - interaction needed'));
+      audio.play().catch(e => console.warn('[Audio] Feedback play blocked'));
     } catch (e) {
       console.error('[Audio] Alert failed', e);
     }
@@ -79,7 +79,7 @@ const AdminApp: React.FC = () => {
           if (newOrders.length > 0) {
             playNotificationSound();
             newOrders.forEach(o => {
-              addAdminToast(`New Order from ${o.customer_name}`, o.order_id || String(o.id));
+              addAdminToast(`New order from ${o.customer_name}`, o.order_id || String(o.id));
             });
           }
         }
@@ -97,7 +97,7 @@ const AdminApp: React.FC = () => {
         syncToStorage(mergedData);
       }
     } catch (e) {
-      console.error("[Admin App] Sync Failed:", e);
+      console.error("[Admin] Sync Failed:", e);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -108,7 +108,6 @@ const AdminApp: React.FC = () => {
       const { data, error } = await adminSupabase.from('products').select('*').order('created_at', { ascending: false });
       if (!error && data) {
         setProducts(data.map(p => {
-          // Robust parsing for potentially stringified JSON columns
           let parsedImages = [];
           try {
             parsedImages = typeof p.images === 'string' ? JSON.parse(p.images) : (Array.isArray(p.images) ? p.images : []);
@@ -121,12 +120,12 @@ const AdminApp: React.FC = () => {
 
           return {
             id: String(p.id),
-            name: p.name || 'Product',
+            name: p.name || 'Untitled Product',
             description: p.description || '',
             price: Number(p.price_pkr || p.price || 0),
-            image: p.image || p.image_url || (parsedImages[0]) || '',
+            image: p.image || p.image_url || parsedImages[0] || '',
             images: parsedImages.length > 0 ? parsedImages : (p.image ? [p.image] : []),
-            category: p.category || 'Luxury',
+            category: p.category || 'General',
             inventory: Number(p.inventory || 0),
             rating: Number(p.rating || 5),
             reviews: [],
@@ -135,7 +134,7 @@ const AdminApp: React.FC = () => {
         }));
       }
     } catch (e) {
-      console.error("[Admin App] Fetch Products Error:", e);
+      console.error("[Admin] Fetch Products Error:", e);
     }
   }, []);
 
@@ -148,7 +147,6 @@ const AdminApp: React.FC = () => {
     if ('serviceWorker' in navigator) {
       const handleMessage = (event: MessageEvent) => {
         if (event.data?.type === 'NEW_ORDER_DETECTED') {
-          console.log('[Realtime] Instant order pulse received');
           const order = event.data.order;
           addAdminToast(`New Order: ${order.customer_name}`, order.order_id || String(order.id));
           playNotificationSound();
@@ -169,16 +167,6 @@ const AdminApp: React.FC = () => {
       setLoading(false);
     }
   }, [user, initData, refreshOrders]);
-
-  useEffect(() => {
-    const onResume = () => {
-      if (document.visibilityState === 'visible' && user?.role === UserRole.ADMIN) {
-        refreshOrders(true);
-      }
-    };
-    document.addEventListener('visibilitychange', onResume);
-    return () => document.removeEventListener('visibilitychange', onResume);
-  }, [user, refreshOrders]);
 
   const updateOrderStatus = async (id: string, status: string, dbId: any) => {
     const cleanStatus = status.toLowerCase();
@@ -230,7 +218,7 @@ const AdminApp: React.FC = () => {
         total: Number(o.total_pkr || o.total || 0),
         status: cleanStatus,
         customer: { 
-          name: o.customer_name || 'Anonymous', 
+          name: o.customer_name || 'Customer', 
           email: '', 
           phone: o.customer_phone || '', 
           address: o.customer_address || '', 
@@ -245,7 +233,7 @@ const AdminApp: React.FC = () => {
     <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
       <div className="flex flex-col items-center space-y-4">
         <div className="w-8 h-8 border-2 border-white/10 border-t-blue-500 rounded-full animate-spin"></div>
-        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em]">Establishing Secure Console...</p>
+        <p className="text-[10px] font-black uppercase text-white/30 tracking-[0.4em]">Loading Store Admin...</p>
       </div>
     </div>
   );
@@ -271,7 +259,7 @@ const AdminApp: React.FC = () => {
                 localStorage.setItem('itx_admin_audio_enabled', 'false');
             }}
             login={(role: UserRole) => {
-              const u: User = { id: 'master', email: 'admin@itx.com', role, name: 'Master' };
+              const u: User = { id: 'admin', email: 'admin@itx.com', role, name: 'Store Manager' };
               setUser(u);
               localStorage.setItem('itx_user_session', JSON.stringify(u));
               if (Notification.permission === 'default') Notification.requestPermission();
@@ -292,15 +280,11 @@ const AdminApp: React.FC = () => {
                   upsert: true
                 });
                 
-                if (error) {
-                  console.error("[Supabase Storage] Upload Error:", error);
-                  return null;
-                }
-                
+                if (error) throw error;
                 const { data: { publicUrl } } = adminSupabase.storage.from('products').getPublicUrl(data.path);
                 return publicUrl;
               } catch (e) { 
-                console.error("[Upload] Media upload exception:", e);
+                console.error("[Upload] Error:", e);
                 return null; 
               }
             }}
@@ -314,36 +298,31 @@ const AdminApp: React.FC = () => {
                   description: p.description, 
                   price_pkr: Number(p.price), 
                   image: primaryImage,
-                  image_url: primaryImage, // Redundancy for older schemas
+                  image_url: primaryImage, 
                   images: productImages, 
                   category: p.category, 
                   inventory: Number(p.inventory), 
                   variants: Array.isArray(p.variants) ? p.variants : []
                 };
 
-                let response;
+                let result;
                 if (p.id) {
-                  response = await adminSupabase.from('products').update(payload).eq('id', p.id);
+                  result = await adminSupabase.from('products').update(payload).eq('id', p.id);
                 } else {
-                  response = await adminSupabase.from('products').insert([payload]);
+                  result = await adminSupabase.from('products').insert([payload]);
                 }
 
-                if (response.error) {
-                  console.error("[Admin App] Save Product Error:", response.error);
-                  return false;
-                }
-
+                if (result.error) throw result.error;
                 await refreshProducts();
                 return true;
               } catch (e) {
-                console.error("[Admin App] Save Product Exception:", e);
+                console.error("[Admin] Save Product Error:", e);
                 return false;
               }
             }}
             deleteProduct={async (id: string) => {
               const { error } = await adminSupabase.from('products').delete().eq('id', id);
               if (!error) refreshProducts();
-              else console.error("[Admin App] Delete Product Error:", error);
             }}
           />
         } />
